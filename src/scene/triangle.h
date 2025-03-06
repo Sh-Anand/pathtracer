@@ -34,6 +34,8 @@ public:
    */
   BBox get_bbox() const;
 
+  bool test(const Ray& r, double& t, double& u, double& v) const;
+
   /**
    * Ray - Triangle intersection.
    * Check if the given ray intersects with the triangle, no intersection
