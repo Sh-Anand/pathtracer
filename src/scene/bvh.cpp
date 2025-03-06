@@ -58,7 +58,6 @@ BVHNode *BVHAccel::construct_bvh(std::vector<Primitive *>::iterator start,
   // single leaf node (which is also the root) that encloses all the
   // primitives.
 
-
   BBox bbox;
 
   for (auto p = start; p != end; p++) {
@@ -67,12 +66,34 @@ BVHNode *BVHAccel::construct_bvh(std::vector<Primitive *>::iterator start,
   }
 
   BVHNode *node = new BVHNode(bbox);
-  node->start = start;
-  node->end = end;
 
+  if (end - start <= max_leaf_size) {
+    node->start = start;
+    node->end = end;
+    return node;
+  }
+
+  auto sort_x = [](Primitive *a, Primitive *b) {
+    return a->get_bbox().centroid().x < b->get_bbox().centroid().x;
+  };
+  auto sort_y = [](Primitive *a, Primitive *b) {
+    return a->get_bbox().centroid().y < b->get_bbox().centroid().y;
+  };
+  auto sort_z = [](Primitive *a, Primitive *b) {
+    return a->get_bbox().centroid().z < b->get_bbox().centroid().z;
+  };
+  
+  if (bbox.extent.x >= bbox.extent.y && bbox.extent.x >= bbox.extent.z) {
+    std::sort(start, end, sort_x);
+  } else if (bbox.extent.y >= bbox.extent.x && bbox.extent.y >= bbox.extent.z) {
+    std::sort(start, end, sort_y);
+  } else {
+    std::sort(start, end, sort_z);
+  }
+  
+  node->l = construct_bvh(start, start + (end - start)/2, max_leaf_size);
+  node->r = construct_bvh(start + (end - start)/2, end, max_leaf_size);
   return node;
-
-
 }
 
 bool BVHAccel::has_intersection(const Ray &ray, BVHNode *node) const {
@@ -82,15 +103,22 @@ bool BVHAccel::has_intersection(const Ray &ray, BVHNode *node) const {
   // Intersection version cannot, since it returns as soon as it finds
   // a hit, it doesn't actually have to find the closest hit.
 
-
-
-  for (auto p : primitives) {
-    total_isects++;
-    if (p->has_intersection(ray))
-      return true;
+  double t0, t1;
+  if (!node->bb.intersect(ray, t0, t1)) {
+    return false;
   }
-  return false;
 
+  if (node->isLeaf()) {
+    for (auto p = node->start; p != node->end; p++) {
+      total_isects++;
+      if ((*p)->has_intersection(ray)) {
+        return true;
+      }
+    }
+    return false;
+  } else {
+    return has_intersection(ray, node->l) || has_intersection(ray, node->r);
+  }
 
 }
 
@@ -98,16 +126,34 @@ bool BVHAccel::intersect(const Ray &ray, Intersection *i, BVHNode *node) const {
   // TODO (Part 2.3):
   // Fill in the intersect function.
 
-
-
   bool hit = false;
-  for (auto p : primitives) {
-    total_isects++;
-    hit = p->intersect(ray, i) || hit;
+  i->t = ray.max_t;
+
+  double t0, t1;
+  if (!node->bb.intersect(ray, t0, t1)) {
+    return false;
   }
+
+  Intersection *t_i = new Intersection();
+  if (node->isLeaf()) {
+    for (auto p = node->start; p != node->end; p++) {
+      total_isects++;
+      if ((*p)->intersect(ray, t_i)) {
+        hit = true;
+        if (t_i->t < i->t) {
+          *i = *t_i;
+        }
+      }
+    }
+  } else {
+    bool hit_l = intersect(ray, t_i, node->l);
+    if (hit_l && t_i->t < i->t) *i = *t_i;
+    bool hit_r = hit || intersect(ray, t_i, node->r);
+    if (hit_r && t_i->t < i->t) *i = *t_i;
+    hit = hit_l || hit_r;
+  }
+
   return hit;
-
-
 }
 
 } // namespace SceneObjects
