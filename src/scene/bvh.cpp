@@ -127,29 +127,30 @@ bool BVHAccel::intersect(const Ray &ray, Intersection *i, BVHNode *node) const {
   // Fill in the intersect function.
 
   bool hit = false;
-  i->t = ray.max_t;
 
   double t0, t1;
   if (!node->bb.intersect(ray, t0, t1)) {
     return false;
   }
 
-  Intersection *t_i = new Intersection();
+  i->t = ray.max_t;
+
+  Intersection t_i;
   if (node->isLeaf()) {
     for (auto p = node->start; p != node->end; p++) {
       total_isects++;
-      if ((*p)->intersect(ray, t_i)) {
+      if ((*p)->intersect(ray, &t_i)) {
         hit = true;
-        if (t_i->t < i->t) {
-          *i = *t_i;
+        if (t_i.t < i->t) {
+          *i = t_i;
         }
       }
     }
   } else {
-    bool hit_l = intersect(ray, t_i, node->l);
-    if (hit_l && t_i->t < i->t) *i = *t_i;
-    bool hit_r = hit || intersect(ray, t_i, node->r);
-    if (hit_r && t_i->t < i->t) *i = *t_i;
+    bool hit_l = intersect(ray, &t_i, node->l);
+    if (hit_l && t_i.t < i->t) *i = t_i;
+    bool hit_r = intersect(ray, &t_i, node->r);
+    if (hit_r && t_i.t < i->t) *i = t_i;
     hit = hit_l || hit_r;
   }
 
