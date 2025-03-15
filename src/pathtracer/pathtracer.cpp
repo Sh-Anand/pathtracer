@@ -153,6 +153,8 @@ Vector3D PathTracer::one_bounce_radiance(const Ray &r,
   }
 }
 
+#define RRT 0.7
+
 Vector3D PathTracer::at_least_one_bounce_radiance(const Ray &r,
                                                   const Intersection &isect) {
   Matrix3x3 o2w;
@@ -165,9 +167,11 @@ Vector3D PathTracer::at_least_one_bounce_radiance(const Ray &r,
 
   // TODO: Part 4, Task 2
   // Returns the one bounce radiance + radiance from extra bounces at this point.
-  // Should be called recursively to simulate extra bounces.
+  // Should be called recursively to simulate extra bounces
+  bool ignore_RRT = r.depth == 1 && max_ray_depth > 1;
+  bool not_terminate = ignore_RRT || (r.depth < max_ray_depth && (!isAccumBounces || coin_flip(RRT))); 
 
-  if (r.depth == max_ray_depth - 1) {
+  if (!not_terminate) {
     return one_bounce_radiance(r, isect);
   }
 
@@ -182,12 +186,14 @@ Vector3D PathTracer::at_least_one_bounce_radiance(const Ray &r,
   Intersection bounce_isect;
   if (bvh->intersect(bounce_ray, &bounce_isect)) {
     if (isAccumBounces) {
-      L_out = one_bounce_radiance(r, isect) + f * dot(wi, isect.n) * at_least_one_bounce_radiance(bounce_ray, bounce_isect) / pdf;
+      L_out = one_bounce_radiance(r, isect) + f * abs_cos_theta(wi) * at_least_one_bounce_radiance(bounce_ray, bounce_isect) / pdf / RRT;
     } else {
-      L_out = f * dot(wi, isect.n) * at_least_one_bounce_radiance(bounce_ray, bounce_isect) / pdf;
+      L_out = f * abs_cos_theta(wi) * at_least_one_bounce_radiance(bounce_ray, bounce_isect);
     }
+  } else {
+    L_out = one_bounce_radiance(r, isect);
   }
-
+  
   return L_out;
 }
 
@@ -234,6 +240,7 @@ void PathTracer::raytrace_pixel(size_t x, size_t y) {
   for (int i = 0; i < num_samples; i++) {
     Vector2D sample = origin + gridSampler->get_sample();
     Ray r = camera->generate_ray(sample.x / sampleBuffer.w, sample.y / sampleBuffer.h);
+    r.depth = 1;
     pixel_sum += est_radiance_global_illumination(r);
   }
   pixel_sum /= num_samples;
