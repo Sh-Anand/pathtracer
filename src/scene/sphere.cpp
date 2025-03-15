@@ -28,7 +28,6 @@ bool Sphere::test(const Ray &r, double &t1, double &t2) const {
   t1 = b2a - sqrt_discr_r2a;
   t2 = b2a + sqrt_discr_r2a;
 
-  r.max_t = t2;
   return true;
 }
 
@@ -67,6 +66,7 @@ bool Sphere::intersect(const Ray &r, Intersection *i) const {
   i->primitive = this;
   i->bsdf = get_bsdf();  
   i->n = normal(r.o + i->t * r.d);
+  r.max_t = i->t;
   
   return true;
 }
