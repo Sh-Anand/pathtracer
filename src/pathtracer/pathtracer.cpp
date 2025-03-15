@@ -185,10 +185,11 @@ Vector3D PathTracer::at_least_one_bounce_radiance(const Ray &r,
 
   Intersection bounce_isect;
   if (bvh->intersect(bounce_ray, &bounce_isect)) {
+    Vector3D bounce_radiance = at_least_one_bounce_radiance(bounce_ray, bounce_isect);
     if (isAccumBounces) {
-      L_out = one_bounce_radiance(r, isect) + f * abs_cos_theta(wi) * at_least_one_bounce_radiance(bounce_ray, bounce_isect) / pdf / RRT;
+      L_out = one_bounce_radiance(r, isect) + f * abs_cos_theta(wi) * bounce_radiance / pdf / RRT;
     } else {
-      L_out = f * abs_cos_theta(wi) * at_least_one_bounce_radiance(bounce_ray, bounce_isect);
+      L_out = f * abs_cos_theta(wi) * bounce_radiance / pdf / RRT;
     }
   } else {
     L_out = one_bounce_radiance(r, isect);
@@ -215,8 +216,12 @@ Vector3D PathTracer::est_radiance_global_illumination(const Ray &r) {
     return envLight ? envLight->sample_dir(r) : L_out;
 
 
-  L_out = (isect.t == INF_D) ? debug_shading(r.d) : zero_bounce_radiance(r, isect) + at_least_one_bounce_radiance(r, isect);
-
+  if (max_ray_depth == 0)
+    L_out = zero_bounce_radiance(r, isect);
+  else if (isAccumBounces)
+    L_out = zero_bounce_radiance(r, isect) + at_least_one_bounce_radiance(r, isect);
+  else
+    L_out = at_least_one_bounce_radiance(r, isect);
   // TODO (Part 3): Return the direct illumination.
   // TODO (Part 4): Accumulate the "direct" and "indirect"
   // parts of global illumination into L_out rather than just direct
