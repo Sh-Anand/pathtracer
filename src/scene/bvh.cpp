@@ -83,16 +83,53 @@ BVHNode *BVHAccel::construct_bvh(std::vector<Primitive *>::iterator start,
     return a->get_bbox().centroid().z < b->get_bbox().centroid().z;
   };
   
-  if (bbox.extent.x >= bbox.extent.y && bbox.extent.x >= bbox.extent.z) {
+
+  size_t best_axis = 0;
+  size_t best_index = 0;
+  double best_cost = std::numeric_limits<double>::infinity();
+
+  for (size_t axis = 0; axis < 3; axis++) {
+    if (axis == 0) {
+      std::sort(start, end, sort_x);
+    } else if (axis == 1) {
+      std::sort(start, end, sort_y);
+    } else {
+      std::sort(start, end, sort_z);
+    }
+
+    std::vector<BBox> left(end-start+1), right(end-start+1);
+    BBox s_bbox, e_bbox;
+    for (auto p = start; p != end; p++) {
+      s_bbox.expand((*p)->get_bbox());
+      left[p - start] = s_bbox;
+    }
+    for (auto p = end - 1; p >= start; p--) {
+      e_bbox.expand((*p)->get_bbox());
+      right[p - start] = e_bbox;
+    }
+
+    for (auto p = start + 1; p != end; p++) {
+      double cost = left[p - start - 1].surface_area() * (p - start) + right[p - start].surface_area() * (end - p);
+      if (cost < best_cost) {
+        best_cost = cost;
+        best_axis = axis;
+        best_index = p - start;
+      }
+    }
+  }
+
+  if (best_axis == 0) {
     std::sort(start, end, sort_x);
-  } else if (bbox.extent.y >= bbox.extent.x && bbox.extent.y >= bbox.extent.z) {
+  } else if (best_axis == 1) {
     std::sort(start, end, sort_y);
   } else {
     std::sort(start, end, sort_z);
   }
+
+  auto mid = start + best_index;
   
-  node->l = construct_bvh(start, start + (end - start)/2, max_leaf_size);
-  node->r = construct_bvh(start + (end - start)/2, end, max_leaf_size);
+  node->l = construct_bvh(start, mid, max_leaf_size);
+  node->r = construct_bvh(mid, end, max_leaf_size);
   return node;
 }
 
