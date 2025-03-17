@@ -11,6 +11,11 @@ Vector2D UniformGridSampler2D::get_sample() const {
 
 }
 
+Vector2D JitteredSampler2D::get_sample() const {
+  size_t i = floor(random_uniform() * n);
+  size_t j = floor(random_uniform() * n);
+  return samples[i * n + j];
+}
 
 // Uniform Sphere Sampler3D Implementation //
 

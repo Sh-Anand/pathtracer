@@ -10,7 +10,7 @@ using namespace CGL::SceneObjects;
 namespace CGL {
 
 PathTracer::PathTracer() {
-  gridSampler = new UniformGridSampler2D();
+  gridSampler = new JitteredSampler2D(16);
   hemisphereSampler = new UniformHemisphereSampler3D();
 
   tm_gamma = 2.2f;

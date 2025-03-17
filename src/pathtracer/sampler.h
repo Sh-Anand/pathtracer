@@ -67,6 +67,29 @@ class UniformGridSampler2D : public Sampler2D {
 
 }; // class UniformSampler2D
 
+class JitteredSampler2D: public Sampler2D {
+ private:
+  size_t n;
+  std::vector<Vector2D> samples;
+
+ public:
+  Vector2D get_sample() const;
+
+  void reset() {
+    samples.clear();
+    for (size_t i = 0; i < n; i++) {
+      for (size_t j = 0; j < n; j++) {
+        samples.push_back(Vector2D((i + random_uniform()) / n, (j + random_uniform()) / n));
+      }
+    }
+  }
+
+  JitteredSampler2D(size_t n): n(n) {
+    reset();
+  }
+
+}; // class JitteredSampler2D
+
 /**
  * A Sampler3D implementation with uniform distribution on unit hemisphere
  */
