@@ -119,11 +119,13 @@ PathTracer::estimate_direct_lighting_importance(const Ray &r,
     sample_count += num_samples;
     for (int j = 0; j < num_samples; j++) {
       Vector3D radiance = light->sample_L(hit_p, &wi, &distToLight, &pdf);
+      Vector3D wi_o = w2o * wi;
+      if (wi_o.z < 0 || radiance == 0) continue;
       Ray shadow_ray = Ray(hit_p, wi);
       shadow_ray.min_t = EPS_D;
       shadow_ray.max_t = distToLight;
       if (!bvh->intersect(shadow_ray, &light_isect)) {
-        L_out += isect.bsdf->f(w_out, w2o*wi) * radiance * dot(wi, isect.n) / pdf;
+        L_out += isect.bsdf->f(w_out, wi_o) * radiance * abs_cos_theta(wi_o) / pdf;
       }
     }
   }
