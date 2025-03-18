@@ -14,26 +14,26 @@ bool BBox::intersect(const Ray& r, double& t0, double& t1) const {
   // If the ray intersected the bouding box within the range given by
   // t0, t1, update t0 and t1 with the new intersection times.
   
-  double tmin, tmax, timin, timax;
-  double r_rdx = 1.0 / r.d.x, r_rdy = 1.0 / r.d.y, r_rdz = 1.0 / r.d.z;
+  double tmin, tmax, timinx, timaxx, timiny, timaxy, timinz, timaxz;
+  double r_rdx = r.inv_d.x, r_rdy = r.inv_d.y, r_rdz = r.inv_d.z;
   double minox = min.x - r.o.x, maxox = max.x - r.o.x;
   double minoy = min.y - r.o.y, maxoy = max.y - r.o.y;
   double minoz = min.z - r.o.z, maxoz = max.z - r.o.z;
   
-  timin = minox * r_rdx;
-  timax = maxox * r_rdx;
-  tmin = std::min(timin, timax);
-  tmax = std::max(timin, timax);
+  timinx = minox * r_rdx;
+  timaxx = maxox * r_rdx;
+  tmin = std::min(timinx, timaxx);
+  tmax = std::max(timinx, timaxx);
 
-  timin = minoy * r_rdy;
-  timax = maxoy * r_rdy;
-  tmin = std::max(tmin, std::min(timin, timax));
-  tmax = std::min(tmax, std::max(timin, timax));
+  timiny = minoy * r_rdy;
+  timaxy = maxoy * r_rdy;
+  tmin = std::max(tmin, std::min(timiny, timaxy));
+  tmax = std::min(tmax, std::max(timiny, timaxy));
 
-  timin = minoz * r_rdz;
-  timax = maxoz * r_rdz;
-  tmin = std::max(tmin, std::min(timin, timax));
-  tmax = std::min(tmax, std::max(timin, timax));
+  timinz = minoz * r_rdz;
+  timaxz = maxoz * r_rdz;
+  tmin = std::max(tmin, std::min(timinz, timaxz));
+  tmax = std::min(tmax, std::max(timinz, timaxz));
 
   if (tmin > tmax || tmin > r.max_t || tmax < r.min_t || tmax < 0) {
     return false;

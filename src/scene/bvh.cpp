@@ -189,8 +189,13 @@ bool BVHAccel::intersect(const Ray &ray, Intersection *i, BVHNode *node) const {
         }
       }
     } else {
-      stack.push(n->l);
-      stack.push(n->r);
+      if (ray.d.x > 0) {
+        stack.push(n->l);
+        stack.push(n->r);
+      } else {
+        stack.push(n->r);
+        stack.push(n->l);
+      }
     }
   } 
 
