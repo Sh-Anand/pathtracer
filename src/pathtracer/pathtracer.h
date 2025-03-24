@@ -47,7 +47,6 @@ namespace CGL {
         /**
          * Trace an ray in the scene.
          */
-        Vector3D estimate_direct_lighting_hemisphere(const Ray& r, const SceneObjects::Intersection& isect);
         Vector3D estimate_direct_lighting_importance(const Ray& r, const SceneObjects::Intersection& isect);
 
         Vector3D est_radiance_global_illumination(const Ray& r);
