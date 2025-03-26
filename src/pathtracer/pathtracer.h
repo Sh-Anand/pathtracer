@@ -18,6 +18,8 @@ using CGL::SceneObjects::EnvironmentLight;
 using CGL::SceneObjects::BVHNode;
 using CGL::SceneObjects::BVHAccel;
 
+#include "util/reservoir.h"
+
 namespace CGL {
 
     class PathTracer {
@@ -49,10 +51,18 @@ namespace CGL {
          */
         Vector3D estimate_direct_lighting_importance(const Ray& r, const SceneObjects::Intersection& isect);
 
-        Vector3D est_radiance_global_illumination(const Ray& r);
+        void est_radiance_global_illumination(const size_t x, const size_t y);
         Vector3D zero_bounce_radiance(const Ray& r, const SceneObjects::Intersection& isect);
         Vector3D one_bounce_radiance(const Ray& r, const SceneObjects::Intersection& isect);
         Vector3D at_least_one_bounce_radiance(const Ray& r, const SceneObjects::Intersection& isect);
+
+        // ReSTIR GI //
+        std::vector<Sample> initialSampleBuffer;
+        std::vector<Reservoir> temporalReservoirBuffer;
+        std::vector<Reservoir> spatialReservoirBuffer;
+        void temporal_resampling(size_t x, size_t y);
+        void spatial_resampling(size_t x, size_t y);
+        void render_final_sample(size_t x, size_t y);
         
         Vector3D debug_shading(const Vector3D d) {
             return Vector3D(abs(d.r), abs(d.g), .0).unit();

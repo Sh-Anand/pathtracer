@@ -20,6 +20,8 @@ namespace CGL {
 struct Ray {
   size_t depth;  ///< depth of the Ray
 
+  size_t x,y; ///< pixel coordinates
+
   Vector3D o;  ///< origin
   Vector3D d;  ///< direction
   mutable double min_t; ///< treat the ray as a segment (ray "begin" at min_t)

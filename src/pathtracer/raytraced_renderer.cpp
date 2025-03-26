@@ -83,6 +83,7 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
   imageTileSize = 32;                     // Size of the rendering tile.
   numWorkerThreads = num_threads;         // Number of threads
   workerThreads.resize(numWorkerThreads);
+
 }
 
 /**
@@ -334,6 +335,20 @@ void RaytracedRenderer::render_to_file(string filename, size_t x, size_t y, size
     start_raytracing();
     cv_done.wait(lk, [this]{ return state == DONE; });
     lk.unlock();
+    // iterate over all pixels and call temporal sampling
+    for (size_t y = 0; y < frameBuffer.h; y++) {
+      for (size_t x = 0; x < frameBuffer.w; x++) {
+        pt->temporal_resampling(x, y);
+      }
+    }
+    //iterate over all pixels and call spatial sampling and render final
+    for (size_t y = 0; y < frameBuffer.h; y++) {
+      for (size_t x = 0; x < frameBuffer.w; x++) {
+        pt->spatial_resampling(x, y);
+        pt->render_final_sample(x, y);
+      }
+    }
+    pt->write_to_framebuffer(frameBuffer, 0, 0, frameBuffer.w, frameBuffer.h);
     save_image(filename);
     fprintf(stdout, "[PathTracer] Job completed.\n");
   } else {
@@ -611,13 +626,14 @@ void RaytracedRenderer::raytrace_tile(int tile_x, int tile_y,
   for (size_t y = tile_start_y; y < tile_end_y; y++) {
     if (!continueRaytracing) return;
     for (size_t x = tile_start_x; x < tile_end_x; x++) {
+      // generate samples
       pt->raytrace_pixel(x, y);
     }
   }
 
   tile_samples[tile_idx_x + tile_idx_y * num_tiles_w] += 1;
 
-  pt->write_to_framebuffer(frameBuffer, tile_start_x, tile_start_y, tile_end_x, tile_end_y);
+//  pt->write_to_framebuffer(frameBuffer, tile_start_x, tile_start_y, tile_end_x, tile_end_y);
 }
 
 void RaytracedRenderer::raytrace_cell(ImageBuffer& buffer) {
