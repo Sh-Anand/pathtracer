@@ -1,9 +1,6 @@
 #include "sphere.h"
 
 #include "scene/object.h"
-#include "util/sphere_drawing.h"
-
-#include "application/visual_debugger.h"
 
 #include "pathtracer/bsdf.h"
 
@@ -16,28 +13,6 @@ Sphere::Sphere(const Collada::SphereInfo& info,
     bsdf = info.material->bsdf;
   } else {
     bsdf = new DiffuseBSDF(Vector3D(0.5f,0.5f,0.5f));    
-  }
-}
-
-void Sphere::set_draw_styles(DrawStyle *defaultStyle, DrawStyle *hoveredStyle,
-                             DrawStyle *selectedStyle) {
-  style = defaultStyle;
-}
-
-void Sphere::render_in_opengl() const {
-  Misc::draw_sphere_opengl(p, r);
-}
-
-void Sphere::render_debugger_node()
-{
-  if (ImGui::TreeNode(this, "Sphere"))
-  {
-    DragDouble("Radius", &r, 0.005);
-    DragDouble3("Position", &p[0], 0.005);
-
-    if (bsdf) bsdf->render_debugger_node();
-
-    ImGui::TreePop();
   }
 }
 

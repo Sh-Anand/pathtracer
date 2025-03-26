@@ -127,12 +127,6 @@ struct BBox {
    * \param t1 upper bound of intersection time
    */
   bool intersect(const Ray& r, double& t0, double& t1) const;
-
-  /**
-   * Draw box wireframe with OpenGL.
-   * \param c color of the wireframe
-   */
-  void draw(Color c, float) const;
 };
 
 std::ostream& operator<<(std::ostream& os, const BBox& b);

@@ -1,7 +1,6 @@
 #include "triangle.h"
 
 #include "CGL/CGL.h"
-#include "GL/glew.h"
 
 namespace CGL {
 namespace SceneObjects {
@@ -67,24 +66,6 @@ bool Triangle::intersect(const Ray &r, Intersection *isect) const {
   isect->t = t; isect->primitive = this; isect->bsdf = get_bsdf();
 
   return true;
-}
-
-void Triangle::draw(const Color &c, float alpha) const {
-  glColor4f(c.r, c.g, c.b, alpha);
-  glBegin(GL_TRIANGLES);
-  glVertex3d(p1.x, p1.y, p1.z);
-  glVertex3d(p2.x, p2.y, p2.z);
-  glVertex3d(p3.x, p3.y, p3.z);
-  glEnd();
-}
-
-void Triangle::drawOutline(const Color &c, float alpha) const {
-  glColor4f(c.r, c.g, c.b, alpha);
-  glBegin(GL_LINE_LOOP);
-  glVertex3d(p1.x, p1.y, p1.z);
-  glVertex3d(p2.x, p2.y, p2.z);
-  glVertex3d(p3.x, p3.y, p3.z);
-  glEnd();
 }
 
 } // namespace SceneObjects

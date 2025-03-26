@@ -2,8 +2,6 @@
 #include "bsdf.h"
 #include "bsdf.h"
 
-#include "application/visual_debugger.h"
-
 #include <algorithm>
 #include <iostream>
 #include <utility>
@@ -72,15 +70,6 @@ Vector3D DiffuseBSDF::sample_f(const Vector3D wo, Vector3D *wi, double *pdf) {
   return f(wo, *wi);
 }
 
-void DiffuseBSDF::render_debugger_node()
-{
-  if (ImGui::TreeNode(this, "Diffuse BSDF"))
-  {
-    DragDouble3("Reflectance", &reflectance[0], 0.005);
-    ImGui::TreePop();
-  }
-}
-
 /**
  * Evalutate Emission BSDF (Light Source)
  */
@@ -95,15 +84,6 @@ Vector3D EmissionBSDF::sample_f(const Vector3D wo, Vector3D *wi, double *pdf) {
   *pdf = 1.0 / PI;
   *wi = sampler.get_sample(pdf);
   return Vector3D();
-}
-
-void EmissionBSDF::render_debugger_node()
-{
-  if (ImGui::TreeNode(this, "Emission BSDF"))
-  {
-    DragDouble3("Radiance", &radiance[0], 0.005);
-    ImGui::TreePop();
-  }
 }
 
 } // namespace CGL

@@ -5,8 +5,6 @@
 #include "scene/collada/light_info.h"
 #include "scene/light.h"
 
-#include "application/visual_debugger.h"
-
 namespace CGL { namespace GLScene {
 
 class AmbientLight : public SceneLight {
@@ -20,14 +18,6 @@ class AmbientLight : public SceneLight {
     SceneObjects::InfiniteHemisphereLight* l = 
       new SceneObjects::InfiniteHemisphereLight(spectrum);
     return l;
-  }
-
-  void render_debugger_node() {
-    if (ImGui::TreeNode(this, "Infinite Hemisphere Light 0x%x", this))
-    {
-      DragDouble3("Radiance", &spectrum[0], 0.005);
-      ImGui::TreePop();
-    }
   }
 
  private:

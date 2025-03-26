@@ -3,7 +3,6 @@
 #include <cmath>
 
 #include "pathtracer/bsdf.h"
-#include "util/sphere_drawing.h"
 
 namespace CGL {
 namespace SceneObjects {
@@ -69,14 +68,6 @@ bool Sphere::intersect(const Ray &r, Intersection *i) const {
   r.max_t = i->t;
   
   return true;
-}
-
-void Sphere::draw(const Color &c, float alpha) const {
-  Misc::draw_sphere_opengl(o, r, c);
-}
-
-void Sphere::drawOutline(const Color &c, float alpha) const {
-  // Misc::draw_sphere_opengl(o, r, c);
 }
 
 } // namespace SceneObjects

@@ -99,8 +99,6 @@ class BSDF {
    */
   virtual bool is_delta() const = 0;
 
-  virtual void render_debugger_node() {};
-
   /**
    * Reflection helper
    */
@@ -132,8 +130,6 @@ class DiffuseBSDF : public BSDF {
   Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
   Vector3D get_emission() const { return Vector3D(); }
   bool is_delta() const { return false; }
-
-  void render_debugger_node();
 
 private:
   /*
@@ -183,8 +179,6 @@ public:
   Vector3D get_emission() const { return Vector3D(); }
   bool is_delta() const { return false; }
 
-  void render_debugger_node();
-
 private:
   Vector3D eta, k;
   double alpha;
@@ -204,8 +198,6 @@ class MirrorBSDF : public BSDF {
   Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
   Vector3D get_emission() const { return Vector3D(); }
   bool is_delta() const { return true; }
-
-  void render_debugger_node();
 
 private:
 
@@ -227,8 +219,6 @@ class RefractionBSDF : public BSDF {
   Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
   Vector3D get_emission() const { return Vector3D(); }
   bool is_delta() const { return true; }
-
-  void render_debugger_node();
 
  private:
 
@@ -254,8 +244,6 @@ class GlassBSDF : public BSDF {
   Vector3D get_emission() const { return Vector3D(); }
   bool is_delta() const { return true; }
 
-  void render_debugger_node();
-
  private:
 
   double ior;
@@ -277,8 +265,6 @@ class EmissionBSDF : public BSDF {
   Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
   Vector3D get_emission() const { return radiance; }
   bool is_delta() const { return false; }
-
-  void render_debugger_node();
 
  private:
 

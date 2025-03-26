@@ -49,19 +49,6 @@ class Primitive {
    * SceneObjects the primitive belongs to.
    */
   virtual BSDF* get_bsdf() const = 0;
-
-  /**
-   * Draw with OpenGL (for visualization)
-   * \param c desired highlight color
-   */
-  virtual void draw(const Color& c, float alpha) const = 0;
-
-  /**
-   * Draw outline with OpenGL (for visualization)
-   * \param c desired highlight color
-   */
-  virtual void drawOutline(const Color& c, float alpha) const = 0;
-
 };
 
 } // namespace SceneObjects

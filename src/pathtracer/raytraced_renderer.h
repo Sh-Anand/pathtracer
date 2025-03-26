@@ -110,14 +110,6 @@ public:
   void set_frame_size(size_t width, size_t height);
 
   /**
-   * Update result on screen.
-   * If the pathtracer is in RENDERING or DONE, it will display the result in
-   * its frame buffer. If the pathtracer is in VISUALIZE mode, it will draw
-   * the BVH visualization with OpenGL.
-   */
-  void update_screen();
-
-  /**
    * Transitions from any running state to READY.
    */
   void stop();
@@ -126,11 +118,6 @@ public:
    * If the pathtracer is in READY, delete all internal data, transition to INIT.
    */
   void clear();
-
-  /**
-   * If the pathtracer is in RENDER, set the camera focal distance to the vector.
-   */
-  void autofocus(Vector2D loc);
 
   /**
    * If the pathtracer is in READY, transition to VISUALIZE.
@@ -143,8 +130,6 @@ public:
   void start_raytracing();
 
   void render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy);
-
-  void raytrace_cell(ImageBuffer& buffer);
 
   /**
    * If the pathtracer is in VISUALIZE, handle key presses to traverse the bvh.
@@ -172,13 +157,6 @@ public:
    * Build acceleration structures.
    */
   void build_accel();
-
-  /**
-   * Visualize acceleration structures.
-   */
-  void visualize_accel() const;
-
-  void visualize_cell() const;
 
   /**
    * Raytrace a tile of the scene and update the frame buffer. Is run

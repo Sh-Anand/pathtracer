@@ -116,23 +116,6 @@ class BVHAccel : public Aggregate {
    */
   BSDF* get_bsdf() const { return NULL; }
 
-  /**
-   * Get entry point (root) - used in visualizer
-   */
-  BVHNode* get_root() const { return root; }
-
-  /**
-   * Draw the BVH with OpenGL - used in visualizer
-   */
-  void draw(const Color& c, float alpha) const { }
-  void draw(BVHNode *node, const Color& c, float alpha) const;
-
-  /**
-   * Draw the BVH outline with OpenGL - used in visualizer
-   */
-  void drawOutline(const Color& c, float alpha) const { }
-  void drawOutline(BVHNode *node, const Color& c, float alpha) const;
-
   mutable unsigned long long total_rays, total_isects;
 
 private:

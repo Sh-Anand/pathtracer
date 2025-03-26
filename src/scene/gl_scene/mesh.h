@@ -5,7 +5,6 @@
 
 #include "scene/collada/polymesh_info.h"
 #include "util/halfEdgeMesh.h"
-#include "application/meshEdit.h"
 
 namespace CGL { namespace GLScene {
 
@@ -35,54 +34,19 @@ class MeshFeature {
 };
 
 
-class Mesh : public SceneObject, public MeshView {
+class Mesh : public SceneObject {
  public:
 
   Mesh(Collada::PolymeshInfo& polyMesh, const Matrix4x4& transform);
 
   ~Mesh();
 
-  void set_draw_styles(DrawStyle *defaultStyle, DrawStyle *hoveredStyle,
-                       DrawStyle *selectedStyle);
-  void render_in_opengl() const;
-
-  void render_debugger_node();
-
   BBox get_bbox();
-
-  double test_selection(const Vector2D& p, const Matrix4x4& worldTo3DH,
-                        double minW);
-
-  void confirm_hover();
-  void confirm_select();
-  void invalidate_hover();
-  void invalidate_selection();
-  void get_selection_info(SelectionInfo *selectionInfo);
-
-  void drag_selection(float dx, float dy, const Matrix4x4& worldTo3DH);
-
-  MeshView *get_mesh_view();
 
   BSDF *get_bsdf();
   SceneObjects::SceneObject *get_static_object();
 
-  // MeshView methods
-  void collapse_selected_edge();
-  void flip_selected_edge();
-  void split_selected_edge();
-  void upsample();
-  void downsample();
-  void resample();
-
  private:
-
-  // Helpers for render_in_opengl.
-  void draw_faces() const;
-  void draw_edges() const;
-  void draw_feature_if_needed(const MeshFeature *feature) const;
-  void draw_vertex(const Vertex *v) const;
-  void draw_halfedge_arrow(const Halfedge *h) const;
-  DrawStyle *get_draw_style(const HalfedgeElement *element) const;
 
   /**
    * Returns w for collision, and writes barycentric coordinates to baryPtr.
@@ -105,13 +69,8 @@ class Mesh : public SceneObject, public MeshView {
    */
   void choose_hovered_subfeature();
 
-  // selection draw styles
-  MeshFeature potentialFeature, hoveredFeature, selectedFeature;
-	DrawStyle *defaultStyle, *hoveredStyle, *selectedStyle;
-
   // halfEdge mesh
   HalfedgeMesh mesh;
-  MeshResampler resampler;
 
   // material
   BSDF* bsdf;

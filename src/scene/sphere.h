@@ -75,16 +75,6 @@ class Sphere : public Primitive {
   }
 
   /**
-   * Draw with OpenGL (for visualizer)
-   */
-  void draw(const Color& c, float alpha) const;
-
-  /**
-  * Draw outline with OpenGL (for visualizer)
-  */
-  void drawOutline(const Color& c, float alpha) const;
-
-  /**
    * Tests for ray-sphere intersection, returning true if there are
    * intersections and writing the smaller of the two intersection times in t1
    * and the larger in t2.

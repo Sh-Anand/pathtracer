@@ -26,28 +26,6 @@ BVHAccel::~BVHAccel() {
 
 BBox BVHAccel::get_bbox() const { return root->bb; }
 
-void BVHAccel::draw(BVHNode *node, const Color &c, float alpha) const {
-  if (node->isLeaf()) {
-    for (auto p = node->start; p != node->end; p++) {
-      (*p)->draw(c, alpha);
-    }
-  } else {
-    draw(node->l, c, alpha);
-    draw(node->r, c, alpha);
-  }
-}
-
-void BVHAccel::drawOutline(BVHNode *node, const Color &c, float alpha) const {
-  if (node->isLeaf()) {
-    for (auto p = node->start; p != node->end; p++) {
-      (*p)->drawOutline(c, alpha);
-    }
-  } else {
-    drawOutline(node->l, c, alpha);
-    drawOutline(node->r, c, alpha);
-  }
-}
-
 BVHNode *BVHAccel::construct_bvh(std::vector<Primitive *>::iterator start,
                                  std::vector<Primitive *>::iterator end,
                                  size_t max_leaf_size) {

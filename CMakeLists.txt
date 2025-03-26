@@ -31,16 +31,6 @@ set(APPLICATION_3_1_SOURCE
     src/pathtracer/camera.cpp
     src/pathtracer/bsdf.cpp
     src/pathtracer/pathtracer.cpp
-
-    # Imgui
-    src/imgui/imgui.cpp
-    src/imgui/imgui_widgets.cpp
-    src/imgui/imgui_draw.cpp
-    src/imgui/imgui_tables.cpp
-    src/imgui/backends/imgui_impl_glfw.cpp
-    src/imgui/backends/imgui_impl_opengl2.cpp
-
-    src/application/pathtracer_launcher_gui.cpp
 )
 
 set(APPLICATION_3_2_SOURCE
@@ -61,7 +51,6 @@ set(APPLICATION_3_2_SOURCE
 
     # MeshEdit
     src/util/halfEdgeMesh.cpp
-    src/application/meshEdit.cpp
 
     src/pathtracer/sampler.cpp
     src/pathtracer/advanced_bsdf.cpp
@@ -70,20 +59,11 @@ set(APPLICATION_3_2_SOURCE
     src/pathtracer/raytraced_renderer.cpp
 
     # misc
-    src/util/sphere_drawing.cpp
     src/util/lodepng.cpp
 
     # Application
     src/application/application.cpp
     src/application/main.cpp
-    src/application/visual_debugger.cpp
-
-    src/imgui/imgui.cpp
-    src/imgui/imgui_widgets.cpp
-    src/imgui/imgui_draw.cpp
-    src/imgui/imgui_tables.cpp
-    src/imgui/backends/imgui_impl_glfw.cpp
-    src/imgui/backends/imgui_impl_opengl2.cpp
 )
 
 set(APPLICATION_HEADERS
@@ -99,10 +79,8 @@ set(APPLICATION_HEADERS
     src/scene/gl_scene/ambient_light.h
     src/scene/gl_scene/area_light.h
     src/scene/gl_scene/directional_light.h
-    src/scene/gl_scene/draw_style.h
     src/scene/gl_scene/environment_light.h
     src/scene/gl_scene/material.h
-    src/scene/gl_scene/mesh_view.h
     src/scene/gl_scene/mesh.h
     src/scene/gl_scene/point_light.h
     src/scene/gl_scene/scene.h
@@ -134,11 +112,9 @@ set(APPLICATION_HEADERS
     src/pathtracer/raytraced_renderer.h
     src/pathtracer/sampler.h
     # misc
-    src/util/sphere_drawing.h
     src/util/lodepng.h
     # Application
     src/application/application.h
-    src/application/meshEdit.h
     src/application/renderer.h
 )
 
@@ -160,7 +136,7 @@ target_include_directories(pathtracer PUBLIC src)
 target_link_libraries(pt31 PUBLIC CGL)
 target_link_libraries(pathtracer PUBLIC pt31)
 
-set(CGL_INCLUDE_DIRS CGL/include CGL/deps/glew/include CGL/deps/glfw/include ./src/imgui ./src/imgui/backends)
+set(CGL_INCLUDE_DIRS CGL/include)
 
 #-------------------------------------------------------------------------------
 # Find dependencies
@@ -169,11 +145,6 @@ add_subdirectory(CGL)
 target_include_directories(pt31 PUBLIC ${CGL_INCLUDE_DIRS})
 target_include_directories(pathtracer PUBLIC ${CGL_INCLUDE_DIRS})
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CGL_CXX_FLAGS}")
-
-set(OpenGL_GL_PREFERENCE LEGACY)
-find_package(OpenGL REQUIRED)
-target_link_libraries(pt31 PUBLIC OpenGL::GL)
-target_link_libraries(pt31 PUBLIC OpenGL::GLU)
 
 #-------------------------------------------------------------------------------
 # Add subdirectories

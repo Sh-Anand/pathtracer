@@ -72,9 +72,6 @@ set(CGL_SOURCE
     src/quaternion.cpp
     src/complex.cpp
     src/color.cpp
-    src/osdtext.cpp
-    src/osdfont.cpp
-    src/viewer.cpp
     src/base64.cpp
     src/lodepng.cpp
     src/tinyxml2.cpp
@@ -96,25 +93,10 @@ target_include_directories(CGL PUBLIC ${CGL_INCLUDE_DIRS})
 # Threads
 find_package(Threads REQUIRED)
 
-# OpenGL
-set(OpenGL_GL_PREFERENCE LEGACY)
-find_package(OpenGL REQUIRED)
-
 # Freetype
 find_package(Freetype REQUIRED)
 target_include_directories(CGL PRIVATE ${FREETYPE_INCLUDE_DIRS})
 target_link_libraries(CGL PRIVATE ${FREETYPE_LIBRARIES})
-
-# GLEW
-add_definitions(-DGLEW_STATIC)
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/deps/glew")
-target_include_directories(CGL PUBLIC ${GLEW_INCLUDE_DIRS})
-target_link_libraries(CGL PUBLIC ${GLEW_LIBRARIES})
-
-# GLFW
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/deps/glfw")
-target_link_libraries(CGL PUBLIC glfw)
-target_link_libraries(CGL PUBLIC OpenGL::GL)
 
 #-------------------------------------------------------------------------------
 # Add subdirectories

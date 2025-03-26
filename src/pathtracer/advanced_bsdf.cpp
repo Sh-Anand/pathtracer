@@ -4,8 +4,6 @@
 #include <iostream>
 #include <utility>
 
-#include "application/visual_debugger.h"
-
 using std::max;
 using std::min;
 using std::swap;
@@ -24,15 +22,6 @@ Vector3D MirrorBSDF::sample_f(const Vector3D wo, Vector3D* wi, double* pdf) {
   // Implement MirrorBSDF
   
   return Vector3D();
-}
-
-void MirrorBSDF::render_debugger_node()
-{
-  if (ImGui::TreeNode(this, "Mirror BSDF"))
-  {
-    DragDouble3("Reflectance", &reflectance[0], 0.005);
-    ImGui::TreePop();
-  }
 }
 
 // Microfacet BSDF //
@@ -79,17 +68,6 @@ Vector3D MicrofacetBSDF::sample_f(const Vector3D wo, Vector3D* wi, double* pdf) 
   return MicrofacetBSDF::f(wo, *wi);
 }
 
-void MicrofacetBSDF::render_debugger_node()
-{
-  if (ImGui::TreeNode(this, "Micofacet BSDF"))
-  {
-    DragDouble3("eta", &eta[0], 0.005);
-    DragDouble3("K", &k[0], 0.005);
-    DragDouble("alpha", &alpha, 0.005);
-    ImGui::TreePop();
-  }
-}
-
 // Refraction BSDF //
 
 Vector3D RefractionBSDF::f(const Vector3D wo, const Vector3D wi) {
@@ -103,16 +81,6 @@ Vector3D RefractionBSDF::sample_f(const Vector3D wo, Vector3D* wi, double* pdf) 
   
   
   return Vector3D();
-}
-
-void RefractionBSDF::render_debugger_node()
-{
-  if (ImGui::TreeNode(this, "Refraction BSDF"))
-  {
-    DragDouble3("Transmittance", &transmittance[0], 0.005);
-    DragDouble("ior", &ior, 0.005);
-    ImGui::TreePop();
-  }
 }
 
 // Glass BSDF //
@@ -131,17 +99,6 @@ Vector3D GlassBSDF::sample_f(const Vector3D wo, Vector3D* wi, double* pdf) {
 
 
   return Vector3D();
-}
-
-void GlassBSDF::render_debugger_node()
-{
-  if (ImGui::TreeNode(this, "Refraction BSDF"))
-  {
-    DragDouble3("Reflectance", &reflectance[0], 0.005);
-    DragDouble3("Transmittance", &transmittance[0], 0.005);
-    DragDouble("ior", &ior, 0.005);
-    ImGui::TreePop();
-  }
 }
 
 void BSDF::reflect(const Vector3D wo, Vector3D* wi) {

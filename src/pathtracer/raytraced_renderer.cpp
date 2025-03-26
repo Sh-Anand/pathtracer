@@ -12,8 +12,6 @@
 #include "CGL/matrix3x3.h"
 #include "CGL/lodepng.h"
 
-#include "GL/glew.h"
-
 #include "scene/sphere.h"
 #include "scene/triangle.h"
 #include "scene/light.h"
@@ -168,7 +166,6 @@ void RaytracedRenderer::set_frame_size(size_t width, size_t height) {
   frameBuffer.resize(width, height);
   cell_tl = Vector2D(0,0); 
   cell_br = Vector2D(width, height);
-  render_cell = false;
 
   pt->set_frame_size(width, height);
 
@@ -179,35 +176,6 @@ void RaytracedRenderer::set_frame_size(size_t width, size_t height) {
 
 bool RaytracedRenderer::has_valid_configuration() {
   return scene && camera;
-}
-
-/**
- * Update result on screen.
- * If the pathtracer is in RENDERING or DONE, it will display the result in
- * its frame buffer. If the pathtracer is in VISUALIZE mode, it will draw
- * the BVH visualization with OpenGL.
- */
-void RaytracedRenderer::update_screen() {
-  switch (state) {
-    case INIT:
-    case READY:
-      break;
-    case VISUALIZE:
-      visualize_accel();
-      break;
-    case RENDERING:
-      glDrawPixels(frameBuffer.w, frameBuffer.h, GL_RGBA,
-                   GL_UNSIGNED_BYTE, &frameBuffer.data[0]);
-      if (render_cell)
-        visualize_cell();
-      break;
-    case DONE:
-      glDrawPixels(frameBuffer.w, frameBuffer.h, GL_RGBA,
-                   GL_UNSIGNED_BYTE, &frameBuffer.data[0]);
-      if (render_cell)
-        visualize_cell();
-      break;
-  }
 }
 
 /**
@@ -248,7 +216,6 @@ void RaytracedRenderer::clear() {
   selectionHistory.pop();
   frameBuffer.resize(0, 0);
   state = INIT;
-  render_cell = false;
 
   pt->clear();
 }
@@ -286,39 +253,19 @@ void RaytracedRenderer::start_raytracing() {
   pt->camera = camera;
   pt->scene = scene;
 
-  if (!render_cell) {
-    frameBuffer.clear();
-    num_tiles_w = width / imageTileSize + 1;
-    num_tiles_h = height / imageTileSize + 1;
-    tilesTotal = num_tiles_w * num_tiles_h;
-    tilesDone = 0;
-    tile_samples.resize(num_tiles_w * num_tiles_h);
-    memset(&tile_samples[0], 0, num_tiles_w * num_tiles_h * sizeof(int));
+  frameBuffer.clear();
+  num_tiles_w = width / imageTileSize + 1;
+  num_tiles_h = height / imageTileSize + 1;
+  tilesTotal = num_tiles_w * num_tiles_h;
+  tilesDone = 0;
+  tile_samples.resize(num_tiles_w * num_tiles_h);
+  memset(&tile_samples[0], 0, num_tiles_w * num_tiles_h * sizeof(int));
 
-    // populate the tile work queue
-    for (size_t y = 0; y < height; y += imageTileSize) {
-        for (size_t x = 0; x < width; x += imageTileSize) {
-            workQueue.put_work(WorkItem(x, y, imageTileSize, imageTileSize));
-        }
-    }
-  } else {
-    int w = (cell_br-cell_tl).x;
-    int h = (cell_br-cell_tl).y;
-    int imTS = imageTileSize / 4;
-    num_tiles_w = w / imTS + 1;
-    num_tiles_h = h / imTS + 1;
-    tilesTotal = num_tiles_w * num_tiles_h;
-    tilesDone = 0;
-    tile_samples.resize(num_tiles_w * num_tiles_h);
-    memset(&tile_samples[0], 0, num_tiles_w * num_tiles_h * sizeof(int));
-
-    // populate the tile work queue
-    for (size_t y = cell_tl.y; y < cell_br.y; y += imTS) {
-      for (size_t x = cell_tl.x; x < cell_br.x; x += imTS) {
-        workQueue.put_work(WorkItem(x, y, 
-          min(imTS, (int)(cell_br.x-x)), min(imTS, (int)(cell_br.y-y)) ));
+  // populate the tile work queue
+  for (size_t y = 0; y < height; y += imageTileSize) {
+      for (size_t x = 0; x < width; x += imageTileSize) {
+          workQueue.put_work(WorkItem(x, y, imageTileSize, imageTileSize));
       }
-    }
   }
 
   bvh->total_isects = 0; bvh->total_rays = 0;
@@ -330,36 +277,26 @@ void RaytracedRenderer::start_raytracing() {
 }
 
 void RaytracedRenderer::render_to_file(string filename, size_t x, size_t y, size_t dx, size_t dy) {
-  if (x == -1) {
-    unique_lock<std::mutex> lk(m_done);
-    start_raytracing();
-    cv_done.wait(lk, [this]{ return state == DONE; });
-    lk.unlock();
-    // iterate over all pixels and call temporal sampling
-    for (size_t y = 0; y < frameBuffer.h; y++) {
-      for (size_t x = 0; x < frameBuffer.w; x++) {
-        pt->temporal_resampling(x, y);
-      }
+  unique_lock<std::mutex> lk(m_done);
+  start_raytracing();
+  cv_done.wait(lk, [this]{ return state == DONE; });
+  lk.unlock();
+  // iterate over all pixels and call temporal sampling
+  for (size_t y = 0; y < frameBuffer.h; y++) {
+    for (size_t x = 0; x < frameBuffer.w; x++) {
+      pt->temporal_resampling(x, y);
     }
-    //iterate over all pixels and call spatial sampling and render final
-    for (size_t y = 0; y < frameBuffer.h; y++) {
-      for (size_t x = 0; x < frameBuffer.w; x++) {
-        pt->spatial_resampling(x, y);
-        pt->render_final_sample(x, y);
-      }
-    }
-    pt->write_to_framebuffer(frameBuffer, 0, 0, frameBuffer.w, frameBuffer.h);
-    save_image(filename);
-    fprintf(stdout, "[PathTracer] Job completed.\n");
-  } else {
-    render_cell = true;
-    cell_tl = Vector2D(x,y);
-    cell_br = Vector2D(x+dx,y+dy);
-    ImageBuffer buffer;
-    raytrace_cell(buffer);
-    save_image(filename, &buffer);
-    fprintf(stdout, "[PathTracer] Cell job completed.\n");
   }
+  //iterate over all pixels and call spatial sampling and render final
+  for (size_t y = 0; y < frameBuffer.h; y++) {
+    for (size_t x = 0; x < frameBuffer.w; x++) {
+      pt->spatial_resampling(x, y);
+      pt->render_final_sample(x, y);
+    }
+  }
+  pt->write_to_framebuffer(frameBuffer, 0, 0, frameBuffer.w, frameBuffer.h);
+  save_image(filename);
+  fprintf(stdout, "[PathTracer] Job completed.\n");
 }
 
 
@@ -384,224 +321,6 @@ void RaytracedRenderer::build_accel() {
   bvh = new BVHAccel(primitives);
   timer.stop();
   fprintf(stdout, "Done! (%.4f sec)\n", timer.duration());
-
-  // initial visualization //
-  selectionHistory.push(bvh->get_root());
-}
-
-void RaytracedRenderer::visualize_accel() const {
-
-  glPushAttrib(GL_ENABLE_BIT);
-  glDisable(GL_LIGHTING);
-  glLineWidth(1);
-  glEnable(GL_DEPTH_TEST);
-
-  // hardcoded color settings
-  Color cnode = Color(.5, .5, .5); float cnode_alpha = 0.25f;
-  Color cnode_hl = Color(1., .25, .0); float cnode_hl_alpha = 0.6f;
-  Color cnode_hl_child = Color(1., 1., 1.); float cnode_hl_child_alpha = 0.6f;
-
-  Color cprim_hl_left = Color(.6, .6, 1.); float cprim_hl_left_alpha = 1.f;
-  Color cprim_hl_right = Color(.8, .8, 1.); float cprim_hl_right_alpha = 1.f;
-  Color cprim_hl_edges = Color(0., 0., 0.); float cprim_hl_edges_alpha = 0.5f;
-
-  BVHNode *selected = selectionHistory.top();
-
-  // render solid geometry (with depth offset)
-  glPolygonOffset(1.0, 1.0);
-  glEnable(GL_POLYGON_OFFSET_FILL);
-
-  if (selected->isLeaf()) {
-    bvh->draw(selected, cprim_hl_left, cprim_hl_left_alpha);
-  } else {
-    bvh->draw(selected->l, cprim_hl_left, cprim_hl_left_alpha);
-    bvh->draw(selected->r, cprim_hl_right, cprim_hl_right_alpha);
-  }
-
-  glDisable(GL_POLYGON_OFFSET_FILL);
-
-  // draw geometry outline
-  bvh->drawOutline(selected, cprim_hl_edges, cprim_hl_edges_alpha);
-
-  // keep depth buffer check enabled so that mesh occluded bboxes, but
-  // disable depth write so that bboxes don't occlude each other.
-  glDepthMask(GL_FALSE);
-
-  // create traversal stack
-  stack<BVHNode *> tstack;
-
-  // push initial traversal data
-  tstack.push(bvh->get_root());
-
-  // draw all BVH bboxes with non-highlighted color
-  while (!tstack.empty()) {
-
-    BVHNode *current = tstack.top();
-    tstack.pop();
-
-    current->bb.draw(cnode, cnode_alpha);
-    if (current->l) tstack.push(current->l);
-    if (current->r) tstack.push(current->r);
-  }
-
-  // draw selected node bbox and primitives
-  if (selected->l) selected->l->bb.draw(cnode_hl_child, cnode_hl_child_alpha);
-  if (selected->r) selected->r->bb.draw(cnode_hl_child, cnode_hl_child_alpha);
-
-  glLineWidth(3.f);
-  selected->bb.draw(cnode_hl, cnode_hl_alpha);
-
-  // now perform visualization of the rays
-  if (show_rays) {
-      glLineWidth(1.f);
-      glBegin(GL_LINES);
-
-      for (size_t i=0; i<rayLog.size(); i+=500) {
-
-          const static double VERY_LONG = 10e4;
-          double ray_t = VERY_LONG;
-
-          // color rays that are hits yellow
-          // and rays this miss all geometry red
-          if (rayLog[i].hit_t >= 0.0) {
-              ray_t = rayLog[i].hit_t;
-              glColor4f(1.f, 1.f, 0.f, 0.1f);
-          } else {
-              glColor4f(1.f, 0.f, 0.f, 0.1f);
-          }
-
-          Vector3D end = rayLog[i].o + ray_t * rayLog[i].d;
-
-          glVertex3f(rayLog[i].o[0], rayLog[i].o[1], rayLog[i].o[2]);
-          glVertex3f(end[0], end[1], end[2]);
-      }
-      glEnd();
-  }
-
-  glDepthMask(GL_TRUE);
-  glPopAttrib();
-}
-
-void RaytracedRenderer::visualize_cell() const {
-  glPushAttrib(GL_VIEWPORT_BIT);
-  glViewport(0, 0, frameBuffer.w, frameBuffer.h);
-
-  glMatrixMode(GL_PROJECTION);
-  glPushMatrix();
-  glLoadIdentity();
-  glOrtho(0, frameBuffer.w, frameBuffer.h, 0, 0, 1);
-
-  glMatrixMode(GL_MODELVIEW);
-  glPushMatrix();
-  glLoadIdentity();
-  glTranslatef(0, 0, -1);
-
-  glColor4f(1.0, 0.0, 0.0, 0.8);
-  glDisable(GL_DEPTH_TEST);
-  glDisable(GL_LIGHTING);
-
-  // Draw the Red Rectangle.
-  glBegin(GL_LINE_LOOP);
-  glVertex2f(cell_tl.x, frameBuffer.h-cell_br.y);
-  glVertex2f(cell_br.x, frameBuffer.h-cell_br.y);
-  glVertex2f(cell_br.x, frameBuffer.h-cell_tl.y);
-  glVertex2f(cell_tl.x, frameBuffer.h-cell_tl.y);
-  glEnd();
-
-  glMatrixMode(GL_PROJECTION);
-  glPopMatrix();
-
-  glMatrixMode(GL_MODELVIEW);
-  glPopMatrix();
-
-  glPopAttrib();
-
-  glEnable(GL_LIGHTING);
-  glEnable(GL_DEPTH_TEST);
-}
-
-/**
- * If the pathtracer is in VISUALIZE, handle key presses to traverse the bvh.
- */
-void RaytracedRenderer::key_press(int key) {
-  BVHNode *current = selectionHistory.top();
-  switch (key) {
-  case ']':
-    pt->ns_aa *=2;
-    fprintf(stdout, "[PathTracer] Samples per pixel changed to %lu\n", pt->ns_aa);
-    //tm_key = clamp(tm_key + 0.02f, 0.0f, 1.0f);
-    break;
-  case '[':
-    //tm_key = clamp(tm_key - 0.02f, 0.0f, 1.0f);
-    pt->ns_aa /=2;
-    if (pt->ns_aa < 1) pt->ns_aa = 1;
-    fprintf(stdout, "[PathTracer] Samples per pixel changed to %lu\n", pt->ns_aa);
-    break;
-  case '=': case '+':
-    pt->ns_area_light *= 2;
-    fprintf(stdout, "[PathTracer] Area light sample count increased to %zu.\n", pt->ns_area_light);
-    break;
-  case '-': case '_':
-    if (pt->ns_area_light > 1) pt->ns_area_light /= 2;
-    fprintf(stdout, "[PathTracer] Area light sample count decreased to %zu.\n", pt->ns_area_light);
-    break;
-  case '.': case '>':
-    pt->max_ray_depth++;
-    fprintf(stdout, "[PathTracer] Max ray depth increased to %zu.\n", pt->max_ray_depth);
-    break;
-  case ',': case '<':
-    if (pt->max_ray_depth) pt->max_ray_depth--;
-    fprintf(stdout, "[PathTracer] Max ray depth decreased to %zu.\n", pt->max_ray_depth);
-    break;
-  case 'h': case 'H':
-    pt->direct_hemisphere_sample = !pt->direct_hemisphere_sample;
-    fprintf(stdout, "[PathTracer] Toggled direct lighting to %s\n", (pt->direct_hemisphere_sample ? "uniform hemisphere sampling" : "importance light sampling"));
-    break;
-  case 'k': case 'K':
-    pt->camera->lensRadius = std::max(pt->camera->lensRadius - 0.05, 0.0);
-    fprintf(stdout, "[PathTracer] Camera lens radius reduced to %f.\n", pt->camera->lensRadius);
-    break;
-  case 'l': case 'L':
-    pt->camera->lensRadius = pt->camera->lensRadius + 0.05;
-    fprintf(stdout, "[PathTracer] Camera lens radius increased to %f.\n", pt->camera->lensRadius);
-    break;
-  case ';':
-    pt->camera->focalDistance = std::max(pt->camera->focalDistance - 0.1, 0.0);
-    fprintf(stdout, "[PathTracer] Camera focal distance reduced to %f.\n", pt->camera->focalDistance);
-    break;
-  case '\'':
-    pt->camera->focalDistance = pt->camera->focalDistance + 0.1;
-    fprintf(stdout, "[PathTracer] Camera focal distance increased to %f.\n", pt->camera->focalDistance);
-    break;
-  case KEYBOARD_UP:
-    if (current != bvh->get_root()) {
-        selectionHistory.pop();
-    }
-    break;
-  case KEYBOARD_LEFT:
-    if (current->l) {
-        selectionHistory.push(current->l);
-    }
-    break;
-  case KEYBOARD_RIGHT:
-    if (current->l) {
-        selectionHistory.push(current->r);
-    }
-    break;
-
-  case 'C':
-    render_cell = !render_cell;
-    if (render_cell)
-      fprintf(stdout, "[PathTracer] Now in cell render mode.\n");
-    else
-      fprintf(stdout, "[PathTracer] No longer in cell render mode.\n");
-    break;
-
-  case 'a': case 'A':
-    show_rays = !show_rays;
-  default:
-    return;
-  }
 }
 
 /**
@@ -634,38 +353,6 @@ void RaytracedRenderer::raytrace_tile(int tile_x, int tile_y,
   tile_samples[tile_idx_x + tile_idx_y * num_tiles_w] += 1;
 
 //  pt->write_to_framebuffer(frameBuffer, tile_start_x, tile_start_y, tile_end_x, tile_end_y);
-}
-
-void RaytracedRenderer::raytrace_cell(ImageBuffer& buffer) {
-  size_t tile_start_x = cell_tl.x;
-  size_t tile_start_y = cell_tl.y;
-
-  size_t tile_end_x = cell_br.x;
-  size_t tile_end_y = cell_br.y;
-
-  size_t w = tile_end_x - tile_start_x;
-  size_t h = tile_end_y - tile_start_y;
-  HDRImageBuffer sb(w, h);
-  buffer.resize(w,h);
-
-  stop();
-  render_cell = true;
-  {
-    unique_lock<std::mutex> lk(m_done);
-    start_raytracing();
-    cv_done.wait(lk, [this]{ return state == DONE; });
-    lk.unlock();
-  }
-
-  for (size_t y = tile_start_y; y < tile_end_y; y++) {
-    for (size_t x = tile_start_x; x < tile_end_x; x++) {
-      buffer.data[w*(y-tile_start_y)+(x-tile_start_x)] = frameBuffer.data[x+y*frame_w];
-    }
-  }
-}
-
-void RaytracedRenderer::autofocus(Vector2D loc) {
-  pt->autofocus(loc);
 }
 
 void RaytracedRenderer::worker_thread() {

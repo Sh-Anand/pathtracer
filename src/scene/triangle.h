@@ -65,16 +65,6 @@ public:
    */
   BSDF* get_bsdf() const { return bsdf; }
 
-  /**
-   * Draw with OpenGL (for visualizer)
-   */
-  void draw(const Color& c, float alpha) const;
-
-  /**
-   * Draw outline with OpenGL (for visualizer)
-   */
-  void drawOutline(const Color& c, float alpha) const;
-
   Vector3D p1, p2, p3;
   Vector3D n1, n2, n3;
   

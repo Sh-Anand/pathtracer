@@ -5,7 +5,6 @@
 #include <string>
 
 #include "CGL/CGL.h"
-#include "CGL/tinyexr.h"
 #include "CGL/tinyxml2.h"
 
 #include "camera_info.h"
