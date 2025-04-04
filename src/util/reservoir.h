@@ -18,7 +18,7 @@ struct Sample {
 #define distance_threshold 0.1f
 bool inline are_geometrically_similar(const Sample& s1, const Sample& s2) {
     // Normal and distance check
-    return dot(s1.n_v.unit(), s2.n_v.unit()) >= cos_angle_threshold
+    return acos(dot(s1.n_v.unit(), s2.n_v.unit())) <= radians(25.0)
         && (s1.x_v - s2.x_v).norm() <= distance_threshold;
 }
 

@@ -82,8 +82,8 @@ PathTracer::estimate_direct_lighting_importance(const Ray &r,
     sample_count += num_samples;
     for (int j = 0; j < num_samples; j++) {
       Vector3D radiance = light->sample_L(hit_p, &wi, &distToLight, &pdf);
+      if (radiance == 0) continue;
       Vector3D wi_o = w2o * wi;
-      if (wi_o.z < 0 || radiance == 0) continue;
       Ray shadow_ray = Ray(hit_p, wi);
       shadow_ray.min_t = EPS_D;
       shadow_ray.max_t = distToLight;
@@ -224,15 +224,13 @@ void PathTracer::spatial_resampling(size_t x, size_t y) {
     // Ensure the sample is within the frame buffer bounds
     if (sample_x >= sampleBuffer.w || sample_y >= sampleBuffer.h || sample_x < 0 || sample_y < 0) continue;
 
-    // Calculate geometric similarity between q and qn
-    Sample qn = initialSampleBuffer[sample_x + sample_y * sampleBuffer.w];
-    if (!are_geometrically_similar(q, qn)) continue;
-
     // Retrieve the reservoir from the neighboring pixel
     Reservoir Rn = temporalReservoirBuffer[sample_x + sample_y * sampleBuffer.w];
+    // Calculate geometric similarity between q and qn
+    if (!are_geometrically_similar(q, Rn.z) || Rn.z.L == Vector3D(0, 0, 0)) continue;
 
     // Calculate |Jqn→q| (Jacobian determinant)
-    double Jqn_to_q = jacobian(qn, q); // Placeholder for actual Jacobian calculation
+    double Jqn_to_q = jacobian(Rn.z, q); // Placeholder for actual Jacobian calculation
 
     // Calculate ˆp′q
     double p_prime_q = p_hat(Rn.z) / Jqn_to_q;
@@ -258,8 +256,13 @@ void PathTracer::render_final_sample(size_t x, size_t y) {
   Reservoir R = spatialReservoirBuffer[x + y * sampleBuffer.w];
   Sample S = R.z;
   Sample initial = initialSampleBuffer[x + y *  sampleBuffer.w];
-  Vector3D L = initial.emittance + initial.fcos * S.L * R.W;
-  sampleBuffer.update_pixel(L, x, y);
+  Vector3D L = initial.emittance + initial.fcos * S.L;
+  Vector3D L_initial = initial.emittance + initial.fcos * initial.L;
+  if (y > 3*sampleBuffer.h /4) {
+  cout << x << "," << y << ": "<< L << " " << L_initial << endl;
+
+    sampleBuffer.update_pixel((L), x, y);
+  }
   sampleCountBuffer[x + y * sampleBuffer.w] = 1;
 }
 
