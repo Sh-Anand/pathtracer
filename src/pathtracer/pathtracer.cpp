@@ -203,11 +203,12 @@ void PathTracer::temporal_resampling(size_t x, size_t y) {
   Sample S = initialSampleBuffer[x + y * sampleBuffer.w];
   Reservoir R = temporalReservoirBuffer[x + y * sampleBuffer.w];
 
-  double w = S.pdf > 0 ? p_hat(S) / S.pdf : 0;
+  double w = p_hat(S);
   R.update(S, w);
   R.W = R.w / (R.M * p_hat(R.z));
 
   temporalReservoirBuffer[x + y * sampleBuffer.w] = R;
+  spatialReservoirBuffer[x + y * sampleBuffer.w] = R;
 }
 
 void PathTracer::spatial_resampling(size_t x, size_t y) {
@@ -233,7 +234,7 @@ void PathTracer::spatial_resampling(size_t x, size_t y) {
     double Jqn_to_q = jacobian(Rn.z, q); // Placeholder for actual Jacobian calculation
 
     // Calculate ˆp′q
-    double p_prime_q = p_hat(Rn.z) / Jqn_to_q;
+    double p_prime_q = (p_hat(Rn.z)) / Jqn_to_q;
 
     // visibility test
     // if neighbour's path's point is invisible from the current path's point, p_prime_q = 0
@@ -256,13 +257,9 @@ void PathTracer::render_final_sample(size_t x, size_t y) {
   Reservoir R = spatialReservoirBuffer[x + y * sampleBuffer.w];
   Sample S = R.z;
   Sample initial = initialSampleBuffer[x + y *  sampleBuffer.w];
-  Vector3D L = initial.emittance + initial.fcos * S.L;
-  Vector3D L_initial = initial.emittance + initial.fcos * initial.L;
-  if (y > 3*sampleBuffer.h /4) {
-  cout << x << "," << y << ": "<< L << " " << L_initial << endl;
+  Vector3D L = initial.emittance + S.fcos * S.L * R.W;
 
-    sampleBuffer.update_pixel((L), x, y);
-  }
+  sampleBuffer.update_pixel(L, x, y);
   sampleCountBuffer[x + y * sampleBuffer.w] = 1;
 }
 

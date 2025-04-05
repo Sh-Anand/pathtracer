@@ -11,7 +11,7 @@ struct Sample {
     Vector3D L; // outgoing radiance at x_s
     double pdf; // pdf of the sample
     Vector3D fcos; // product of bsdf and cosine factor
-    Vector3D emittance; // zero bounce radiance  
+    Vector3D emittance; // zero + one bounce radiance
 };
 
 #define cos_angle_threshold 0.9f // cos(25 degrees) 
@@ -23,7 +23,7 @@ bool inline are_geometrically_similar(const Sample& s1, const Sample& s2) {
 }
 
 float inline p_hat(const Sample& s) {
-    return s.L.illum();
+    return (s.pdf > 0) ? s.L.illum() / s.pdf : 0.0f;
 }
 
 class Reservoir {
