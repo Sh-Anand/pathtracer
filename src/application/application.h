@@ -86,7 +86,7 @@ struct AppConfig {
   double pathtracer_focalDistance;
 };
 
-class Application : public Renderer {
+class Application {
  public:
 
   Application(AppConfig config, bool gl = true);
@@ -120,7 +120,7 @@ private:
   void set_up_pathtracer();
 
   GLScene::Scene *scene;
-  OfflineRenderer* renderer;
+  RaytracedRenderer* renderer;
 
   // View Frustrum Variables.
   // On resize, the aspect ratio is changed. On reset_camera, the position and

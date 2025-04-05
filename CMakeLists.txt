@@ -115,7 +115,6 @@ set(APPLICATION_HEADERS
     src/util/lodepng.h
     # Application
     src/application/application.h
-    src/application/renderer.h
 )
 
 if (WIN32)

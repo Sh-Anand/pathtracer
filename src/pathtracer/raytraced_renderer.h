@@ -18,8 +18,6 @@
 #include "util/work_queue.h"
 #include "pathtracer/intersection.h"
 
-#include "application/renderer.h"
-
 #include "scene/scene.h"
 using CGL::SceneObjects::Scene;
 
@@ -36,16 +34,18 @@ namespace CGL {
 struct WorkItem {
 
   // Default constructor.
-  WorkItem() : WorkItem(0, 0, 0, 0) { }
+  WorkItem() : WorkItem(0, 0, 0, 0, NULL) { }
 
-  WorkItem(int x, int y, int w, int h)
-      : tile_x(x), tile_y(y), tile_w(w), tile_h(h) {}
+  WorkItem(int x, int y, int w, int h, 
+           void (PathTracer::*func)(size_t, size_t))
+      : tile_x(x), tile_y(y), tile_w(w), tile_h(h), func(func) {}
 
   int tile_x;
   int tile_y;
   int tile_w;
   int tile_h;
 
+  void (PathTracer::*func)(size_t, size_t);
 };
 
 /**
@@ -57,7 +57,7 @@ struct WorkItem {
  * -> RENDERING: rendering a scene.
  * -> DONE: completed rendering a scene.
  */
-class RaytracedRenderer : public OfflineRenderer {
+class RaytracedRenderer {
 public:
 
   /**
@@ -109,42 +109,16 @@ public:
    */
   void set_frame_size(size_t width, size_t height);
 
-  /**
-   * Transitions from any running state to READY.
-   */
-  void stop();
+  void start_tiled_processing(void (PathTracer::*func)(size_t, size_t));
 
-  /**
-   * If the pathtracer is in READY, delete all internal data, transition to INIT.
-   */
-  void clear();
-
-  /**
-   * If the pathtracer is in READY, transition to VISUALIZE.
-   */
-  void start_visualizing();
-
-  /**
-   * If the pathtracer is in READY, transition to RENDERING.
-   */
   void start_raytracing();
 
   void render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy);
 
   /**
-   * If the pathtracer is in VISUALIZE, handle key presses to traverse the bvh.
-   */
-  void key_press(int key);
-
-  /**
    * Save rendered result to png file.
    */
-  void save_image(std::string filename="", ImageBuffer* buffer=NULL);
-
-  /**
-   * Save sampling rates to png file.
-   */
-  void save_sampling_rate_image(std::string filename);
+  void save_image(std::string filename="");
 
  private:
 
@@ -162,8 +136,7 @@ public:
    * Raytrace a tile of the scene and update the frame buffer. Is run
    * in a worker thread.
    */
-  void raytrace_tile(int tile_x, int tile_y, int tile_w, int tile_h);
-
+  void process_tile(int tile_x, int tile_y, int tile_w, int tile_h, void (PathTracer::*func)(size_t, size_t));
   /**
    * Implementation of a ray tracer worker thread
    */
@@ -209,20 +182,10 @@ public:
   size_t numWorkerThreads;
   size_t imageTileSize;
 
-  bool continueRaytracing;                  ///< rendering should continue
   std::vector<std::thread*> workerThreads;  ///< pool of worker threads
-  std::atomic<int> workerDoneCount;         ///< worker threads management
   WorkQueue<WorkItem> workQueue;            ///< queue of work for the workers
-  std::condition_variable cv_done;
-  std::mutex m_done;
   size_t tilesDone;
   size_t tilesTotal;
-
-  // Visualizer Controls //
-
-  std::stack<BVHNode*> selectionHistory;  ///< node selection history
-  std::vector<LoggedRay> rayLog;          ///< ray tracing log
-  bool show_rays;                         ///< show rays from raylog
   
   std::string filename;
 };

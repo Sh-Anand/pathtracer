@@ -6,9 +6,7 @@
 #include "scene/bvh.h"
 #include "pathtracer/sampler.h"
 #include "pathtracer/intersection.h"
-
-#include "application/renderer.h"
-
+#include "pathtracer/camera.h"
 #include "scene/scene.h"
 using CGL::SceneObjects::Scene;
 
