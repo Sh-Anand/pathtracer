@@ -376,95 +376,94 @@ void RaytracedRenderer::build_accel() {
 
 void RaytracedRenderer::visualize_accel() const {
 
-  glPushAttrib(GL_ENABLE_BIT);
-  glDisable(GL_LIGHTING);
-  glLineWidth(1);
-  glEnable(GL_DEPTH_TEST);
+  // glPushAttrib(GL_ENABLE_BIT);
+  // glDisable(GL_LIGHTING);
+  // glLineWidth(1);
+  // glEnable(GL_DEPTH_TEST);
 
-  // hardcoded color settings
-  Color cnode = Color(.5, .5, .5); float cnode_alpha = 0.25f;
-  Color cnode_hl = Color(1., .25, .0); float cnode_hl_alpha = 0.6f;
-  Color cnode_hl_child = Color(1., 1., 1.); float cnode_hl_child_alpha = 0.6f;
+  // // hardcoded color settings
+  // Color cnode = Color(.5, .5, .5); float cnode_alpha = 0.25f;
+  // Color cnode_hl = Color(1., .25, .0); float cnode_hl_alpha = 0.6f;
+  // Color cnode_hl_child = Color(1., 1., 1.); float cnode_hl_child_alpha = 0.6f;
 
-  Color cprim_hl_left = Color(.6, .6, 1.); float cprim_hl_left_alpha = 1.f;
-  Color cprim_hl_right = Color(.8, .8, 1.); float cprim_hl_right_alpha = 1.f;
-  Color cprim_hl_edges = Color(0., 0., 0.); float cprim_hl_edges_alpha = 0.5f;
+  // Color cprim_hl_left = Color(.6, .6, 1.); float cprim_hl_left_alpha = 1.f;
+  // Color cprim_hl_right = Color(.8, .8, 1.); float cprim_hl_right_alpha = 1.f;
+  // Color cprim_hl_edges = Color(0., 0., 0.); float cprim_hl_edges_alpha = 0.5f;
 
-  BVHNode *selected = selectionHistory.top();
+  // size_t selected = selectionHistory.top();
 
-  // render solid geometry (with depth offset)
-  glPolygonOffset(1.0, 1.0);
-  glEnable(GL_POLYGON_OFFSET_FILL);
+  // // render solid geometry (with depth offset)
+  // glPolygonOffset(1.0, 1.0);
+  // glEnable(GL_POLYGON_OFFSET_FILL);
 
-  if (selected->isLeaf()) {
-    bvh->draw(selected, cprim_hl_left, cprim_hl_left_alpha);
-  } else {
-    bvh->draw(selected->l, cprim_hl_left, cprim_hl_left_alpha);
-    bvh->draw(selected->r, cprim_hl_right, cprim_hl_right_alpha);
-  }
+  // if (bvh->isLeaf(selected)) {
+  //   bvh->draw(selected, cprim_hl_left, cprim_hl_left_alpha);
+  // } else {
+  //   bvh->drawLR(selected, cprim_hl_left, cprim_hl_left_alpha);
+  // }
 
-  glDisable(GL_POLYGON_OFFSET_FILL);
+  // glDisable(GL_POLYGON_OFFSET_FILL);
 
-  // draw geometry outline
-  bvh->drawOutline(selected, cprim_hl_edges, cprim_hl_edges_alpha);
+  // // draw geometry outline
+  // bvh->drawOutline(selected, cprim_hl_edges, cprim_hl_edges_alpha);
 
-  // keep depth buffer check enabled so that mesh occluded bboxes, but
-  // disable depth write so that bboxes don't occlude each other.
-  glDepthMask(GL_FALSE);
+  // // keep depth buffer check enabled so that mesh occluded bboxes, but
+  // // disable depth write so that bboxes don't occlude each other.
+  // glDepthMask(GL_FALSE);
 
-  // create traversal stack
-  stack<BVHNode *> tstack;
+  // // create traversal stack
+  // stack<size_t> tstack;
 
-  // push initial traversal data
-  tstack.push(bvh->get_root());
+  // // push initial traversal data
+  // tstack.push(bvh->get_root());
 
-  // draw all BVH bboxes with non-highlighted color
-  while (!tstack.empty()) {
+  // // draw all BVH bboxes with non-highlighted color
+  // while (!tstack.empty()) {
 
-    BVHNode *current = tstack.top();
-    tstack.pop();
+  //   BVHNode *current = tstack.top();
+  //   tstack.pop();
 
-    current->bb.draw(cnode, cnode_alpha);
-    if (current->l) tstack.push(current->l);
-    if (current->r) tstack.push(current->r);
-  }
+  //   current->bb.draw(cnode, cnode_alpha);
+  //   if (current->l) tstack.push(current->l);
+  //   if (current->r) tstack.push(current->r);
+  // }
 
-  // draw selected node bbox and primitives
-  if (selected->l) selected->l->bb.draw(cnode_hl_child, cnode_hl_child_alpha);
-  if (selected->r) selected->r->bb.draw(cnode_hl_child, cnode_hl_child_alpha);
+  // // draw selected node bbox and primitives
+  // if (selected->l) selected->l->bb.draw(cnode_hl_child, cnode_hl_child_alpha);
+  // if (selected->r) selected->r->bb.draw(cnode_hl_child, cnode_hl_child_alpha);
 
-  glLineWidth(3.f);
-  selected->bb.draw(cnode_hl, cnode_hl_alpha);
+  // glLineWidth(3.f);
+  // selected->bb.draw(cnode_hl, cnode_hl_alpha);
 
-  // now perform visualization of the rays
-  if (show_rays) {
-      glLineWidth(1.f);
-      glBegin(GL_LINES);
+  // // now perform visualization of the rays
+  // if (show_rays) {
+  //     glLineWidth(1.f);
+  //     glBegin(GL_LINES);
 
-      for (size_t i=0; i<rayLog.size(); i+=500) {
+  //     for (size_t i=0; i<rayLog.size(); i+=500) {
 
-          const static double VERY_LONG = 10e4;
-          double ray_t = VERY_LONG;
+  //         const static double VERY_LONG = 10e4;
+  //         double ray_t = VERY_LONG;
 
-          // color rays that are hits yellow
-          // and rays this miss all geometry red
-          if (rayLog[i].hit_t >= 0.0) {
-              ray_t = rayLog[i].hit_t;
-              glColor4f(1.f, 1.f, 0.f, 0.1f);
-          } else {
-              glColor4f(1.f, 0.f, 0.f, 0.1f);
-          }
+  //         // color rays that are hits yellow
+  //         // and rays this miss all geometry red
+  //         if (rayLog[i].hit_t >= 0.0) {
+  //             ray_t = rayLog[i].hit_t;
+  //             glColor4f(1.f, 1.f, 0.f, 0.1f);
+  //         } else {
+  //             glColor4f(1.f, 0.f, 0.f, 0.1f);
+  //         }
 
-          Vector3D end = rayLog[i].o + ray_t * rayLog[i].d;
+  //         Vector3D end = rayLog[i].o + ray_t * rayLog[i].d;
 
-          glVertex3f(rayLog[i].o[0], rayLog[i].o[1], rayLog[i].o[2]);
-          glVertex3f(end[0], end[1], end[2]);
-      }
-      glEnd();
-  }
+  //         glVertex3f(rayLog[i].o[0], rayLog[i].o[1], rayLog[i].o[2]);
+  //         glVertex3f(end[0], end[1], end[2]);
+  //     }
+  //     glEnd();
+  // }
 
-  glDepthMask(GL_TRUE);
-  glPopAttrib();
+  // glDepthMask(GL_TRUE);
+  // glPopAttrib();
 }
 
 void RaytracedRenderer::visualize_cell() const {
@@ -509,7 +508,7 @@ void RaytracedRenderer::visualize_cell() const {
  * If the pathtracer is in VISUALIZE, handle key presses to traverse the bvh.
  */
 void RaytracedRenderer::key_press(int key) {
-  BVHNode *current = selectionHistory.top();
+  size_t current = selectionHistory.top();
   switch (key) {
   case ']':
     pt->ns_aa *=2;
@@ -561,16 +560,6 @@ void RaytracedRenderer::key_press(int key) {
   case KEYBOARD_UP:
     if (current != bvh->get_root()) {
         selectionHistory.pop();
-    }
-    break;
-  case KEYBOARD_LEFT:
-    if (current->l) {
-        selectionHistory.push(current->l);
-    }
-    break;
-  case KEYBOARD_RIGHT:
-    if (current->l) {
-        selectionHistory.push(current->r);
     }
     break;
 

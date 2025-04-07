@@ -242,7 +242,7 @@ public:
 
   // Visualizer Controls //
 
-  std::stack<BVHNode*> selectionHistory;  ///< node selection history
+  std::stack<size_t> selectionHistory;  ///< node selection history
   std::vector<LoggedRay> rayLog;          ///< ray tracing log
   bool show_rays;                         ///< show rays from raylog
   

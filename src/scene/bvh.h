@@ -8,7 +8,6 @@
 
 namespace CGL { namespace SceneObjects {
 
-
 /**
  * A node in the BVH accelerator aggregate.
  * The accelerator uses a "flat tree" structure where all the primitives are
@@ -20,22 +19,14 @@ namespace CGL { namespace SceneObjects {
  * constructing the BVH.
  */
 struct BVHNode {
-
-  BVHNode(BBox bb): bb(bb), l(NULL), r(NULL) { }
-
-  ~BVHNode() {
-    if (l) delete l;
-    if (r) delete r;
-  }
-
-  inline bool isLeaf() const { return l == NULL && r == NULL; }
-
   BBox bb;        ///< bounding box of the node
-  BVHNode* l;     ///< left child node
-  BVHNode* r;     ///< right child node
-
+  bool leaf;
+  inline bool isLeaf() const { return leaf;}
   std::vector<Primitive*>::const_iterator start;
   std::vector<Primitive*>::const_iterator end;
+  size_t l, r;
+
+  BVHNode(BBox b) : bb(b) { }
 };
 
 /**
@@ -86,7 +77,7 @@ class BVHAccel : public Aggregate {
     return has_intersection(r, root);
   }
 
-  bool has_intersection(const Ray& r, BVHNode *node) const;
+  bool has_intersection(const Ray& r, size_t node) const;
 
   /**
    * Ray - Aggregate intersection 2.
@@ -106,7 +97,7 @@ class BVHAccel : public Aggregate {
     return intersect(r, i, root);
   }
 
-  bool intersect(const Ray& r, Intersection* i, BVHNode *node) const;
+  bool intersect(const Ray& r, Intersection* i, size_t node) const;
 
   /**
    * Get BSDF of the surface material
@@ -119,27 +110,31 @@ class BVHAccel : public Aggregate {
   /**
    * Get entry point (root) - used in visualizer
    */
-  BVHNode* get_root() const { return root; }
+  size_t get_root() const { return root; }
+
+  bool isLeaf(size_t idx) const {
+    return nodes[idx].isLeaf();
+  }
 
   /**
    * Draw the BVH with OpenGL - used in visualizer
    */
   void draw(const Color& c, float alpha) const { }
-  void draw(BVHNode *node, const Color& c, float alpha) const;
+  void draw(size_t idx, const Color& c, float alpha) const;
 
   /**
    * Draw the BVH outline with OpenGL - used in visualizer
    */
   void drawOutline(const Color& c, float alpha) const { }
-  void drawOutline(BVHNode *node, const Color& c, float alpha) const;
+  void drawOutline(size_t idx, const Color& c, float alpha) const;
 
   mutable unsigned long long total_rays, total_isects;
 
 private:
   std::vector<Primitive*> primitives;
-  BVHNode* root; ///< root node of the BVH
-  BVHNode *construct_bvh(std::vector<Primitive*>::iterator start, std::vector<Primitive*>::iterator end, size_t max_leaf_size);
-  
+  std::vector<BVHNode> nodes;
+  size_t root;
+  int construct_bvh(std::vector<Primitive*>::iterator start, std::vector<Primitive*>::iterator end, size_t max_leaf_size);
 };
 
 } // namespace SceneObjects
