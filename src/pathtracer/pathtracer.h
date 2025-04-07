@@ -42,14 +42,6 @@ namespace CGL {
          */
         void clear();
 
-        void autofocus(Vector2D loc);
-
-        /**
-         * Trace an ray in the scene.
-         */
-        Vector3D estimate_direct_lighting_importance(const Ray& r, const SceneObjects::Intersection& isect);
-
-        void est_radiance_global_illumination(const size_t x, const size_t y);
         Vector3D zero_bounce_radiance(const Ray& r, const SceneObjects::Intersection& isect);
         Vector3D one_bounce_radiance(const Ray& r, const SceneObjects::Intersection& isect);
         Vector3D at_least_one_bounce_radiance(const Ray& r, const SceneObjects::Intersection& isect);
@@ -61,15 +53,7 @@ namespace CGL {
         void temporal_resampling(size_t x, size_t y);
         void spatial_resampling(size_t x, size_t y);
         void render_final_sample(size_t x, size_t y);
-        
-        Vector3D debug_shading(const Vector3D d) {
-            return Vector3D(abs(d.r), abs(d.g), .0).unit();
-        }
-
-        Vector3D normal_shading(const Vector3D n) {
-            return n * .5 + Vector3D(.5);
-        }
-
+    
         /**
          * Trace a camera ray given by the pixel coordinate.
          */
@@ -85,10 +69,6 @@ namespace CGL {
         size_t ns_glsy;       ///< number of samples - glossy surfaces
         size_t ns_refr;       ///< number of samples - refractive surfaces
 
-        size_t samplesPerBatch;
-        double maxTolerance;
-        bool direct_hemisphere_sample; ///< true if sampling uniformly from hemisphere for direct lighting. Otherwise, light sample
-
         // Components //
 
         BVHAccel* bvh;                 ///< BVH accelerator aggregate
@@ -98,17 +78,8 @@ namespace CGL {
         HDRImageBuffer sampleBuffer;   ///< sample buffer
         Timer timer;                   ///< performance test timer
 
-        std::vector<int> sampleCountBuffer;   ///< sample count buffer
-
         Scene* scene;         ///< current scene
         Camera* camera;       ///< current camera
-
-        // Tonemapping Controls //
-
-        double tm_gamma;                           ///< gamma
-        double tm_level;                           ///< exposure level
-        double tm_key;                             ///< key value
-        double tm_wht;                             ///< white point
     };
 
 }  // namespace CGL

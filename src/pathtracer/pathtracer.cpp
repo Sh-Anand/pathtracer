@@ -12,11 +12,6 @@ namespace CGL {
 PathTracer::PathTracer() {
   gridSampler = new JitteredSampler2D(16);
   hemisphereSampler = new UniformHemisphereSampler3D();
-
-  tm_gamma = 2.2f;
-  tm_level = 1.0f;
-  tm_key = 0.18;
-  tm_wht = 5.0f;
 }
 
 PathTracer::~PathTracer() {
@@ -26,7 +21,6 @@ PathTracer::~PathTracer() {
 
 void PathTracer::set_frame_size(size_t width, size_t height) {
   sampleBuffer.resize(width, height);
-  sampleCountBuffer.resize(width * height);
   initialSampleBuffer.resize(width * height);
   temporalReservoirBuffer.resize(width * height);
   spatialReservoirBuffer.resize(width * height);
@@ -37,12 +31,10 @@ void PathTracer::clear() {
   scene = NULL;
   camera = NULL;
   sampleBuffer.clear();
-  sampleCountBuffer.clear();
   initialSampleBuffer.clear();
   temporalReservoirBuffer.clear();
   spatialReservoirBuffer.clear();
   sampleBuffer.resize(0, 0);
-  sampleCountBuffer.resize(0, 0);
   initialSampleBuffer.resize(0);
   temporalReservoirBuffer.resize(0);
   spatialReservoirBuffer.resize(0);
@@ -53,9 +45,13 @@ void PathTracer::write_to_framebuffer(ImageBuffer &framebuffer, size_t x0,
   sampleBuffer.toColor(framebuffer, x0, y0, x1, y1);
 }
 
-Vector3D
-PathTracer::estimate_direct_lighting_importance(const Ray &r,
-                                                const Intersection &isect) {
+Vector3D PathTracer::zero_bounce_radiance(const Ray &r,
+                                          const Intersection &isect) {
+  return isect.bsdf->get_emission();
+}
+
+Vector3D PathTracer::one_bounce_radiance(const Ray &r,
+                                         const Intersection &isect) {
   // Estimate the lighting from this intersection coming directly from a light.
   // To implement importance sampling, sample only from lights, not uniformly in
   // a hemisphere.
@@ -95,16 +91,6 @@ PathTracer::estimate_direct_lighting_importance(const Ray &r,
 
   L_out /= sample_count;
   return L_out;
-}
-
-Vector3D PathTracer::zero_bounce_radiance(const Ray &r,
-                                          const Intersection &isect) {
-  return isect.bsdf->get_emission();
-}
-
-Vector3D PathTracer::one_bounce_radiance(const Ray &r,
-                                         const Intersection &isect) {
-    return estimate_direct_lighting_importance(r, isect);
 }
 
 #define RRT 0.7
@@ -156,26 +142,6 @@ Vector3D PathTracer::at_least_one_bounce_radiance(const Ray &r,
   return L_out;
 }
 
-void PathTracer::est_radiance_global_illumination(size_t x, size_t y) {
-  Intersection isect;
-  
-  size_t num_samples = ns_aa;
-  Ray r;
-  size_t i = 1;
-  do {
-    Vector2D origin = Vector2D(x, y);
-    Vector2D sample = origin + gridSampler->get_sample();
-    r = camera->generate_ray(sample.x / sampleBuffer.w, sample.y / sampleBuffer.h);
-    r.depth = 1, r.x = x, r.y = y;
-  } while (i++ != num_samples && !bvh->intersect(r, &isect));
-  if (i == num_samples + 1) {
-    initialSampleBuffer[x + y * sampleBuffer.w].L = envLight ? envLight->sample_dir(r) : Vector3D(0, 0, 0);
-  } else {
-    Vector3D L = at_least_one_bounce_radiance(r, isect);
-    initialSampleBuffer[r.x + r.y * sampleBuffer.w].emittance += zero_bounce_radiance(r, isect);
-  }
-}
-
 // Computes jacobian from s1->s2 as defined in Equation 11 of the ReSTIR-GI paper
 double jacobian(const Sample& s1, const Sample& s2) {
     Vector3D xq1 = s1.x_v;
@@ -194,7 +160,23 @@ double jacobian(const Sample& s1, const Sample& s2) {
 }
 
 void PathTracer::raytrace_pixel(size_t x, size_t y) {
-  est_radiance_global_illumination(x,y);          
+  Intersection isect;
+  
+  size_t num_samples = ns_aa;
+  Ray r;
+  size_t i = 1;
+  do {
+    Vector2D origin = Vector2D(x, y);
+    Vector2D sample = origin + gridSampler->get_sample();
+    r = camera->generate_ray(sample.x / sampleBuffer.w, sample.y / sampleBuffer.h);
+    r.depth = 1, r.x = x, r.y = y;
+  } while (i++ != num_samples && !bvh->intersect(r, &isect));
+  if (i == num_samples + 1) {
+    initialSampleBuffer[x + y * sampleBuffer.w].L = envLight ? envLight->sample_dir(r) : Vector3D(0, 0, 0);
+  } else {
+    Vector3D L = at_least_one_bounce_radiance(r, isect);
+    initialSampleBuffer[r.x + r.y * sampleBuffer.w].emittance += zero_bounce_radiance(r, isect);
+  }         
 }
 
 const size_t max_neighbouring_samples = 9; // ReSTIR GI paper value without temporal sampling
@@ -260,16 +242,6 @@ void PathTracer::render_final_sample(size_t x, size_t y) {
   Vector3D L = initial.emittance + S.fcos * S.L * R.W;
 
   sampleBuffer.update_pixel(L, x, y);
-  sampleCountBuffer[x + y * sampleBuffer.w] = 1;
-}
-
-void PathTracer::autofocus(Vector2D loc) {
-  Ray r = camera->generate_ray(loc.x / sampleBuffer.w, loc.y / sampleBuffer.h);
-  Intersection isect;
-
-  bvh->intersect(r, &isect);
-
-  camera->focalDistance = isect.t;
 }
 
 } // namespace CGL

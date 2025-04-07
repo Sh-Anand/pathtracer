@@ -49,9 +49,6 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
   pt->ns_diff = ns_diff;                                    // Number of samples for diffuse surface
   pt->ns_glsy = ns_diff;                                    // Number of samples for glossy surface
   pt->ns_refr = ns_refr;                                    // Number of samples for refraction
-  pt->samplesPerBatch = samples_per_batch;                  // Number of samples per batch
-  pt->maxTolerance = max_tolerance;                         // Maximum tolerance for early termination
-  pt->direct_hemisphere_sample = direct_hemisphere_sample;  // Whether to use direct hemisphere sampling vs. Importance Sampling
 
   this->lensRadius = lensRadius;
   this->focalDistance = focalDistance;
@@ -67,11 +64,6 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
   bvh = NULL;
   scene = NULL;
   camera = NULL;
-
-  imageTileSize = 32;                     // Size of the rendering tile.
-  numWorkerThreads = num_threads;         // Number of threads
-  workerThreads.resize(numWorkerThreads);
-
 }
 
 /**
@@ -79,10 +71,8 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
  * Frees all the internal resources used by the pathtracer.
  */
 RaytracedRenderer::~RaytracedRenderer() {
-
   delete bvh;
   delete pt;
-
 }
 
 /**
@@ -116,9 +106,6 @@ void RaytracedRenderer::set_camera(Camera *camera) {
  * \param height height of the frame
  */
 void RaytracedRenderer::set_frame_size(size_t width, size_t height) {
-  frame_w = width;
-  frame_h = height;
-
   frameBuffer.resize(width, height);
 
   pt->set_frame_size(width, height);
@@ -128,36 +115,7 @@ bool RaytracedRenderer::has_valid_configuration() {
   return scene && camera;
 }
 
-void RaytracedRenderer::start_tiled_processing(void (PathTracer::*func)(size_t, size_t)) {
-  size_t width = frameBuffer.w, height = frameBuffer.h;
-  
-  workQueue.clear();  
-  frameBuffer.clear();
-  num_tiles_w = width / imageTileSize + 1;
-  num_tiles_h = height / imageTileSize + 1;
-  tilesTotal = num_tiles_w * num_tiles_h;
-  tilesDone = 0;
-  tile_samples.resize(num_tiles_w * num_tiles_h);
-  memset(&tile_samples[0], 0, num_tiles_w * num_tiles_h * sizeof(int));
-
-  // populate the tile work queue
-  for (size_t y = 0; y < height; y += imageTileSize) {
-      for (size_t x = 0; x < width; x += imageTileSize) {
-          workQueue.put_work(WorkItem(x, y, imageTileSize, imageTileSize, func));
-      }
-  }
-  for (int i=0; i<numWorkerThreads; i++) {
-      workerThreads[i] = new std::thread(&RaytracedRenderer::worker_thread, this);
-  }
-
-  // wait for all threads to finish
-  for (int i=0; i<numWorkerThreads; i++) {
-      workerThreads[i]->join();
-      delete workerThreads[i];
-  }
-}
-
-void RaytracedRenderer::start_raytracing() {
+void RaytracedRenderer::render_to_file(string filename, size_t x, size_t y, size_t dx, size_t dy) {
   pt->clear();
   pt->set_frame_size(frameBuffer.w, frameBuffer.h);
 
@@ -169,14 +127,23 @@ void RaytracedRenderer::start_raytracing() {
   // launch threads
   fprintf(stdout, "[PathTracer] Rendering... "); fflush(stdout);
 
-  start_tiled_processing(&PathTracer::raytrace_pixel);
-}
+  // loop over all pixels opposite direction
+  for (size_t i = 0; i < frameBuffer.w; ++i)
+    for (size_t j = 0; j < frameBuffer.h; ++j)
+      pt->raytrace_pixel(i, j);
 
-void RaytracedRenderer::render_to_file(string filename, size_t x, size_t y, size_t dx, size_t dy) {
-  start_raytracing();
-  start_tiled_processing(&PathTracer::temporal_resampling);
-  start_tiled_processing(&PathTracer::spatial_resampling);
-  start_tiled_processing(&PathTracer::render_final_sample);
+  for (size_t i = 0; i < frameBuffer.w; ++i)
+    for (size_t j = 0; j < frameBuffer.h; ++j)
+      pt->temporal_resampling(i, j);
+
+  for (size_t i = 0; i < frameBuffer.w; ++i)
+    for (size_t j = 0; j < frameBuffer.h; ++j)
+      pt->spatial_resampling(i, j);
+
+  for (size_t i = 0; i < frameBuffer.w; ++i)
+    for (size_t j = 0; j < frameBuffer.h; ++j)
+      pt->render_final_sample(i, j);
+
   pt->write_to_framebuffer(frameBuffer, 0, 0, frameBuffer.w, frameBuffer.h);
   save_image(filename);
   fprintf(stdout, "[PathTracer] Job completed.\n");
@@ -204,51 +171,6 @@ void RaytracedRenderer::build_accel() {
   bvh = new BVHAccel(primitives);
   timer.stop();
   fprintf(stdout, "Done! (%.4f sec)\n", timer.duration());
-}
-
-/**
- * Raytrace a tile of the scene and update the frame buffer. Is run
- * in a worker thread.
- */
-void RaytracedRenderer::process_tile(int tile_x, int tile_y,
-                               int tile_w, int tile_h, void (PathTracer::*func)(size_t, size_t)) {
-  size_t w = frame_w;
-  size_t h = frame_h;
-
-  size_t tile_start_x = tile_x;
-  size_t tile_start_y = tile_y;
-
-  size_t tile_end_x = std::min(tile_start_x + tile_w, w);
-  size_t tile_end_y = std::min(tile_start_y + tile_h, h);
-
-  size_t tile_idx_x = tile_x / imageTileSize;
-  size_t tile_idx_y = tile_y / imageTileSize;
-  size_t num_samples_tile = tile_samples[tile_idx_x + tile_idx_y * num_tiles_w];
-
-  for (size_t y = tile_start_y; y < tile_end_y; y++) {
-    for (size_t x = tile_start_x; x < tile_end_x; x++) {
-      // generate samples
-      (pt->*func)(x, y);
-    }
-  }
-
-  tile_samples[tile_idx_x + tile_idx_y * num_tiles_w] += 1;
-
-//  pt->write_to_framebuffer(frameBuffer, tile_start_x, tile_start_y, tile_end_x, tile_end_y);
-}
-
-void RaytracedRenderer::worker_thread() {
-
-  Timer timer;
-  timer.start();
-
-  WorkItem work;
-  while (workQueue.try_get_work(&work)) {
-    process_tile(work.tile_x, work.tile_y, work.tile_w, work.tile_h, work.func);
-    { 
-      ++tilesDone;
-    }
-  }
 }
 
 void RaytracedRenderer::save_image(string filename) {

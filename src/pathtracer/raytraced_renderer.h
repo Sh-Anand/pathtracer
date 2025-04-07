@@ -31,23 +31,6 @@ using CGL::SceneObjects::BVHAccel;
 
 namespace CGL {
 
-struct WorkItem {
-
-  // Default constructor.
-  WorkItem() : WorkItem(0, 0, 0, 0, NULL) { }
-
-  WorkItem(int x, int y, int w, int h, 
-           void (PathTracer::*func)(size_t, size_t))
-      : tile_x(x), tile_y(y), tile_w(w), tile_h(h), func(func) {}
-
-  int tile_x;
-  int tile_y;
-  int tile_w;
-  int tile_h;
-
-  void (PathTracer::*func)(size_t, size_t);
-};
-
 /**
  * A pathtracer with BVH accelerator and BVH visualization capabilities.
  * It is always in exactly one of the following states:
@@ -109,10 +92,6 @@ public:
    */
   void set_frame_size(size_t width, size_t height);
 
-  void start_tiled_processing(void (PathTracer::*func)(size_t, size_t));
-
-  void start_raytracing();
-
   void render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy);
 
   /**
@@ -132,39 +111,12 @@ public:
    */
   void build_accel();
 
-  /**
-   * Raytrace a tile of the scene and update the frame buffer. Is run
-   * in a worker thread.
-   */
-  void process_tile(int tile_x, int tile_y, int tile_w, int tile_h, void (PathTracer::*func)(size_t, size_t));
-  /**
-   * Implementation of a ray tracer worker thread
-   */
-  void worker_thread();
-
-  enum State {
-    INIT,               ///< to be initialized
-    READY,              ///< initialized ready to do stuff
-    VISUALIZE,          ///< visualizing BVH accelerator aggregate
-    RENDERING,          ///< started but not completed raytracing
-    DONE                ///< started and completed raytracing
-  };
-
   PathTracer *pt;
 
   // Configurables //
 
-  State state;          ///< current state
   Scene* scene;         ///< current scene
   Camera* camera;       ///< current camera
-
-  // Integration state //
-
-  vector<int> tile_samples; ///< current sample rate for tile
-  size_t num_tiles_w;       ///< number of tiles along width of the image
-  size_t num_tiles_h;       ///< number of tiles along height of the image
-
-  size_t frame_w, frame_h;
 
   double lensRadius;
   double focalDistance;
@@ -174,18 +126,6 @@ public:
   BVHAccel* bvh;                 ///< BVH accelerator aggregate
   ImageBuffer frameBuffer;       ///< frame buffer
   Timer timer;                   ///< performance test timer
-
-  std::vector<int> sampleCountBuffer;   ///< sample count buffer
-
-  // Internals //
-
-  size_t numWorkerThreads;
-  size_t imageTileSize;
-
-  std::vector<std::thread*> workerThreads;  ///< pool of worker threads
-  WorkQueue<WorkItem> workQueue;            ///< queue of work for the workers
-  size_t tilesDone;
-  size_t tilesTotal;
   
   std::string filename;
 };
