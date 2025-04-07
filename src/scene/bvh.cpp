@@ -148,35 +148,32 @@ bool BVHAccel::intersect(const Ray &ray, Intersection *i, size_t idx) const {
   // Fill in the intersect function.
 
   bool hit = false;
-
+  BVHNode node = nodes[idx];
   double t0, t1;
+  if (!node.bb.intersect(ray, t0, t1)) {
+    return false;
+  }
 
   i->t = ray.max_t;
 
   Intersection t_i;
-  std::stack<size_t> stack;
-  stack.push(idx);
-  while (!stack.empty()) {
-    BVHNode n = nodes[stack.top()];
-    stack.pop();
-    if (!n.bb.intersect(ray, t0, t1)) {
-      continue;
-    }
-    if (n.isLeaf()) {
-      for (auto p = n.start; p != n.end; p++) {
-        total_isects++;
-        if ((*p)->intersect(ray, &t_i)) {
-          if (t_i.t < i->t) {
-            hit = true;
-            *i = t_i;
-          }
+  if (node.isLeaf()) {
+    for (auto p = node.start; p != node.end; p++) {
+      total_isects++;
+      if ((*p)->intersect(ray, &t_i)) {
+        if (t_i.t < i->t) {
+          hit = true;
+          *i = t_i;
         }
       }
-    } else {
-      stack.push(n.l);
-      stack.push(n.r);
     }
-  } 
+  } else {
+    bool hit_l = intersect(ray, &t_i, node.l);
+    if (hit_l && t_i.t < i->t) *i = t_i;
+    bool hit_r = intersect(ray, &t_i, node.r);
+    if (hit_r && t_i.t < i->t) *i = t_i;
+    hit = hit_l || hit_r;
+  }
 
   return hit;
 }
