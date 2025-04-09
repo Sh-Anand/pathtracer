@@ -46,12 +46,12 @@ void PathTracer::write_to_framebuffer(ImageBuffer &framebuffer, size_t x0,
 }
 
 Vector3D PathTracer::zero_bounce_radiance(const Ray &r,
-                                          const Intersection &isect) {
-  return isect.bsdf->get_emission();
+                                          const CudaIntersection &isect) {
+  return bvh->get_emission(isect.bsdf);
 }
 
 Vector3D PathTracer::one_bounce_radiance(const Ray &r,
-                                         const Intersection &isect) {
+                                         const CudaIntersection &isect) {
   // Estimate the lighting from this intersection coming directly from a light.
   // To implement importance sampling, sample only from lights, not uniformly in
   // a hemisphere.
@@ -67,7 +67,6 @@ Vector3D PathTracer::one_bounce_radiance(const Ray &r,
   const Vector3D hit_p = r.o + r.d * isect.t;
   const Vector3D w_out = w2o * (-r.d);
   Vector3D L_out = Vector3D(0, 0, 0);
-  Intersection light_isect;
   Vector3D wi;
   double distToLight, pdf;
 
@@ -83,8 +82,9 @@ Vector3D PathTracer::one_bounce_radiance(const Ray &r,
       Ray shadow_ray = Ray(hit_p, wi);
       shadow_ray.min_t = EPS_D;
       shadow_ray.max_t = distToLight;
+      CudaIntersection light_isect;
       if (!bvh->intersect(shadow_ray, &light_isect)) {
-        L_out += isect.bsdf->f(w_out, wi_o) * radiance * abs_cos_theta(wi_o) / pdf;
+        L_out += bvh->f(isect.bsdf, w_out, wi_o) * radiance * abs_cos_theta(wi_o) / pdf;
       }
     }
   }
@@ -96,7 +96,7 @@ Vector3D PathTracer::one_bounce_radiance(const Ray &r,
 #define RRT 0.7
 
 Vector3D PathTracer::at_least_one_bounce_radiance(const Ray &r,
-                                                  const Intersection &isect) {
+                                                  const CudaIntersection &isect) {
   Matrix3x3 o2w;
   make_coord_space(o2w, isect.n);
   Matrix3x3 w2o = o2w.T();
@@ -117,13 +117,13 @@ Vector3D PathTracer::at_least_one_bounce_radiance(const Ray &r,
 
   Vector3D wi;
   double pdf;
-  Vector3D f = isect.bsdf->sample_f(w_out, &wi, &pdf);
+  Vector3D f = bvh->sample_f(isect.bsdf, w_out, &wi, &pdf);
   
   Ray bounce_ray = Ray(hit_p, o2w * wi);
   bounce_ray.min_t = EPS_D;
   bounce_ray.depth = r.depth + 1;
 
-  Intersection bounce_isect;
+  CudaIntersection bounce_isect;
   if (bvh->intersect(bounce_ray, &bounce_isect)) {
     Vector3D bounce_radiance = at_least_one_bounce_radiance(bounce_ray, bounce_isect);
     Vector3D bounce_radiance_p = bounce_radiance / pdf / RRT;
@@ -160,7 +160,7 @@ double jacobian(const Sample& s1, const Sample& s2) {
 }
 
 void PathTracer::raytrace_pixel(size_t x, size_t y) {
-  Intersection isect;
+  CudaIntersection isect;
   
   size_t num_samples = ns_aa;
   Ray r;
@@ -223,7 +223,7 @@ void PathTracer::spatial_resampling(size_t x, size_t y) {
     Ray shadow_ray(q.x_v, (Rn.z.x_s - q.x_v).unit());
     shadow_ray.min_t = EPS_D;
     shadow_ray.max_t = (Rn.z.x_s - q.x_v).norm() - EPS_D;
-    Intersection isect;
+    CudaIntersection isect;
     if (bvh->intersect(shadow_ray, &isect)) p_prime_q = 0;
 
     // Merge Rn into the current reservoir

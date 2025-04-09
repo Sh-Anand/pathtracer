@@ -13,8 +13,7 @@ using CGL::SceneObjects::Scene;
 #include "scene/environment_light.h"
 using CGL::SceneObjects::EnvironmentLight;
 
-using CGL::SceneObjects::BVHNode;
-using CGL::SceneObjects::BVHAccel;
+using CGL::SceneObjects::BVHCuda;
 
 #include "util/reservoir.h"
 
@@ -42,9 +41,9 @@ namespace CGL {
          */
         void clear();
 
-        Vector3D zero_bounce_radiance(const Ray& r, const SceneObjects::Intersection& isect);
-        Vector3D one_bounce_radiance(const Ray& r, const SceneObjects::Intersection& isect);
-        Vector3D at_least_one_bounce_radiance(const Ray& r, const SceneObjects::Intersection& isect);
+        Vector3D zero_bounce_radiance(const Ray& r, const SceneObjects::CudaIntersection& isect);
+        Vector3D one_bounce_radiance(const Ray& r, const SceneObjects::CudaIntersection& isect);
+        Vector3D at_least_one_bounce_radiance(const Ray& r, const SceneObjects::CudaIntersection& isect);
 
         // ReSTIR GI //
         std::vector<Sample> initialSampleBuffer;
@@ -71,7 +70,7 @@ namespace CGL {
 
         // Components //
 
-        BVHAccel* bvh;                 ///< BVH accelerator aggregate
+        BVHCuda* bvh;                 ///< BVH accelerator aggregate
         EnvironmentLight* envLight;    ///< environment map
         Sampler2D* gridSampler;        ///< samples unit grid
         Sampler3D* hemisphereSampler;  ///< samples unit hemisphere

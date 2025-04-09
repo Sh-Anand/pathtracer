@@ -119,7 +119,7 @@ void RaytracedRenderer::render_to_file(string filename, size_t x, size_t y, size
   pt->clear();
   pt->set_frame_size(frameBuffer.w, frameBuffer.h);
 
-  pt->bvh = bvh;
+  pt->bvh = bvh_cuda;
   pt->camera = camera;
   pt->scene = scene;
 
@@ -169,6 +169,7 @@ void RaytracedRenderer::build_accel() {
   fflush(stdout);
   timer.start();
   bvh = new BVHAccel(primitives);
+  bvh_cuda = new BVHCuda(bvh);
   timer.stop();
   fprintf(stdout, "Done! (%.4f sec)\n", timer.duration());
 }

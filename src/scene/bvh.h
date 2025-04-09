@@ -4,6 +4,9 @@
 #include "scene.h"
 #include "aggregate.h"
 
+#include "triangle.h"
+#include "sphere.h"
+
 #include <vector>
 
 namespace CGL { namespace SceneObjects {
@@ -22,8 +25,8 @@ struct BVHNode {
   BBox bb;        ///< bounding box of the node
   bool leaf;
   inline bool isLeaf() const { return leaf;}
-  std::vector<Primitive*>::const_iterator start;
-  std::vector<Primitive*>::const_iterator end;
+  size_t start;
+  size_t end;
   size_t l, r;
 
   BVHNode(BBox b) : bb(b) { }
@@ -65,21 +68,6 @@ class BVHAccel : public Aggregate {
   BBox get_bbox() const;
 
   /**
-   * Ray - Aggregate intersection.
-   * Check if the given ray intersects with the aggregate (any primitive in
-   * the aggregate), no intersection information is stored.
-   * \param r ray to test intersection with
-   * \return true if the given ray intersects with the aggregate,
-             false otherwise
-   */
-  bool has_intersection(const Ray& r) const {
-    ++total_rays;
-    return has_intersection(r, root);
-  }
-
-  bool has_intersection(const Ray& r, size_t node) const;
-
-  /**
    * Ray - Aggregate intersection 2.
    * Check if the given ray intersects with the aggregate (any primitive in
    * the aggregate). If so, the input intersection data is updated to contain
@@ -114,11 +102,57 @@ class BVHAccel : public Aggregate {
 
   mutable unsigned long long total_rays, total_isects;
 
-private:
   std::vector<Primitive*> primitives;
   std::vector<BVHNode> nodes;
   size_t root;
-  int construct_bvh(std::vector<Primitive*>::iterator start, std::vector<Primitive*>::iterator end, size_t max_leaf_size);
+  int construct_bvh(size_t start, size_t end, size_t max_leaf_size);
+};
+
+// CUDA BVH
+class BVHCuda {
+  public:
+    BVHCuda(BVHAccel* bvh);
+  
+    ~BVHCuda();
+    
+    bool intersect(const Ray& r, CudaIntersection* i) const {
+      return intersect(r, i, root);
+    }
+
+    bool intersect(const Ray& r, CudaIntersection* i, size_t node) const;
+  
+    CudaPrimitive* primitives;
+    size_t num_primitives;
+
+    CudaTriangle* triangles;
+    size_t num_triangles;
+    CudaSphere* spheres;
+    size_t num_spheres;
+
+    BVHNode* nodes;
+    size_t num_nodes;
+    size_t root;
+
+    //BSDFs
+    CudaDiffuseBSDF* diffuse_bsdfs;
+    size_t num_diffuse_bsdfs;
+    CudaEmissionBSDF* emission_bsdfs;
+    size_t num_emission_bsdfs;
+
+    Vector3D sample_f (CudaBSDF bsdf, const Vector3D wo, Vector3D *wi, double* pdf) const;
+
+    Vector3D f (CudaBSDF bsdf, const Vector3D wo, const Vector3D wi) const;
+
+    Vector3D get_emission (CudaBSDF bsdf) const {
+      if (bsdf.type == CudaBSDFType_Emission) {
+        return emission_bsdfs[bsdf.idx].get_emission();
+      } else if (bsdf.type == CudaBSDFType_Diffuse) {
+        return diffuse_bsdfs[bsdf.idx].get_emission();
+      } else {
+        return Vector3D(0, 0, 0);
+      }
+    }
+
 };
 
 } // namespace SceneObjects

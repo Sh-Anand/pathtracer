@@ -124,6 +124,7 @@ public:
   // Components //
 
   BVHAccel* bvh;                 ///< BVH accelerator aggregate
+  BVHCuda* bvh_cuda;             ///< BVH accelerator aggregate for cuda
   ImageBuffer frameBuffer;       ///< frame buffer
   Timer timer;                   ///< performance test timer
   

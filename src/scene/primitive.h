@@ -21,16 +21,6 @@ class Primitive {
   virtual BBox get_bbox() const = 0;
 
   /**
-   * Ray - Primitive intersection.
-   * Check if the given ray intersects with the primitive, no intersection
-   * information is stored.
-   * \param r ray to test intersection with
-   * \return true if the given ray intersects with the primitive,
-             false otherwise
-   */
-  virtual bool has_intersection(const Ray& r) const = 0;
-
-  /**
    * Ray - Primitive intersection 2.
    * Check if the given ray intersects with the primitive, if so, the input
    * intersection data is updated to contain intersection information for the
@@ -50,6 +40,17 @@ class Primitive {
    */
   virtual BSDF* get_bsdf() const = 0;
 };
+
+enum CudaPrimitiveType {
+  TRIANGLE = 0,
+  SPHERE = 1,
+};
+struct CudaPrimitive {
+  CudaPrimitive(size_t idx, CudaPrimitiveType type) : idx(idx), type(type) {}
+  size_t idx;
+  CudaPrimitiveType type;
+};
+
 
 } // namespace SceneObjects
 } // namespace CGL

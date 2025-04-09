@@ -131,7 +131,6 @@ class DiffuseBSDF : public BSDF {
   Vector3D get_emission() const { return Vector3D(); }
   bool is_delta() const { return false; }
 
-private:
   /*
    * Reflectance is also commonly called the "albedo" of a surface,
    * which ranges from [0,1] in RGB, representing a range of
@@ -266,12 +265,45 @@ class EmissionBSDF : public BSDF {
   Vector3D get_emission() const { return radiance; }
   bool is_delta() const { return false; }
 
- private:
-
   Vector3D radiance;
   CosineWeightedHemisphereSampler3D sampler;
 
 }; // class EmissionBSDF
+
+enum CudaBSDFType {
+  CudaBSDFType_Diffuse,
+  CudaBSDFType_Microfacet,
+  CudaBSDFType_Mirror,
+  CudaBSDFType_Refraction,
+  CudaBSDFType_Glass,
+  CudaBSDFType_Emission
+};
+
+struct CudaBSDF {
+  size_t idx;
+  CudaBSDFType type;
+};
+
+struct CudaDiffuseBSDF {
+  Vector3D reflectance;
+  CosineWeightedHemisphereSampler3D sampler;
+
+  CudaDiffuseBSDF(const DiffuseBSDF *bsdf) : reflectance(bsdf->reflectance), sampler(bsdf->sampler) {}
+  Vector3D f(const Vector3D wo, const Vector3D wi);
+  Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
+  Vector3D get_emission() const { return Vector3D(); }
+};
+
+struct CudaEmissionBSDF {
+  Vector3D radiance;
+  CosineWeightedHemisphereSampler3D sampler;
+
+  CudaEmissionBSDF(const EmissionBSDF *bsdf) : radiance(bsdf->radiance), sampler(bsdf->sampler) {}
+  Vector3D f(const Vector3D wo, const Vector3D wi);
+  Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
+  Vector3D get_emission() const { return radiance; }
+};
+
 
 }  // namespace CGL
 
