@@ -15,8 +15,7 @@ using CGL::SceneObjects::Scene;
 #include "scene/environment_light.h"
 using CGL::SceneObjects::EnvironmentLight;
 
-using CGL::SceneObjects::BVHNode;
-using CGL::SceneObjects::BVHAccel;
+using CGL::SceneObjects::BVHCuda;
 
 namespace CGL {
 
@@ -47,13 +46,13 @@ namespace CGL {
         /**
          * Trace an ray in the scene.
          */
-        Vector3D estimate_direct_lighting_hemisphere(const Ray& r, const SceneObjects::Intersection& isect);
-        Vector3D estimate_direct_lighting_importance(const Ray& r, const SceneObjects::Intersection& isect);
+        Vector3D estimate_direct_lighting_hemisphere(const Ray& r, const SceneObjects::CudaIntersection& isect);
+        Vector3D estimate_direct_lighting_importance(const Ray& r, const SceneObjects::CudaIntersection& isect);
 
         Vector3D est_radiance_global_illumination(const Ray& r);
-        Vector3D zero_bounce_radiance(const Ray& r, const SceneObjects::Intersection& isect);
-        Vector3D one_bounce_radiance(const Ray& r, const SceneObjects::Intersection& isect);
-        Vector3D at_least_one_bounce_radiance(const Ray& r, const SceneObjects::Intersection& isect);
+        Vector3D zero_bounce_radiance(const Ray& r, const SceneObjects::CudaIntersection& isect);
+        Vector3D one_bounce_radiance(const Ray& r, const SceneObjects::CudaIntersection& isect);
+        Vector3D at_least_one_bounce_radiance(const Ray& r, const SceneObjects::CudaIntersection& isect);
         
         Vector3D debug_shading(const Vector3D d) {
             return Vector3D(abs(d.r), abs(d.g), .0).unit();
@@ -84,7 +83,7 @@ namespace CGL {
 
         // Components //
 
-        BVHAccel* bvh;                 ///< BVH accelerator aggregate
+        BVHCuda* bvh;                 ///< BVH accelerator aggregate
         EnvironmentLight* envLight;    ///< environment map
         Sampler2D* gridSampler;        ///< samples unit grid
         Sampler3D* hemisphereSampler;  ///< samples unit hemisphere

@@ -37,16 +37,6 @@ public:
   bool test(const Ray& r, double& t, double& u, double& v) const;
 
   /**
-   * Ray - Triangle intersection.
-   * Check if the given ray intersects with the triangle, no intersection
-   * information is stored.
-   * \param r ray to test intersection with
-   * \return true if the given ray intersects with the triangle,
-             false otherwise
-   */
-  bool has_intersection(const Ray& r) const;
-
-  /**
    * Ray - Triangle intersection 2.
    * Check if the given ray intersects with the triangle, if so, the input
    * intersection data is updated to contain intersection information for the
@@ -82,6 +72,26 @@ public:
 
   BBox bbox;
 }; // class Triangle
+
+struct CudaTriangle {
+
+  CudaTriangle(Triangle* triangle, CudaBSDF bsdf) {
+    p1 = triangle->p1;
+    p2 = triangle->p2;
+    p3 = triangle->p3;
+    n1 = triangle->n1;
+    n2 = triangle->n2;
+    n3 = triangle->n3;
+    this->bsdf = bsdf;
+  }
+
+  bool intersect(const Ray& r, CudaIntersection* i) const;
+
+  Vector3D p1, p2, p3;
+  Vector3D n1, n2, n3;
+  
+  CudaBSDF bsdf;
+};
 
 } // namespace SceneObjects
 } // namespace CGL

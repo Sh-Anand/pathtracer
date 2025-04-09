@@ -33,6 +33,13 @@ struct Intersection {
   // More to follow.
 };
 
+struct CudaIntersection {
+  CudaIntersection() : t (INF_D) { }
+  double t;
+  Vector3D n;
+  CudaBSDF bsdf;
+};
+
 } // namespace SceneObjects
 } // namespace CGL
 

@@ -281,7 +281,7 @@ void RaytracedRenderer::start_raytracing() {
   pt->clear();
   pt->set_frame_size(width, height);
 
-  pt->bvh = bvh;
+  pt->bvh = bvh_cuda;
   pt->camera = camera;
   pt->scene = scene;
 
@@ -367,6 +367,7 @@ void RaytracedRenderer::build_accel() {
   fflush(stdout);
   timer.start();
   bvh = new BVHAccel(primitives);
+  bvh_cuda = new BVHCuda(bvh);
   timer.stop();
   fprintf(stdout, "Done! (%.4f sec)\n", timer.duration());
 

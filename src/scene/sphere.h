@@ -34,16 +34,6 @@ class Sphere : public Primitive {
   }
 
   /**
-   * Ray - Sphere intersection.
-   * Check if the given ray intersects with the sphere, no intersection
-   * information is stored.
-   * \param r ray to test intersection with
-   * \return true if the given ray intersects with the sphere,
-             false otherwises
-   */
-  bool has_intersection(const Ray& r) const;
-
-  /**
    * Ray - Sphere intersection 2.
    * Check if the given ray intersects with the sphere, if so, the input
    * intersection data is updated to contain intersection information for the
@@ -98,6 +88,27 @@ class Sphere : public Primitive {
   double r2;  ///< radius squared
 
 }; // class Sphere
+
+struct CudaSphere {
+  public:
+    CudaSphere(const Sphere* sphere, CudaBSDF bsdf) {
+      o = sphere->o;
+      r = sphere->r;
+      r2 = sphere->r2;
+      this->bsdf = bsdf;
+    }
+  
+    Vector3D normal(Vector3D p) const {
+      return (p - o).unit();
+    }
+
+    bool intersect(const Ray& r, CudaIntersection* i) const;
+    
+    Vector3D o; ///< origin of the sphere
+    double r;   ///< radius
+    double r2;  ///< radius squared
+    CudaBSDF bsdf;
+};
 
 } // namespace SceneObjects
 } // namespace CGL

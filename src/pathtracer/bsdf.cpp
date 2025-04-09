@@ -57,6 +57,10 @@ Vector3D DiffuseBSDF::f(const Vector3D wo, const Vector3D wi) {
   return reflectance / PI;
 }
 
+Vector3D CudaDiffuseBSDF::f(const Vector3D wo, const Vector3D wi) {
+  return reflectance / PI;
+}
+
 /**
  * Evalutate diffuse lambertian BSDF.
  */
@@ -68,6 +72,11 @@ Vector3D DiffuseBSDF::sample_f(const Vector3D wo, Vector3D *wi, double *pdf) {
   // at (wo, *wi).
   // You can use the `f` function. The reference solution only takes two lines.
 
+  *wi = sampler.get_sample(pdf);
+  return f(wo, *wi);
+}
+
+Vector3D CudaDiffuseBSDF::sample_f(const Vector3D wo, Vector3D *wi, double *pdf) {
   *wi = sampler.get_sample(pdf);
   return f(wo, *wi);
 }
@@ -88,10 +97,20 @@ Vector3D EmissionBSDF::f(const Vector3D wo, const Vector3D wi) {
   return Vector3D();
 }
 
+Vector3D CudaEmissionBSDF::f(const Vector3D wo, const Vector3D wi) {
+  return Vector3D();
+}
+
 /**
  * Evalutate Emission BSDF (Light Source)
  */
 Vector3D EmissionBSDF::sample_f(const Vector3D wo, Vector3D *wi, double *pdf) {
+  *pdf = 1.0 / PI;
+  *wi = sampler.get_sample(pdf);
+  return Vector3D();
+}
+
+Vector3D CudaEmissionBSDF::sample_f(const Vector3D wo, Vector3D *wi, double *pdf) {
   *pdf = 1.0 / PI;
   *wi = sampler.get_sample(pdf);
   return Vector3D();

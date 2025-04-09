@@ -16,7 +16,7 @@ BVHAccel::BVHAccel(const std::vector<Primitive *> &_primitives,
 
   primitives = std::vector<Primitive *>(_primitives);
   nodes = std::vector<BVHNode>();
-  root = construct_bvh(primitives.begin(), primitives.end(), max_leaf_size);
+  root = construct_bvh(0, primitives.size(), max_leaf_size);
 }
 
 BVHAccel::~BVHAccel() {
@@ -24,13 +24,110 @@ BVHAccel::~BVHAccel() {
   nodes.clear();
 }
 
+CudaBSDF to_cuda_bsdf(const BSDF *bsdf, size_t idx) {
+  CudaBSDF cuda_bsdf;
+  // dynamic cst BSDF and figure out type:
+  if (const DiffuseBSDF *diffuse_bsdf = dynamic_cast<const DiffuseBSDF *>(bsdf)) {
+    cuda_bsdf.type = CudaBSDFType_Diffuse;
+  } else if (const MicrofacetBSDF *microfacet_bsdf = dynamic_cast<const MicrofacetBSDF *>(bsdf)) {
+    cuda_bsdf.type = CudaBSDFType_Microfacet;
+  } else if (const MirrorBSDF *mirror_bsdf = dynamic_cast<const MirrorBSDF *>(bsdf)) {
+    cuda_bsdf.type = CudaBSDFType_Mirror;
+  } else if (const RefractionBSDF *refraction_bsdf = dynamic_cast<const RefractionBSDF *>(bsdf)) {
+    cuda_bsdf.type = CudaBSDFType_Refraction;
+  } else if (const GlassBSDF *glass_bsdf = dynamic_cast<const GlassBSDF *>(bsdf)) {
+    cuda_bsdf.type = CudaBSDFType_Glass;
+  } else if (const EmissionBSDF *emission_bsdf = dynamic_cast<const EmissionBSDF *>(bsdf)) {
+    cuda_bsdf.type = CudaBSDFType_Emission;
+  } else {
+    std::cerr << "Unknown BSDF type" << std::endl;
+    exit(1);
+  }
+  cuda_bsdf.idx = idx;
+  return cuda_bsdf;
+}
+
+BVHCuda::BVHCuda(BVHAccel *bvh) {
+  std::vector<CudaPrimitive> primitives_vec;
+  std::vector<CudaSphere> spheres_vec;
+  std::vector<CudaTriangle> triangles_vec;
+  std::vector<CudaDiffuseBSDF> diffuse_bsdfs_vec;
+  std::vector<CudaEmissionBSDF> emission_bsdfs_vec;
+
+  num_triangles = 0;
+  num_spheres = 0;
+  num_diffuse_bsdfs = 0;
+  num_emission_bsdfs = 0;
+
+  for (size_t i = 0; i < bvh->primitives.size(); i++) {
+    Primitive *primitive = bvh->primitives[i];
+    size_t bsdf_idx;
+    if (DiffuseBSDF *diffuse_bsdf = dynamic_cast<DiffuseBSDF *>(primitive->get_bsdf())) {
+      diffuse_bsdfs_vec.push_back(CudaDiffuseBSDF(diffuse_bsdf));
+      bsdf_idx = num_diffuse_bsdfs++;
+    } else if (EmissionBSDF *emission_bsdf = dynamic_cast<EmissionBSDF *>(primitive->get_bsdf())) {
+      emission_bsdfs_vec.push_back(CudaEmissionBSDF(emission_bsdf));
+      bsdf_idx = num_emission_bsdfs++;
+    } else {
+      std::cerr << "Unknown BSDF type" << std::endl;
+      exit(1);
+    }
+
+    if (Triangle *t = dynamic_cast<Triangle *>(primitive)) {
+      triangles_vec.push_back(CudaTriangle(t, to_cuda_bsdf(primitive->get_bsdf(), bsdf_idx)));
+      primitives_vec.push_back(CudaPrimitive(num_triangles, TRIANGLE));
+      num_triangles++;
+    } else if (Sphere *s = dynamic_cast<Sphere *>(primitive)) {
+      spheres_vec.push_back(CudaSphere(s, to_cuda_bsdf(primitive->get_bsdf(), bsdf_idx)));
+      primitives_vec.push_back(CudaPrimitive(num_spheres, SPHERE));
+      num_spheres++;
+    } else {
+      std::cerr << "Unknown primitive type" << std::endl;
+      exit(1);
+    }
+  }
+
+  num_primitives = primitives_vec.size();
+  num_diffuse_bsdfs = diffuse_bsdfs_vec.size();
+  num_nodes = bvh->nodes.size();
+
+
+  primitives = (CudaPrimitive *) malloc(num_primitives * sizeof(CudaPrimitive));
+  spheres = (CudaSphere *) malloc(num_spheres * sizeof(CudaSphere));
+  triangles = (CudaTriangle *) malloc(num_triangles * sizeof(CudaTriangle));
+  nodes = (BVHNode *) malloc(num_nodes * sizeof(BVHNode));
+  diffuse_bsdfs = (CudaDiffuseBSDF *) malloc(num_diffuse_bsdfs * sizeof(CudaDiffuseBSDF));
+  emission_bsdfs = (CudaEmissionBSDF *) malloc(num_emission_bsdfs * sizeof(CudaEmissionBSDF));
+
+  memcpy(primitives, primitives_vec.data(), num_primitives * sizeof(CudaPrimitive));
+  memcpy(spheres, spheres_vec.data(), num_spheres * sizeof(CudaSphere));
+  memcpy(triangles, triangles_vec.data(), num_triangles * sizeof(CudaTriangle));
+  memcpy(nodes, bvh->nodes.data(), bvh->nodes.size() * sizeof(BVHNode));
+  memcpy(diffuse_bsdfs, diffuse_bsdfs_vec.data(), num_diffuse_bsdfs * sizeof(CudaDiffuseBSDF));
+  memcpy(emission_bsdfs, emission_bsdfs_vec.data(), num_emission_bsdfs * sizeof(CudaEmissionBSDF));
+
+  root = bvh->root;
+
+  std::cout<< "BVHCuda: " << num_primitives << " primitives, " << num_nodes << " nodes, " << std::endl;
+  std::cout<< "BVHCuda: " << num_diffuse_bsdfs << " diffuse BSDFs, " << num_emission_bsdfs << " emission BSDFs" << std::endl;
+  std::cout<< "BVHCuda: " << num_triangles << " triangles, " << num_spheres << " spheres" << std::endl;
+  std::cout<< "root: " << root << std::endl;
+}
+
+BVHCuda::~BVHCuda() {
+  free(primitives);
+  free(spheres);
+  free(triangles);
+  free(nodes);
+}
+
 BBox BVHAccel::get_bbox() const { return nodes[root].bb; }
 
 void BVHAccel::draw(size_t idx, const Color &c, float alpha) const {
   BVHNode node = nodes[idx];
   if (node.isLeaf()) {
-    for (auto p = node.start; p != node.end; p++) {
-      (*p)->draw(c, alpha);
+    for (size_t p = node.start; p < node.end; p++) {
+      (primitives[p])->draw(c, alpha);
     }
   }
 }
@@ -38,15 +135,13 @@ void BVHAccel::draw(size_t idx, const Color &c, float alpha) const {
 void BVHAccel::drawOutline(size_t idx, const Color &c, float alpha) const {
   BVHNode node = nodes[idx];
   if (node.isLeaf()) {
-    for (auto p = node.start; p != node.end; p++) {
-      (*p)->drawOutline(c, alpha);
+    for (size_t p = node.start; p < node.end; p++) {
+      (primitives[p])->drawOutline(c, alpha);
     }
   }
 }
 
-int BVHAccel::construct_bvh(std::vector<Primitive *>::iterator start,
-                                 std::vector<Primitive *>::iterator end,
-                                 size_t max_leaf_size) {
+int BVHAccel::construct_bvh(size_t start, size_t end, size_t max_leaf_size) {
 
   // TODO (Part 2.1):
   // Construct a BVH from the given vector of primitives and maximum leaf
@@ -56,8 +151,8 @@ int BVHAccel::construct_bvh(std::vector<Primitive *>::iterator start,
 
   BBox bbox;
 
-  for (auto p = start; p != end; p++) {
-    BBox bb = (*p)->get_bbox();
+  for (size_t p = start; p < end; p++) {
+    BBox bb = (primitives[p])->get_bbox();
     bbox.expand(bb);
   }
 
@@ -85,27 +180,29 @@ int BVHAccel::construct_bvh(std::vector<Primitive *>::iterator start,
     size_t best_index = 0;
     double best_cost = std::numeric_limits<double>::infinity();
 
+    auto start_it = primitives.begin() + start;
+    auto end_it = primitives.begin() + end;
     for (size_t axis = 0; axis < 3; axis++) {
       if (axis == 0) {
-        std::sort(start, end, sort_x);
+        std::sort(start_it, end_it, sort_x);
       } else if (axis == 1) {
-        std::sort(start, end, sort_y);
+        std::sort(start_it, end_it, sort_y);
       } else {
-        std::sort(start, end, sort_z);
+        std::sort(start_it, end_it, sort_z);
       }
 
       std::vector<BBox> left(end-start+1), right(end-start+1);
       BBox s_bbox, e_bbox;
-      for (auto p = start; p != end; p++) {
-        s_bbox.expand((*p)->get_bbox());
+      for (size_t p = start; p < end; p++) {
+        s_bbox.expand((primitives[p])->get_bbox());
         left[p - start] = s_bbox;
       }
-      for (auto p = end - 1; p >= start; p--) {
-        e_bbox.expand((*p)->get_bbox());
+      for (size_t p = end; p-- > start;) {
+        e_bbox.expand(primitives[p]->get_bbox());
         right[p - start] = e_bbox;
       }
 
-      for (auto p = start + 1; p != end; p++) {
+      for (size_t p = start + 1; p < end; p++) {
         double cost = left[p - start - 1].surface_area() * (p - start) + right[p - start].surface_area() * (end - p);
         if (cost < best_cost) {
           best_cost = cost;
@@ -116,11 +213,11 @@ int BVHAccel::construct_bvh(std::vector<Primitive *>::iterator start,
     }
 
     if (best_axis == 0) {
-      std::sort(start, end, sort_x);
+      std::sort(start_it, end_it, sort_x);
     } else if (best_axis == 1) {
-      std::sort(start, end, sort_y);
+      std::sort(start_it, end_it, sort_y);
     } else {
-      std::sort(start, end, sort_z);
+      std::sort(start_it, end_it, sort_z);
     }
 
     auto mid = start + best_index;
@@ -134,69 +231,87 @@ int BVHAccel::construct_bvh(std::vector<Primitive *>::iterator start,
   return nodes.size() - 1;
 }
 
-bool BVHAccel::has_intersection(const Ray &ray, size_t idx) const {
-  // TODO (Part 2.3):
-  // Fill in the intersect function.
-  // Take note that this function has a short-circuit that the
-  // Intersection version cannot, since it returns as soon as it finds
-  // a hit, it doesn't actually have to find the closest hit.
+bool BVHAccel::intersect(const Ray &ray, Intersection *i, size_t idx) const {
+  const BVHNode &node = nodes[idx];
 
-  BVHNode node = nodes[idx];
   double t0, t1;
   if (!node.bb.intersect(ray, t0, t1)) {
     return false;
   }
 
   if (node.isLeaf()) {
-    for (auto p = node.start; p != node.end; p++) {
+    bool hit = false;
+    Intersection tmp;
+    for (size_t p = node.start; p < node.end; p++) {
       total_isects++;
-      if ((*p)->has_intersection(ray)) {
-        return true;
+      if (primitives[p]->intersect(ray, &tmp) && tmp.t < i->t) {
+        hit = true;
+        *i = tmp;
       }
     }
-    return false;
-  } else {
-    return has_intersection(ray, node.l) || has_intersection(ray, node.r);
+    return hit;
   }
 
+  bool hit_left  = intersect(ray, i, node.l);
+  bool hit_right = intersect(ray, i, node.r);
+  return hit_left || hit_right;
 }
 
-bool BVHAccel::intersect(const Ray &ray, Intersection *i, size_t idx) const {
-  // TODO (Part 2.3):
-  // Fill in the intersect function.
-
-  bool hit = false;
+bool BVHCuda::intersect(const Ray &ray, CudaIntersection *i, size_t idx) const {
+  const BVHNode &node = nodes[idx];
 
   double t0, t1;
+  if (!node.bb.intersect(ray, t0, t1)) {
+    return false;
+  }
 
-  i->t = ray.max_t;
-
-  Intersection t_i;
-  std::stack<size_t> stack;
-  stack.push(idx);
-  while (!stack.empty()) {
-    BVHNode n = nodes[stack.top()];
-    stack.pop();
-    if (!n.bb.intersect(ray, t0, t1)) {
-      continue;
-    }
-    if (n.isLeaf()) {
-      for (auto p = n.start; p != n.end; p++) {
-        total_isects++;
-        if ((*p)->intersect(ray, &t_i)) {
-          if (t_i.t < i->t) {
+  if (node.isLeaf()) {
+    bool hit = false;
+    CudaIntersection tmp;
+    for (size_t p = node.start; p < node.end; p++) {
+      switch (primitives[p].type) {
+        case CudaPrimitiveType::TRIANGLE:
+          if (triangles[primitives[p].idx].intersect(ray, &tmp) && tmp.t < i->t) {
             hit = true;
-            *i = t_i;
+            *i = tmp;
           }
-        }
+          break;
+        case CudaPrimitiveType::SPHERE:
+          if (spheres[primitives[p].idx].intersect(ray, &tmp) && tmp.t < i->t) {
+            hit = true;
+            *i = tmp;
+          }
+          break;
       }
-    } else {
-      stack.push(n.l);
-      stack.push(n.r);
     }
-  } 
+    return hit;
+  }
 
-  return hit;
+  bool hit_left  = intersect(ray, i, node.l);
+  bool hit_right = intersect(ray, i, node.r);
+  return hit_left || hit_right;
+}
+
+Vector3D BVHCuda::sample_f (CudaBSDF bsdf, const Vector3D wo, Vector3D *wi, double* pdf) const {
+  if (bsdf.type == CudaBSDFType_Diffuse) {
+    return diffuse_bsdfs[bsdf.idx].sample_f(wo, wi, pdf);
+  } else if (bsdf.type == CudaBSDFType_Emission) {
+    return emission_bsdfs[bsdf.idx].sample_f(wo, wi, pdf);
+  } else {
+    std::cerr << "Unknown BSDF type" << std::endl;
+    exit(1);
+  }
+}
+
+Vector3D BVHCuda::f (CudaBSDF bsdf, const Vector3D wo, const Vector3D wi) const {
+  if (bsdf.type == CudaBSDFType_Diffuse) {
+    return diffuse_bsdfs[bsdf.idx].f(wo, wi);
+  } else if (bsdf.type == CudaBSDFType_Emission) {
+    return emission_bsdfs[bsdf.idx].f(wo, wi);
+  } else {
+    std::cerr << "Unknown BSDF type" << std::endl;
+    exit(1);
+  }
 }
 
 } // namespace SceneObjects

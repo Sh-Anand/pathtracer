@@ -22,8 +22,9 @@ Triangle::Triangle(const Mesh *mesh, size_t v1, size_t v2, size_t v3) {
 
 BBox Triangle::get_bbox() const { return bbox; }
 
-bool Triangle::test(const Ray &r, double &t, double &u, double &v) const {
-
+bool test_intersect(const Ray &r, const Vector3D &p1,
+                  const Vector3D &p2, const Vector3D &p3, double &t, double &u,
+                  double &v) {
   Vector3D e1 = p2 - p1, e2 = p3 - p1;
   Vector3D normal = cross(e1, e2);
   // early termination
@@ -43,14 +44,8 @@ bool Triangle::test(const Ray &r, double &t, double &u, double &v) const {
   return true;
 }
 
-bool Triangle::has_intersection(const Ray &r) const {
-  // Part 1, Task 3: implement ray-triangle intersection
-  // The difference between this function and the next function is that the next
-  // function records the "intersection" while this function only tests whether
-  // there is a intersection.
-
-  double t,u,v;
-  return test(r, t, u, v);
+bool Triangle::test(const Ray &r, double &t, double &u, double &v) const {
+  return test_intersect(r, p1, p2, p3, t, u, v);
 }
 
 bool Triangle::intersect(const Ray &r, Intersection *isect) const {
@@ -85,6 +80,18 @@ void Triangle::drawOutline(const Color &c, float alpha) const {
   glVertex3d(p2.x, p2.y, p2.z);
   glVertex3d(p3.x, p3.y, p3.z);
   glEnd();
+}
+
+bool CudaTriangle::intersect(const Ray &r, CudaIntersection *isect) const {
+  double t,u,v;
+  if (!test_intersect(r, p1, p2, p3, t, u, v)) {
+    return false;
+  }
+
+  isect->n = (1 - u - v) * n1 + u * n2 + v * n3;
+  isect->t = t; isect->bsdf = bsdf;
+
+  return true;
 }
 
 } // namespace SceneObjects
