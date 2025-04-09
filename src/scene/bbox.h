@@ -4,8 +4,6 @@
 #include <utility>
 #include <algorithm>
 
-#include "CGL/CGL.h"
-
 #include "pathtracer/ray.h"
 
 namespace CGL {
@@ -126,7 +124,7 @@ struct BBox {
    * \param t0 lower bound of intersection time
    * \param t1 upper bound of intersection time
    */
-  bool intersect(const Ray& r, double& t0, double& t1) const;
+  HOST_DEVICE bool intersect(Ray& r, double& t0, double& t1) const;
 
   /**
    * Draw box wireframe with OpenGL.

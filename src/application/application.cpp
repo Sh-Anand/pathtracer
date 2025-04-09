@@ -571,7 +571,7 @@ void Application::mouse_released(e_mouse_button b) {
       break;
     case RIGHT:
       if (mode == RENDER_MODE) {
-        renderer->autofocus(Vector2D(mouseX, screenH - mouseY));
+        // renderer->autofocus(Vector2D(mouseX, screenH - mouseY));
         renderer->stop();
         renderer->start_raytracing();
       }

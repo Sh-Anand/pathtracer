@@ -8,8 +8,8 @@
 #include <sstream>
 
 #include "CGL/CGL.h"
-#include "CGL/vector3D.h"
-#include "CGL/matrix3x3.h"
+#include "util/vector3D.h"
+#include "util/matrix3x3.h"
 #include "CGL/lodepng.h"
 
 #include "GL/glew.h"
@@ -54,7 +54,6 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
 
   pt->ns_aa = ns_aa;                                        // Number of samples per pixel
   pt->max_ray_depth = max_ray_depth;                        // Maximum recursion ray depth
-  pt->isAccumBounces = isAccumBounces;                      // Accumulate Bounces Along Path
   pt->ns_area_light = ns_area_light;                        // Number of samples for area light
   pt->ns_diff = ns_diff;                                    // Number of samples for diffuse surface
   pt->ns_glsy = ns_diff;                                    // Number of samples for glossy surface
@@ -68,11 +67,11 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
 
   this->filename = filename;
 
-  if (envmap) {
-    pt->envLight = new EnvironmentLight(envmap);
-  } else {
-    pt->envLight = NULL;
-  }
+  // if (envmap) {
+  //   pt->envLight = new EnvironmentLight(envmap);
+  // } else {
+  //   pt->envLight = NULL;
+  // }
 
   bvh = NULL;
   scene = NULL;
@@ -83,6 +82,9 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
   imageTileSize = 32;                     // Size of the rendering tile.
   numWorkerThreads = num_threads;         // Number of threads
   workerThreads.resize(numWorkerThreads);
+
+  this->lights = std::vector<CudaLight>();
+  this->light_data = nullptr;
 }
 
 /**
@@ -115,11 +117,19 @@ void RaytracedRenderer::set_scene(Scene *scene) {
     selectionHistory.pop();
   }
 
-  if (pt->envLight != nullptr) {
-    scene->lights.push_back(pt->envLight);
-  }
+  // if (pt->envLight != nullptr) {
+  //   scene->lights.push_back(pt->envLight);
+  // }
 
   this->scene = scene;
+
+  vector<Primitive *> primitives;
+  for (SceneObject *obj : scene->objects) {
+    const vector<Primitive *> &obj_prims = obj->get_primitives();
+    primitives.reserve(primitives.size() + obj_prims.size());
+    primitives.insert(primitives.end(), obj_prims.begin(), obj_prims.end());
+  }
+
   build_accel();
   
   build_lights();
@@ -194,7 +204,6 @@ void RaytracedRenderer::update_screen() {
     case READY:
       break;
     case VISUALIZE:
-      visualize_accel();
       break;
     case RENDERING:
       glDrawPixels(frameBuffer.w, frameBuffer.h, GL_RGBA,
@@ -283,26 +292,9 @@ void RaytracedRenderer::start_raytracing() {
   pt->clear();
   pt->set_frame_size(width, height);
 
-  pt->bvh = bvh_cuda;
-  pt->camera = camera;
-  pt->scene = scene;
+  pt->camera = CudaCamera(camera);
 
-  if (!render_cell) {
-    frameBuffer.clear();
-    num_tiles_w = width / imageTileSize + 1;
-    num_tiles_h = height / imageTileSize + 1;
-    tilesTotal = num_tiles_w * num_tiles_h;
-    tilesDone = 0;
-    tile_samples.resize(num_tiles_w * num_tiles_h);
-    memset(&tile_samples[0], 0, num_tiles_w * num_tiles_h * sizeof(int));
-
-    // populate the tile work queue
-    for (size_t y = 0; y < height; y += imageTileSize) {
-        for (size_t x = 0; x < width; x += imageTileSize) {
-            workQueue.put_work(WorkItem(x, y, imageTileSize, imageTileSize));
-        }
-    }
-  } else {
+  if (render_cell) {
     int w = (cell_br-cell_tl).x;
     int h = (cell_br-cell_tl).y;
     int imTS = imageTileSize / 4;
@@ -320,22 +312,26 @@ void RaytracedRenderer::start_raytracing() {
           min(imTS, (int)(cell_br.x-x)), min(imTS, (int)(cell_br.y-y)) ));
       }
     }
-  }
+    bvh->total_isects = 0; bvh->total_rays = 0;
+    // launch threads
+    fprintf(stdout, "[PathTracer] Rendering... "); fflush(stdout);
+    for (int i=0; i<numWorkerThreads; i++) {
+        workerThreads[i] = new std::thread(&RaytracedRenderer::worker_thread, this);
+    }
+  } else {
+    frameBuffer.clear();
+    copy_host_device_pt();
 
-  bvh->total_isects = 0; bvh->total_rays = 0;
-  // launch threads
-  fprintf(stdout, "[PathTracer] Rendering... "); fflush(stdout);
-  for (int i=0; i<numWorkerThreads; i++) {
-      workerThreads[i] = new std::thread(&RaytracedRenderer::worker_thread, this);
+    gpu_raytrace();
+
+    cout << "GPU raytracing done!" << endl;
   }
 }
 
 void RaytracedRenderer::render_to_file(string filename, size_t x, size_t y, size_t dx, size_t dy) {
   if (x == -1) {
-    unique_lock<std::mutex> lk(m_done);
     start_raytracing();
-    cv_done.wait(lk, [this]{ return state == DONE; });
-    lk.unlock();
+    state = DONE;
     save_image(filename);
     fprintf(stdout, "[PathTracer] Job completed.\n");
   } else {
@@ -347,188 +343,6 @@ void RaytracedRenderer::render_to_file(string filename, size_t x, size_t y, size
     save_image(filename, &buffer);
     fprintf(stdout, "[PathTracer] Cell job completed.\n");
   }
-}
-
-
-void RaytracedRenderer::build_accel() {
-
-  // collect primitives //
-  fprintf(stdout, "[PathTracer] Collecting primitives... "); fflush(stdout);
-  timer.start();
-  vector<Primitive *> primitives;
-  for (SceneObject *obj : scene->objects) {
-    const vector<Primitive *> &obj_prims = obj->get_primitives();
-    primitives.reserve(primitives.size() + obj_prims.size());
-    primitives.insert(primitives.end(), obj_prims.begin(), obj_prims.end());
-  }
-  timer.stop();
-  fprintf(stdout, "Done! (%.4f sec)\n", timer.duration());
-
-  // build BVH //
-  fprintf(stdout, "[PathTracer] Building BVH from %lu primitives... ", primitives.size()); 
-  fflush(stdout);
-  timer.start();
-  bvh = new BVHAccel(primitives);
-  bvh_cuda = new BVHCuda(bvh);
-  timer.stop();
-  fprintf(stdout, "Done! (%.4f sec)\n", timer.duration());
-
-  // initial visualization //
- 
-  selectionHistory.push(bvh->get_root());
-}
-
-void RaytracedRenderer::build_lights() {
-  // Build lights:
-  lights.clear();
-  if (light_data)
-    free(light_data);
-
-  light_data = new CudaLightBundle();
-  light_data->num_directional_lights = 0;
-  light_data->num_point_lights = 0;
-  light_data->num_area_lights = 0;
-
-  std::vector<CudaDirectionalLight> directional_lights;
-  std::vector<CudaPointLight> point_lights;
-  std::vector<CudaAreaLight> area_lights;
-
-  for (size_t i = 0; i < scene->lights.size(); i++) {
-    SceneLight *light = scene->lights[i];
-    CudaLight cuda_light;
-    if (dynamic_cast<DirectionalLight *>(light)) {
-      directional_lights.push_back(CudaDirectionalLight(*(DirectionalLight *) light));
-      cuda_light.type = CudaLightType_Directional;
-      cuda_light.idx = light_data->num_directional_lights++;
-    } else if (dynamic_cast<PointLight *>(light)) {
-      point_lights.push_back(CudaPointLight(*(PointLight *) light));
-      cuda_light.type = CudaLightType_Point;
-      cuda_light.idx = light_data->num_point_lights++;
-    } else if (dynamic_cast<AreaLight *>(light)) {
-      area_lights.push_back(CudaAreaLight(*(AreaLight *) light));
-      cuda_light.type = CudaLightType_Area;
-      cuda_light.idx = light_data->num_area_lights++;
-    } else {
-      std::cout<< "Here?";
-      std::cerr << "Unknown light type" << std::endl;
-      exit(1);
-    }
-    lights.push_back(cuda_light);
-  }
-
-  // copy lights to pt
-  pt->lights = (CudaLight *)malloc(lights.size() * sizeof(CudaLight));
-  pt->light_data = (CudaLightBundle *)malloc(sizeof(CudaLightBundle));
-
-  pt->light_data->num_directional_lights = light_data->num_directional_lights;
-  pt->light_data->num_point_lights = light_data->num_point_lights;
-  pt->light_data->num_area_lights = light_data->num_area_lights;
-  pt->light_data->directional_lights = (CudaDirectionalLight *)malloc(light_data->num_directional_lights * sizeof(CudaDirectionalLight));
-  pt->light_data->point_lights = (CudaPointLight *)malloc(light_data->num_point_lights * sizeof(CudaPointLight));
-  pt->light_data->area_lights = (CudaAreaLight *)malloc(light_data->num_area_lights * sizeof(CudaAreaLight));
-
-  memcpy(pt->lights, lights.data(), lights.size() * sizeof(CudaLight));
-  memcpy(pt->light_data->directional_lights, directional_lights.data(), light_data->num_directional_lights * sizeof(CudaDirectionalLight));
-  memcpy(pt->light_data->point_lights, point_lights.data(), light_data->num_point_lights * sizeof(CudaPointLight));
-  memcpy(pt->light_data->area_lights, area_lights.data(), light_data->num_area_lights * sizeof(CudaAreaLight));
-
-  pt->num_lights = lights.size();
-
-  std::cout << "CudaLights: " << light_data->num_directional_lights << " directional lights, "
-            << light_data->num_point_lights << " point lights, "
-            << light_data->num_area_lights << " area lights" << std::endl;
-}
-
-void RaytracedRenderer::visualize_accel() const {
-
-  // glPushAttrib(GL_ENABLE_BIT);
-  // glDisable(GL_LIGHTING);
-  // glLineWidth(1);
-  // glEnable(GL_DEPTH_TEST);
-
-  // // hardcoded color settings
-  // Color cnode = Color(.5, .5, .5); float cnode_alpha = 0.25f;
-  // Color cnode_hl = Color(1., .25, .0); float cnode_hl_alpha = 0.6f;
-  // Color cnode_hl_child = Color(1., 1., 1.); float cnode_hl_child_alpha = 0.6f;
-
-  // Color cprim_hl_left = Color(.6, .6, 1.); float cprim_hl_left_alpha = 1.f;
-  // Color cprim_hl_right = Color(.8, .8, 1.); float cprim_hl_right_alpha = 1.f;
-  // Color cprim_hl_edges = Color(0., 0., 0.); float cprim_hl_edges_alpha = 0.5f;
-
-  // size_t selected = selectionHistory.top();
-
-  // // render solid geometry (with depth offset)
-  // glPolygonOffset(1.0, 1.0);
-  // glEnable(GL_POLYGON_OFFSET_FILL);
-
-  // if (bvh->isLeaf(selected)) {
-  //   bvh->draw(selected, cprim_hl_left, cprim_hl_left_alpha);
-  // } else {
-  //   bvh->drawLR(selected, cprim_hl_left, cprim_hl_left_alpha);
-  // }
-
-  // glDisable(GL_POLYGON_OFFSET_FILL);
-
-  // // draw geometry outline
-  // bvh->drawOutline(selected, cprim_hl_edges, cprim_hl_edges_alpha);
-
-  // // keep depth buffer check enabled so that mesh occluded bboxes, but
-  // // disable depth write so that bboxes don't occlude each other.
-  // glDepthMask(GL_FALSE);
-
-  // // create traversal stack
-  // stack<size_t> tstack;
-
-  // // push initial traversal data
-  // tstack.push(bvh->get_root());
-
-  // // draw all BVH bboxes with non-highlighted color
-  // while (!tstack.empty()) {
-
-  //   BVHNode *current = tstack.top();
-  //   tstack.pop();
-
-  //   current->bb.draw(cnode, cnode_alpha);
-  //   if (current->l) tstack.push(current->l);
-  //   if (current->r) tstack.push(current->r);
-  // }
-
-  // // draw selected node bbox and primitives
-  // if (selected->l) selected->l->bb.draw(cnode_hl_child, cnode_hl_child_alpha);
-  // if (selected->r) selected->r->bb.draw(cnode_hl_child, cnode_hl_child_alpha);
-
-  // glLineWidth(3.f);
-  // selected->bb.draw(cnode_hl, cnode_hl_alpha);
-
-  // // now perform visualization of the rays
-  // if (show_rays) {
-  //     glLineWidth(1.f);
-  //     glBegin(GL_LINES);
-
-  //     for (size_t i=0; i<rayLog.size(); i+=500) {
-
-  //         const static double VERY_LONG = 10e4;
-  //         double ray_t = VERY_LONG;
-
-  //         // color rays that are hits yellow
-  //         // and rays this miss all geometry red
-  //         if (rayLog[i].hit_t >= 0.0) {
-  //             ray_t = rayLog[i].hit_t;
-  //             glColor4f(1.f, 1.f, 0.f, 0.1f);
-  //         } else {
-  //             glColor4f(1.f, 0.f, 0.f, 0.1f);
-  //         }
-
-  //         Vector3D end = rayLog[i].o + ray_t * rayLog[i].d;
-
-  //         glVertex3f(rayLog[i].o[0], rayLog[i].o[1], rayLog[i].o[2]);
-  //         glVertex3f(end[0], end[1], end[2]);
-  //     }
-  //     glEnd();
-  // }
-
-  // glDepthMask(GL_TRUE);
-  // glPopAttrib();
 }
 
 void RaytracedRenderer::visualize_cell() const {
@@ -606,22 +420,6 @@ void RaytracedRenderer::key_press(int key) {
     pt->direct_hemisphere_sample = !pt->direct_hemisphere_sample;
     fprintf(stdout, "[PathTracer] Toggled direct lighting to %s\n", (pt->direct_hemisphere_sample ? "uniform hemisphere sampling" : "importance light sampling"));
     break;
-  case 'k': case 'K':
-    pt->camera->lensRadius = std::max(pt->camera->lensRadius - 0.05, 0.0);
-    fprintf(stdout, "[PathTracer] Camera lens radius reduced to %f.\n", pt->camera->lensRadius);
-    break;
-  case 'l': case 'L':
-    pt->camera->lensRadius = pt->camera->lensRadius + 0.05;
-    fprintf(stdout, "[PathTracer] Camera lens radius increased to %f.\n", pt->camera->lensRadius);
-    break;
-  case ';':
-    pt->camera->focalDistance = std::max(pt->camera->focalDistance - 0.1, 0.0);
-    fprintf(stdout, "[PathTracer] Camera focal distance reduced to %f.\n", pt->camera->focalDistance);
-    break;
-  case '\'':
-    pt->camera->focalDistance = pt->camera->focalDistance + 0.1;
-    fprintf(stdout, "[PathTracer] Camera focal distance increased to %f.\n", pt->camera->focalDistance);
-    break;
   case KEYBOARD_UP:
     if (current != bvh->get_root()) {
         selectionHistory.pop();
@@ -662,16 +460,16 @@ void RaytracedRenderer::raytrace_tile(int tile_x, int tile_y,
   size_t tile_idx_y = tile_y / imageTileSize;
   size_t num_samples_tile = tile_samples[tile_idx_x + tile_idx_y * num_tiles_w];
 
-  for (size_t y = tile_start_y; y < tile_end_y; y++) {
-    if (!continueRaytracing) return;
-    for (size_t x = tile_start_x; x < tile_end_x; x++) {
-      pt->raytrace_pixel(x, y);
-    }
-  }
+  // for (size_t y = tile_start_y; y < tile_end_y; y++) {
+  //   if (!continueRaytracing) return;
+  //   for (size_t x = tile_start_x; x < tile_end_x; x++) {
+  //     pt->raytrace_pixel(x, y);
+  //   }
+  // }
 
   tile_samples[tile_idx_x + tile_idx_y * num_tiles_w] += 1;
 
-  pt->write_to_framebuffer(frameBuffer, tile_start_x, tile_start_y, tile_end_x, tile_end_y);
+  pt->write_to_framebuffer(pt->sampleBuffer, frameBuffer, tile_start_x, tile_start_y, tile_end_x, tile_end_y);
 }
 
 void RaytracedRenderer::raytrace_cell(ImageBuffer& buffer) {
@@ -703,7 +501,7 @@ void RaytracedRenderer::raytrace_cell(ImageBuffer& buffer) {
 }
 
 void RaytracedRenderer::autofocus(Vector2D loc) {
-  pt->autofocus(loc);
+  // pt->autofocus(loc);
 }
 
 void RaytracedRenderer::worker_thread() {
@@ -746,6 +544,8 @@ void RaytracedRenderer::save_image(string filename, ImageBuffer* buffer) {
 
   if (state != DONE) return;
 
+  cout << "[PathTracer] Saving image..." << endl;
+
   if (!buffer)
     buffer = &frameBuffer;
 
@@ -760,6 +560,8 @@ void RaytracedRenderer::save_image(string filename, ImageBuffer* buffer) {
       << lt->tm_hour << "-" << lt->tm_min << "-" << lt->tm_sec << ".png";
     filename = ss.str();  
   }
+
+  cout << "[PathTracer] Saving to file: " << filename << endl;
 
   uint32_t* frame = &buffer->data[0];
   size_t w = buffer->w;
@@ -789,7 +591,7 @@ void RaytracedRenderer::save_sampling_rate_image(string filename) {
 
   for (int x = 0; x < w; x++) {
       for (int y = 0; y < h; y++) {
-          float samplingRate = pt->sampleCountBuffer[y * w + x] * 1.0f / pt->ns_aa;
+          float samplingRate = 1.0f / pt->ns_aa;
 
           Color c;
           if (samplingRate <= 0.5) {

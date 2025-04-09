@@ -1,7 +1,7 @@
 #ifndef CGL_COLLADA_LIGHTINFO_H
 #define CGL_COLLADA_LIGHTINFO_H
 
-#include "CGL/vector3D.h"
+#include "util/vector3D.h"
 
 #include "collada_info.h"
 

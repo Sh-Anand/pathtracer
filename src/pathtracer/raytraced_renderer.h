@@ -175,10 +175,7 @@ public:
 
   void build_lights();
 
-  /**
-   * Visualize acceleration structures.
-   */
-  void visualize_accel() const;
+  void copy_host_device_pt();
 
   void visualize_cell() const;
 
@@ -193,6 +190,8 @@ public:
    */
   void worker_thread();
 
+  void gpu_raytrace();
+
   enum State {
     INIT,               ///< to be initialized
     READY,              ///< initialized ready to do stuff
@@ -202,6 +201,7 @@ public:
   };
 
   PathTracer *pt;
+  PathTracer *pt_cuda;
 
   // Configurables //
 

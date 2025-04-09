@@ -5,8 +5,8 @@
 #include <fstream>
 
 #include "CGL/misc.h"
-#include "CGL/vector2D.h"
-#include "CGL/vector3D.h"
+#include "util/vector2D.h"
+#include "util/vector3D.h"
 
 using std::cout;
 using std::endl;
@@ -182,24 +182,6 @@ void Camera::load_settings(string filename) {
   file >> screenW >> screenH >> screenDist;
   file >> focalDistance >> lensRadius;
   cout << "[Camera] Loaded settings from " << filename << endl;
-}
-
-/**
- * This function generates a ray from camera perspective, passing through camera / sensor plane (x,y)
- */
-Ray Camera::generate_ray(double x, double y) const {
-
-  // TODO (Part 1.1):
-  // compute position of the input sensor sample coordinate on the
-  // canonical sensor plane one unit away from the pinhole.
-  // Note: hFov and vFov are in degrees.
-  //
-  Vector3D sensor = Vector3D((x - 0.5) * 2 * tan(radians(hFov) * 0.5), (y - 0.5) * 2 * tan(radians(vFov) * 0.5), -1);
-  Vector3D dir = (c2w * sensor);
-  Ray camera_ray = Ray(pos, dir.unit());
-  camera_ray.min_t = nClip; camera_ray.max_t = fClip;
-
-  return camera_ray;
 }
 
 } // namespace CGL

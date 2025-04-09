@@ -43,7 +43,7 @@ class Sphere : public Primitive {
    * \return true if the given ray intersects with the sphere,
              false otherwise
    */
-  bool intersect(const Ray& r, Intersection* i) const;
+  bool intersect(Ray& r, Intersection* i) const;
 
   /**
    * Get BSDF.
@@ -79,7 +79,7 @@ class Sphere : public Primitive {
    * intersections and writing the smaller of the two intersection times in t1
    * and the larger in t2.
    */
-  bool test(const Ray& ray, double& t1, double& t2) const;
+  bool test(Ray& ray, double& t1, double& t2) const;
 
   const SphereObject* object; ///< pointer to the sphere object
 
@@ -98,11 +98,11 @@ struct CudaSphere {
       this->bsdf = bsdf;
     }
   
-    Vector3D normal(Vector3D p) const {
+    DEVICE Vector3D normal(Vector3D p) const {
       return (p - o).unit();
     }
 
-    bool intersect(const Ray& r, CudaIntersection* i) const;
+    DEVICE bool intersect(Ray& r, CudaIntersection* i);
     
     Vector3D o; ///< origin of the sphere
     double r;   ///< radius

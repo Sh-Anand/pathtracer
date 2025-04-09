@@ -24,10 +24,10 @@ namespace CGL { namespace SceneObjects {
 struct BVHNode {
   BBox bb;        ///< bounding box of the node
   bool leaf;
-  inline bool isLeaf() const { return leaf;}
-  size_t start;
-  size_t end;
-  size_t l, r;
+  HOST_DEVICE inline bool isLeaf() const { return leaf;}
+  uint16_t start;
+  uint16_t end;
+  uint16_t l, r;
 
   BVHNode(BBox b) : bb(b) { }
 };
@@ -80,12 +80,12 @@ class BVHAccel : public Aggregate {
    * \return true if the given ray intersects with the aggregate,
              false otherwise
    */
-  bool intersect(const Ray& r, Intersection* i) const {
+  bool intersect(Ray& r, Intersection* i) const {
     ++total_rays;
     return intersect(r, i, root);
   }
 
-  bool intersect(const Ray& r, Intersection* i, size_t node) const;
+  bool intersect(Ray& r, Intersection* i, size_t node) const;
 
   /**
    * Get BSDF of the surface material
@@ -124,6 +124,12 @@ class BVHAccel : public Aggregate {
   int construct_bvh(size_t start, size_t end, size_t max_leaf_size);
 };
 
+#ifdef __CUDACC__
+#include "curand_kernel.h"
+#else
+struct curandState;
+#endif
+
 // CUDA BVH
 class BVHCuda {
   public:
@@ -131,35 +137,33 @@ class BVHCuda {
   
     ~BVHCuda();
     
-    bool intersect(const Ray& r, CudaIntersection* i) const {
+    DEVICE bool intersect(Ray& r, CudaIntersection* i) const {
       return intersect(r, i, root);
     }
 
-    bool intersect(const Ray& r, CudaIntersection* i, size_t node) const;
+    DEVICE bool intersect(Ray& r, CudaIntersection* i, uint16_t node) const;
   
     CudaPrimitive* primitives;
-    size_t num_primitives;
+    uint16_t num_primitives;
 
     CudaTriangle* triangles;
-    size_t num_triangles;
+    uint16_t num_triangles;
     CudaSphere* spheres;
-    size_t num_spheres;
+    uint16_t num_spheres;
 
     BVHNode* nodes;
-    size_t num_nodes;
-    size_t root;
+    uint16_t num_nodes;
+    uint16_t root;
 
     //BSDFs
     CudaDiffuseBSDF* diffuse_bsdfs;
-    size_t num_diffuse_bsdfs;
+    uint16_t num_diffuse_bsdfs;
     CudaEmissionBSDF* emission_bsdfs;
-    size_t num_emission_bsdfs;
+    uint16_t num_emission_bsdfs;
 
-    Vector3D sample_f (CudaBSDF bsdf, const Vector3D wo, Vector3D *wi, double* pdf) const;
+    DEVICE Vector3D f (CudaBSDF bsdf, const Vector3D wo, const Vector3D wi) const;
 
-    Vector3D f (CudaBSDF bsdf, const Vector3D wo, const Vector3D wi) const;
-
-    Vector3D get_emission (CudaBSDF bsdf) const {
+    DEVICE Vector3D get_emission (CudaBSDF bsdf) const {
       if (bsdf.type == CudaBSDFType_Emission) {
         return emission_bsdfs[bsdf.idx].get_emission();
       } else if (bsdf.type == CudaBSDFType_Diffuse) {

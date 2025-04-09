@@ -5,8 +5,8 @@
 #include <fstream>
 
 #include "CGL/misc.h"
-#include "CGL/vector2D.h"
-#include "CGL/vector3D.h"
+#include "util/vector2D.h"
+#include "util/vector3D.h"
 
 using std::cout;
 using std::endl;

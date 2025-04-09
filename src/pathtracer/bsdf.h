@@ -1,9 +1,8 @@
 #ifndef CGL_STATICSCENE_BSDF_H
 #define CGL_STATICSCENE_BSDF_H
 
-#include "CGL/CGL.h"
-#include "CGL/vector3D.h"
-#include "CGL/matrix3x3.h"
+#include "util/vector3D.h"
+#include "util/matrix3x3.h"
 
 #include "pathtracer/sampler.h"
 #include "util/image.h"
@@ -22,8 +21,8 @@ inline double cos_theta(const Vector3D w) {
   return w.z;
 }
 
-inline double abs_cos_theta(const Vector3D w) {
-  return fabs(w.z);
+HOST_DEVICE inline double abs_cos_theta(const Vector3D w) {
+  return fabsf(w.z);
 }
 
 inline double sin_theta2(const Vector3D w) {
@@ -46,7 +45,7 @@ inline double sin_phi(const Vector3D w) {
   return clamp(w.y / sinTheta, -1.0, 1.0);
 }
 
-void make_coord_space(Matrix3x3& o2w, const Vector3D n);
+DEVICE void make_coord_space(Matrix3x3& o2w, const Vector3D n);
 
 /**
  * Interface for BSDFs.
@@ -289,28 +288,29 @@ enum CudaBSDFType {
 };
 
 struct CudaBSDF {
-  size_t idx;
+  uint16_t idx;
   CudaBSDFType type;
 };
 
+#ifdef __CUDACC__
+#include <curand_kernel.h>
+#else
+struct curandState;
+#endif
 struct CudaDiffuseBSDF {
   Vector3D reflectance;
-  CosineWeightedHemisphereSampler3D sampler;
 
-  CudaDiffuseBSDF(const DiffuseBSDF *bsdf) : reflectance(bsdf->reflectance), sampler(bsdf->sampler) {}
-  Vector3D f(const Vector3D wo, const Vector3D wi);
-  Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
-  Vector3D get_emission() const { return Vector3D(); }
+  HOST_DEVICE CudaDiffuseBSDF(const DiffuseBSDF *bsdf) : reflectance(bsdf->reflectance) {}
+  DEVICE Vector3D f(const Vector3D wo, const Vector3D wi);
+  DEVICE Vector3D get_emission() const { return Vector3D(); }
 };
 
 struct CudaEmissionBSDF {
   Vector3D radiance;
-  CosineWeightedHemisphereSampler3D sampler;
 
-  CudaEmissionBSDF(const EmissionBSDF *bsdf) : radiance(bsdf->radiance), sampler(bsdf->sampler) {}
-  Vector3D f(const Vector3D wo, const Vector3D wi);
-  Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
-  Vector3D get_emission() const { return radiance; }
+  HOST_DEVICE CudaEmissionBSDF(const EmissionBSDF *bsdf) : radiance(bsdf->radiance) {}
+  DEVICE Vector3D f(const Vector3D wo, const Vector3D wi);
+  DEVICE Vector3D get_emission() const { return radiance; }
 };
 
 

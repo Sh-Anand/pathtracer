@@ -64,13 +64,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CGL_CXX_FLAGS}")
 # Create target: CGL
 #-------------------------------------------------------------------------------
 set(CGL_SOURCE
-    src/vector2D.cpp
-    src/vector3D.cpp
-    src/vector4D.cpp
-    src/matrix3x3.cpp
-    src/matrix4x4.cpp
-    src/quaternion.cpp
-    src/complex.cpp
     src/color.cpp
     src/osdtext.cpp
     src/osdfont.cpp

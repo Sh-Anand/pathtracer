@@ -30,7 +30,7 @@ class Primitive {
    * \return true if the given ray intersects with the primitive,
              false otherwise
    */
-  virtual bool intersect(const Ray& r, Intersection* i) const = 0;
+  virtual bool intersect(Ray& r, Intersection* i) const = 0;
 
   /**
    * Get BSDF.
@@ -59,8 +59,8 @@ enum CudaPrimitiveType {
   SPHERE = 1,
 };
 struct CudaPrimitive {
-  CudaPrimitive(size_t idx, CudaPrimitiveType type) : idx(idx), type(type) {}
-  size_t idx;
+  CudaPrimitive(uint16_t idx, CudaPrimitiveType type) : idx(idx), type(type) {}
+  uint16_t idx;
   CudaPrimitiveType type;
 };
 
