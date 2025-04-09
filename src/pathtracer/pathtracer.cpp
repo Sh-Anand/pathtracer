@@ -72,12 +72,12 @@ Vector3D PathTracer::one_bounce_radiance(const Ray &r,
 
   //NOTE: wi here is in worldpsace, unlike in the previous function
   size_t sample_count = 0;
-  for (auto light : scene->lights) {
-    int num_samples = light->is_delta_light() ? 1 : ns_area_light;
+  for (size_t i = 0; i < num_lights; i++) {
+    CudaLight light = lights[i];
+    int num_samples = light_data->is_delta_light(light) ? 1 : ns_area_light;
     sample_count += num_samples;
     for (int j = 0; j < num_samples; j++) {
-      Vector3D radiance = light->sample_L(hit_p, &wi, &distToLight, &pdf);
-      if (radiance == 0) continue;
+      Vector3D radiance = light_data->sample_L(light, hit_p, &wi, &distToLight, &pdf);
       Vector3D wi_o = w2o * wi;
       Ray shadow_ray = Ray(hit_p, wi);
       shadow_ray.min_t = EPS_D;

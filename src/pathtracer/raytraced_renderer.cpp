@@ -87,6 +87,7 @@ void RaytracedRenderer::set_scene(Scene *scene) {
 
   this->scene = scene;
   build_accel();
+  build_lights();
 }
 
 /**
@@ -172,6 +173,67 @@ void RaytracedRenderer::build_accel() {
   bvh_cuda = new BVHCuda(bvh);
   timer.stop();
   fprintf(stdout, "Done! (%.4f sec)\n", timer.duration());
+}
+
+void RaytracedRenderer::build_lights() {
+  // Build lights:
+  lights.clear();
+  if (light_data)
+    free(light_data);
+
+  light_data = new CudaLightBundle();
+  light_data->num_directional_lights = 0;
+  light_data->num_point_lights = 0;
+  light_data->num_area_lights = 0;
+
+  std::vector<CudaDirectionalLight> directional_lights;
+  std::vector<CudaPointLight> point_lights;
+  std::vector<CudaAreaLight> area_lights;
+
+  for (size_t i = 0; i < scene->lights.size(); i++) {
+    SceneLight *light = scene->lights[i];
+    CudaLight cuda_light;
+    if (dynamic_cast<DirectionalLight *>(light)) {
+      directional_lights.push_back(CudaDirectionalLight(*(DirectionalLight *) light));
+      cuda_light.type = CudaLightType_Directional;
+      cuda_light.idx = light_data->num_directional_lights++;
+    } else if (dynamic_cast<PointLight *>(light)) {
+      point_lights.push_back(CudaPointLight(*(PointLight *) light));
+      cuda_light.type = CudaLightType_Point;
+      cuda_light.idx = light_data->num_point_lights++;
+    } else if (dynamic_cast<AreaLight *>(light)) {
+      area_lights.push_back(CudaAreaLight(*(AreaLight *) light));
+      cuda_light.type = CudaLightType_Area;
+      cuda_light.idx = light_data->num_area_lights++;
+    } else {
+      std::cout<< "Here?";
+      std::cerr << "Unknown light type" << std::endl;
+      exit(1);
+    }
+    lights.push_back(cuda_light);
+  }
+
+  // copy lights to pt
+  pt->lights = (CudaLight *)malloc(lights.size() * sizeof(CudaLight));
+  pt->light_data = (CudaLightBundle *)malloc(sizeof(CudaLightBundle));
+
+  pt->light_data->num_directional_lights = light_data->num_directional_lights;
+  pt->light_data->num_point_lights = light_data->num_point_lights;
+  pt->light_data->num_area_lights = light_data->num_area_lights;
+  pt->light_data->directional_lights = (CudaDirectionalLight *)malloc(light_data->num_directional_lights * sizeof(CudaDirectionalLight));
+  pt->light_data->point_lights = (CudaPointLight *)malloc(light_data->num_point_lights * sizeof(CudaPointLight));
+  pt->light_data->area_lights = (CudaAreaLight *)malloc(light_data->num_area_lights * sizeof(CudaAreaLight));
+
+  memcpy(pt->lights, lights.data(), lights.size() * sizeof(CudaLight));
+  memcpy(pt->light_data->directional_lights, directional_lights.data(), light_data->num_directional_lights * sizeof(CudaDirectionalLight));
+  memcpy(pt->light_data->point_lights, point_lights.data(), light_data->num_point_lights * sizeof(CudaPointLight));
+  memcpy(pt->light_data->area_lights, area_lights.data(), light_data->num_area_lights * sizeof(CudaAreaLight));
+
+  pt->num_lights = lights.size();
+
+  std::cout << "CudaLights: " << light_data->num_directional_lights << " directional lights, "
+            << light_data->num_point_lights << " point lights, "
+            << light_data->num_area_lights << " area lights" << std::endl;
 }
 
 void RaytracedRenderer::save_image(string filename) {

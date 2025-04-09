@@ -111,6 +111,8 @@ public:
    */
   void build_accel();
 
+  void build_lights();
+
   PathTracer *pt;
 
   // Configurables //
@@ -127,6 +129,9 @@ public:
   BVHCuda* bvh_cuda;             ///< BVH accelerator aggregate for cuda
   ImageBuffer frameBuffer;       ///< frame buffer
   Timer timer;                   ///< performance test timer
+
+  std::vector<CudaLight> lights;
+  CudaLightBundle *light_data;
   
   std::string filename;
 };
