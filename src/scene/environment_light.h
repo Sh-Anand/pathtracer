@@ -41,7 +41,7 @@ public:
     * - Handling the edge cases correctly (what happens if you wrap around the
     *   environment map horizontally? What about vertically?).
     */
-  Vector3D sample_dir(const Ray& r) const;
+  Vector3D sample_dir(Ray& r) const;
 
 private:
   const HDRImageBuffer* envMap;

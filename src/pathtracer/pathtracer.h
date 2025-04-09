@@ -1,34 +1,25 @@
 #ifndef CGL_PATHTRACER_H
 #define CGL_PATHTRACER_H
 
-#include "CGL/timer.h"
-
 #include "scene/bvh.h"
 using CGL::SceneObjects::BVHCuda;
 
 #include "pathtracer/sampler.h"
 #include "pathtracer/intersection.h"
-#include "pathtracer/camera.h"
-#include "scene/scene.h"
-using CGL::SceneObjects::Scene;
-
-#include "scene/environment_light.h"
-using CGL::SceneObjects::EnvironmentLight;
-
-using CGL::SceneObjects::BVHCuda;
 
 #include "util/reservoir.h"
 
 #include "scene/light.h"
 using CGL::SceneObjects::CudaLight;
 using CGL::SceneObjects::CudaLightBundle;
+
+#include "pathtracer/camera.h"
+using CGL::CudaCamera;
+
 namespace CGL {
 
     class PathTracer {
     public:
-        PathTracer();
-        ~PathTracer();
-
         /**
          * Sets the pathtracer's frame size. If in a running state (VISUALIZE,
          * RENDERING, or DONE), transitions to READY b/c a changing window size
@@ -37,53 +28,55 @@ namespace CGL {
          * \param width width of the frame
          * \param height height of the frame
          */
-        void set_frame_size(size_t width, size_t height);
+        void set_frame_size(uint16_t width, uint16_t height);
 
-        void write_to_framebuffer(ImageBuffer& framebuffer, size_t x0, size_t y0, size_t x1, size_t y1);
+        void write_to_framebuffer(HDRImageBuffer &buffer, ImageBuffer& framebuffer, uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
 
         /**
          * If the pathtracer is in READY, delete all internal data, transition to INIT.
          */
         void clear();
 
-        Vector3D zero_bounce_radiance(const Ray& r, const SceneObjects::CudaIntersection& isect);
-        Vector3D one_bounce_radiance(const Ray& r, const SceneObjects::CudaIntersection& isect);
-        Vector3D at_least_one_bounce_radiance(const Ray& r, const SceneObjects::CudaIntersection& isect);
+        // void autofocus(Vector2D loc);
+
+        /**
+         * Trace an ray in the scene.
+         */
+        DEVICE Vector3D estimate_direct_lighting_importance(Ray& r, const SceneObjects::CudaIntersection& isect);
+
+        DEVICE Vector3D est_radiance_global_illumination(Ray& r);
+        DEVICE Vector3D at_least_one_bounce_radiance(Ray& r, const SceneObjects::CudaIntersection& isect);
 
         // ReSTIR GI //
-        std::vector<Sample> initialSampleBuffer;
-        std::vector<Reservoir> temporalReservoirBuffer;
-        std::vector<Reservoir> spatialReservoirBuffer;
-        void temporal_resampling(size_t x, size_t y);
-        void spatial_resampling(size_t x, size_t y);
-        void render_final_sample(size_t x, size_t y);
+        Sample* initialSampleBuffer;
+        Reservoir* temporalReservoirBuffer;
+        Reservoir* spatialReservoirBuffer;
+        DEVICE void temporal_resampling(uint16_t x, uint16_t y);
+        DEVICE void spatial_resampling(uint16_t x, uint16_t y);
+        DEVICE void render_final_sample(uint16_t x, uint16_t y);
     
         /**
          * Trace a camera ray given by the pixel coordinate.
          */
-        void raytrace_pixel(size_t x, size_t y);
+        DEVICE void raytrace_pixel(uint16_t x, uint16_t y);
 
         // Integrator sampling settings //
 
-        size_t max_ray_depth; ///< maximum allowed ray depth (applies to all rays)
-        size_t isAccumBounces; ///< number of bounces to accumulate
-        size_t ns_aa;         ///< number of camera rays in one pixel (along one axis)
-        size_t ns_area_light; ///< number samples per area light source
-        size_t ns_diff;       ///< number of samples - diffuse surfaces
-        size_t ns_glsy;       ///< number of samples - glossy surfaces
-        size_t ns_refr;       ///< number of samples - refractive surfaces
+        uint16_t max_ray_depth; ///< maximum allowed ray depth (applies to all rays)
+        uint16_t ns_aa;         ///< number of camera rays in one pixel (along one axis)
+        uint16_t ns_area_light; ///< number samples per area light source
+        uint16_t ns_diff;       ///< number of samples - diffuse surfaces
+        uint16_t ns_glsy;       ///< number of samples - glossy surfaces
+        uint16_t ns_refr;       ///< number of samples - refractive surfaces
 
         // Components //
 
         BVHCuda* bvh;                 ///< BVH accelerator aggregate
-        EnvironmentLight* envLight;    ///< environment map
-        Sampler2D* gridSampler;        ///< samples unit grid
-        Sampler3D* hemisphereSampler;  ///< samples unit hemisphere
         HDRImageBuffer sampleBuffer;   ///< sample buffer
-        Timer timer;                   ///< performance test timer
 
-        Scene* scene;         ///< current scene
-        Camera* camera;       ///< current camera
+        CudaCamera camera;       ///< current camera
+
+        RNGState* rand_states;       ///< random state for each thread
 
         // Lights
         CudaLight *lights; 

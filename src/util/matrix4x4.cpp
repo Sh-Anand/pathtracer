@@ -128,15 +128,10 @@ Matrix4x4 Matrix4x4::operator*(const Matrix4x4 &B) const {
 
   for (int i = 0; i < 4; i++) {
     for (int j = 0; j < 4; j++) {
-#ifdef __AVX__
-      C(i, j) = dot(A[i], Vector4D(B(0, j), B(1, j), B(2, j), B(3, j)));
-#else
       C(i, j) = 0.;
-
       for (int k = 0; k < 4; k++) {
         C(i, j) += A(i, k) * B(k, j);
       }
-#endif
     }
   }
 

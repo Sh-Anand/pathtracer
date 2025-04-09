@@ -2,7 +2,7 @@
 #define CGL_IMAGE_H
 
 #include "CGL/color.h"
-#include "CGL/vector3D.h"
+#include "vector3D.h"
 
 #include <vector>
 #include <string.h>
@@ -51,8 +51,8 @@ struct ImageBuffer {
    * \param y column of the pixel
    */
   void update_pixel(const Color& c, size_t x, size_t y) {
-    assert(0 <= x && x < w);
-    assert(0 <= y && y < h);
+    assert(x < w);
+    assert(y < h);
     uint32_t p = 0;
     p |= ((uint32_t) (clamp(0.f, 1.f, c.b) * 255)) << 16;
     p |= ((uint32_t) (clamp(0.f, 1.f, c.g) * 255)) << 8;
@@ -94,24 +94,19 @@ struct HDRImageBuffer {
   HDRImageBuffer() : w(0), h(0) { }
 
   /**
+   * Resize the image buffer.
+   * \param w new width of the image
+   * \param h new height of the image
+   */
+  void resize(size_t w, size_t h);
+
+  /**
    * Parameterized constructor.
    * Create an image of given size.
    * \param w width of the image
    * \param h height of the image
    */
-  HDRImageBuffer(size_t w, size_t h) : w(w), h(h) { data.resize(w * h); }
-
-  /**
-   * Resize the image buffer.
-   * \param w new width of the image
-   * \param h new height of the image
-   */
-  void resize(size_t w, size_t h) {
-    this->w = w;
-    this->h = h;
-    data.resize(w * h);
-    clear();
-  }
+  HDRImageBuffer(size_t w, size_t h) : w(w), h(h) { data = nullptr; resize(w, h); }
 
   /**
    * Update the color of a given pixel.
@@ -119,7 +114,7 @@ struct HDRImageBuffer {
    * \param x row of the pixel
    * \param y column of the pixel
    */
-  void update_pixel(const Vector3D& s, size_t x, size_t y) {
+  DEVICE void update_pixel(const Vector3D& s, size_t x, size_t y) {
     // assert(0 <= x && x < w);
     // assert(0 <= y && y < h);
     data[x + y * w] = s;
@@ -202,17 +197,9 @@ struct HDRImageBuffer {
    */
   bool is_empty() { return (w == 0 && h == 0); }
 
-  /**
-   * Clear image buffer.
-   */
-  void clear() {
-    data.clear();
-    data.resize(w * h, Vector3D(0.0));
-  }
-
   size_t w; ///< width
   size_t h; ///< height
-  std::vector<Vector3D> data; ///< pixel buffer
+  Vector3D* data; ///< pixel buffer
 
 }; // class HDRImageBuffer
 

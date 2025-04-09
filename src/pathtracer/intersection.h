@@ -3,8 +3,7 @@
 
 #include <vector>
 
-#include "CGL/vector3D.h"
-#include "CGL/misc.h"
+#include "util/vector3D.h"
 
 #include "pathtracer/bsdf.h"
 
@@ -20,7 +19,7 @@ class Primitive;
  */
 struct Intersection {
 
-  Intersection() : t (INF_D), primitive(NULL), bsdf(NULL) { }
+  Intersection() : t (INFINITY), primitive(NULL), bsdf(NULL) { }
 
   double t;    ///< time of intersection
 
@@ -34,7 +33,7 @@ struct Intersection {
 };
 
 struct CudaIntersection {
-  CudaIntersection() : t (INF_D) { }
+  DEVICE CudaIntersection() : t (INFINITY) { }
   double t;
   Vector3D n;
   CudaBSDF bsdf;

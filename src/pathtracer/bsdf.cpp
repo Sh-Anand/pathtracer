@@ -14,31 +14,6 @@ using std::swap;
 namespace CGL {
 
 /**
- * This function creates a object space (basis vectors) from the normal vector
- */
-void make_coord_space(Matrix3x3 &o2w, const Vector3D n) {
-
-  Vector3D z = Vector3D(n.x, n.y, n.z);
-  Vector3D h = z;
-  if (fabs(h.x) <= fabs(h.y) && fabs(h.x) <= fabs(h.z))
-    h.x = 1.0;
-  else if (fabs(h.y) <= fabs(h.x) && fabs(h.y) <= fabs(h.z))
-    h.y = 1.0;
-  else
-    h.z = 1.0;
-
-  z.normalize();
-  Vector3D y = cross(h, z);
-  y.normalize();
-  Vector3D x = cross(z, y);
-  x.normalize();
-
-  o2w[0] = x;
-  o2w[1] = y;
-  o2w[2] = z;
-}
-
-/**
  * Evaluate diffuse lambertian BSDF.
  * Given incident light direction wi and outgoing light direction wo. Note
  * that both wi and wo are defined in the local coordinate system at the
@@ -52,10 +27,6 @@ Vector3D DiffuseBSDF::f(const Vector3D wo, const Vector3D wi) {
   // This function takes in both wo and wi and returns the evaluation of
   // the BSDF for those two directions.
 
-  return reflectance / PI;
-}
-
-Vector3D CudaDiffuseBSDF::f(const Vector3D wo, const Vector3D wi) {
   return reflectance / PI;
 }
 
@@ -74,19 +45,10 @@ Vector3D DiffuseBSDF::sample_f(const Vector3D wo, Vector3D *wi, double *pdf) {
   return f(wo, *wi);
 }
 
-Vector3D CudaDiffuseBSDF::sample_f(const Vector3D wo, Vector3D *wi, double *pdf) {
-  *wi = sampler.get_sample(pdf);
-  return f(wo, *wi);
-}
-
 /**
  * Evalutate Emission BSDF (Light Source)
  */
 Vector3D EmissionBSDF::f(const Vector3D wo, const Vector3D wi) {
-  return Vector3D();
-}
-
-Vector3D CudaEmissionBSDF::f(const Vector3D wo, const Vector3D wi) {
   return Vector3D();
 }
 
@@ -98,12 +60,5 @@ Vector3D EmissionBSDF::sample_f(const Vector3D wo, Vector3D *wi, double *pdf) {
   *wi = sampler.get_sample(pdf);
   return Vector3D();
 }
-
-Vector3D CudaEmissionBSDF::sample_f(const Vector3D wo, Vector3D *wi, double *pdf) {
-  *pdf = 1.0 / PI;
-  *wi = sampler.get_sample(pdf);
-  return Vector3D();
-}
-
 
 } // namespace CGL

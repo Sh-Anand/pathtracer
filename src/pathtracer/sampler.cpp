@@ -72,5 +72,5 @@ Vector3D CosineWeightedHemisphereSampler3D::get_sample(double *pdf) const {
   return Vector3D(r*cos(theta), r*sin(theta), sqrt(1-Xi1));
 }
 
+}
 
-} // namespace CGL

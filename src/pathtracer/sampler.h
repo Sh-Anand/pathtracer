@@ -1,8 +1,8 @@
 #ifndef CGL_SAMPLER_H
 #define CGL_SAMPLER_H
 
-#include "CGL/vector2D.h"
-#include "CGL/vector3D.h"
+#include "util/vector2D.h"
+#include "util/vector3D.h"
 #include "CGL/misc.h"
 #include "util/random_util.h"
 
@@ -117,7 +117,6 @@ class CosineWeightedHemisphereSampler3D : public Sampler3D {
  * TODO (extra credit) :
  * Jittered sampler implementations
  */
-
 } // namespace CGL
 
 #endif //CGL_SAMPLER_H

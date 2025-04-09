@@ -22,14 +22,6 @@ Vector3D DirectionalLight::sample_L(const Vector3D p, Vector3D* wi,
   return radiance;
 }
 
-Vector3D CudaDirectionalLight::sample_L(const Vector3D p, Vector3D* wi,
-                                    double* distToLight, double* pdf) const {
-  *wi = dirToLight;
-  *distToLight = INF_D;
-  *pdf = 1.0;
-  return radiance;
-}
-
 // Infinite Hemisphere Light //
 
 InfiniteHemisphereLight::InfiniteHemisphereLight(const Vector3D rad)
@@ -63,16 +55,6 @@ Vector3D PointLight::sample_L(const Vector3D p, Vector3D* wi,
   *pdf = 1.0;
   return radiance;
 }
-Vector3D CudaPointLight::sample_L(const Vector3D p, Vector3D* wi,
-                             double* distToLight,
-                             double* pdf) const {
-  Vector3D d = position - p;
-  *wi = d.unit();
-  *distToLight = d.norm();
-  *pdf = 1.0;
-  return radiance;
-}
-
 
 // Spot Light //
 
@@ -109,20 +91,6 @@ Vector3D AreaLight::sample_L(const Vector3D p, Vector3D* wi,
   return cosTheta < 0 ? radiance : Vector3D();
 };
 
-Vector3D CudaAreaLight::sample_L(const Vector3D p, Vector3D* wi, 
-                             double* distToLight, double* pdf) const {
-  Vector2D sample = sampler.get_sample() - Vector2D(0.5f, 0.5f);
-  Vector3D d = position + sample.x * dim_x + sample.y * dim_y - p;
-  double cosTheta = dot(d, direction);
-  double sqDist = d.norm2();
-  double dist = sqrt(sqDist);
-  *wi = d / dist;
-  *distToLight = dist;
-  *pdf = sqDist / (area * fabs(cosTheta));
-  return cosTheta < 0 ? radiance : Vector3D();
-}
-
-
 // Sphere Light //
 
 SphereLight::SphereLight(const Vector3D rad, const SphereObject* sphere) {
@@ -143,38 +111,6 @@ MeshLight::MeshLight(const Vector3D rad, const Mesh* mesh) {
 
 Vector3D MeshLight::sample_L(const Vector3D p, Vector3D* wi, 
                              double* distToLight, double* pdf) const {
-  return Vector3D();
-}
-
-bool CudaLightBundle::is_delta_light(CudaLight light) const {
-  switch (light.type) {
-    case CudaLightType_Directional:
-      return directional_lights[light.idx].is_delta_light();
-    case CudaLightType_Point:
-      return point_lights[light.idx].is_delta_light();
-    case CudaLightType_Area:
-      return area_lights[light.idx].is_delta_light();
-    default:
-      std::cerr << "Unknown light type" << std::endl;
-      exit(1);
-  }
-  return false;
-}
-
-Vector3D CudaLightBundle::sample_L(const CudaLight light, const Vector3D p,
-                             Vector3D* wi, double* distToLight,
-                             double* pdf) const {
-  switch (light.type) {
-    case CudaLightType_Directional:
-      return directional_lights[light.idx].sample_L(p, wi, distToLight, pdf);
-    case CudaLightType_Point:
-      return point_lights[light.idx].sample_L(p, wi, distToLight, pdf);
-    case CudaLightType_Area:
-      return area_lights[light.idx].sample_L(p, wi, distToLight, pdf);
-    default:
-      std::cerr << "Unknown light type" << std::endl;
-      exit(1);
-  }
   return Vector3D();
 }
 

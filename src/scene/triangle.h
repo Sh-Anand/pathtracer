@@ -34,7 +34,7 @@ public:
    */
   BBox get_bbox() const;
 
-  bool test(const Ray& r, double& t, double& u, double& v) const;
+  bool test(Ray& r, double& t, double& u, double& v) const;
 
   /**
    * Ray - Triangle intersection 2.
@@ -46,7 +46,7 @@ public:
    * \return true if the given ray intersects with the triangle,
              false otherwise
    */
-  bool intersect(const Ray& r, Intersection* i) const;
+  bool intersect(Ray& r, Intersection* i) const;
 
   /**
    * Get BSDF.
@@ -75,7 +75,7 @@ struct CudaTriangle {
     this->bsdf = bsdf;
   }
 
-  bool intersect(const Ray& r, CudaIntersection* i) const;
+  DEVICE bool intersect(Ray& r, CudaIntersection* i);
 
   Vector3D p1, p2, p3;
   Vector3D n1, n2, n3;

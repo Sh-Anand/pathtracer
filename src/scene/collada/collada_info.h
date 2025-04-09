@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "CGL/matrix4x4.h"
+#include "util/matrix4x4.h"
 
 using std::string;
 using std::vector;

@@ -113,7 +113,13 @@ public:
 
   void build_lights();
 
+  void gpu_raytrace();
+
+  void copy_host_device_pt();
+
+
   PathTracer *pt;
+  PathTracer *pt_cuda;
 
   // Configurables //
 
@@ -132,7 +138,7 @@ public:
 
   std::vector<CudaLight> lights;
   CudaLightBundle *light_data;
-  
+
   std::string filename;
 };
 

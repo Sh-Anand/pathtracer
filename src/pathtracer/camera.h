@@ -4,7 +4,7 @@
 #include <iostream>
 
 #include "scene/collada/camera_info.h"
-#include "CGL/matrix3x3.h"
+#include "util/matrix3x3.h"
 
 #include "math.h"
 #include "ray.h"
@@ -76,25 +76,12 @@ class Camera {
   virtual void dump_settings(std::string filename);
   virtual void load_settings(std::string filename);
 
-  /**
-   * Returns a world-space ray from the camera that corresponds to a
-   * ray exiting the camera that deposits light at the sensor plane
-   * position given by (x,y).  x and y are provided in the normalized
-   * coordinate space of the sensor.  For example (0.5, 0.5)
-   * corresponds to the middle of the screen.
-   *
-   * \param x x-coordinate of the ray sample in the view plane
-   * \param y y-coordinate of the ray sample in the view plane
-   */
-  Ray generate_ray(double x, double y) const;
-
   Ray generate_ray_for_thin_lens(double x, double y, double rndR, double rndTheta) const;
 
   // Lens aperture and focal distance for depth of field effects.
   double lensRadius;
   double focalDistance;
 
- private:
   // Computes pos, screenXDir, screenYDir from target, r, phi, theta.
   void compute_position();
 
@@ -116,6 +103,32 @@ class Camera {
   // of view at some distance.
   size_t screenW, screenH;
   double screenDist;
+};
+
+struct CudaCamera {
+  CudaCamera () {}
+  CudaCamera (Camera * cam) {
+    hFov = cam->hFov;
+    vFov = cam->vFov;
+    nClip = cam->nClip;
+    fClip = cam->fClip;
+    pos = cam->pos;
+    c2w = cam->c2w;
+  }
+  /**
+   * Returns a world-space ray from the camera that corresponds to a
+   * ray exiting the camera that deposits light at the sensor plane
+   * position given by (x,y).  x and y are provided in the normalized
+   * coordinate space of the sensor.  For example (0.5, 0.5)
+   * corresponds to the middle of the screen.
+   *
+   * \param x x-coordinate of the ray sample in the view plane
+   * \param y y-coordinate of the ray sample in the view plane
+   */
+  DEVICE Ray generate_ray(double x, double y);
+  double hFov, vFov, nClip, fClip;
+  Vector3D pos;
+  Matrix3x3 c2w;
 };
 
 } // namespace CGL

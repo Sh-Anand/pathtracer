@@ -140,7 +140,7 @@ namespace CGL { namespace SceneObjects {
     return Vector3D();
   }
 
-  Vector3D EnvironmentLight::sample_dir(const Ray& r) const {
+  Vector3D EnvironmentLight::sample_dir(Ray& r) const {
     // TODO: 3-2 Part 3 Task 1
     // Use the helper functions to convert r.d into (x,y)
     // then bilerp the return value

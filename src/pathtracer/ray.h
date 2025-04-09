@@ -2,9 +2,8 @@
 #define CGL_RAY_H
 
 #include "CGL/CGL.h"
-#include "CGL/vector3D.h"
-#include "CGL/vector4D.h"
-#include "CGL/matrix4x4.h"
+#include "util/vector3D.h"
+#include "util/matrix4x4.h"
 
 #define PART 5
 
@@ -24,12 +23,12 @@ struct Ray {
 
   Vector3D o;  ///< origin
   Vector3D d;  ///< direction
-  mutable double min_t; ///< treat the ray as a segment (ray "begin" at min_t)
-  mutable double max_t; ///< treat the ray as a segment (ray "ends" at max_t)
+  double min_t; ///< treat the ray as a segment (ray "begin" at min_t)
+  double max_t; ///< treat the ray as a segment (ray "ends" at max_t)
 
   Vector3D inv_d;  ///< component wise inverse
 
-  Ray() {}
+  HOST_DEVICE Ray() {}
 
   /**
    * Constructor.
@@ -38,10 +37,7 @@ struct Ray {
    * \param d direction of the ray
    * \param depth depth of the ray
    */
-    Ray(const Vector3D o, const Vector3D d, int depth = 0)
-        : o(o), d(d), min_t(0.0), max_t(INF_D), depth(depth) {
-    inv_d = 1.0 / d;
-  }
+    HOST_DEVICE Ray(const Vector3D o, const Vector3D d, int depth = 0);
 
   /**
    * Constructor.
@@ -51,31 +47,18 @@ struct Ray {
    * \param max_t max t value for the ray (if it's actually a segment)
    * \param depth depth of the ray
    */
-    Ray(const Vector3D o, const Vector3D d, double max_t, int depth = 0)
-        : o(o), d(d), min_t(0.0), max_t(max_t), depth(depth) {
-    inv_d = 1.0 / d;
-  }
-
+    HOST_DEVICE Ray(const Vector3D o, const Vector3D d, double max_t, int depth = 0);
 
   /**
    * Returns the point t * |d| along the ray.
    */
   inline Vector3D at_time(double t) const { return o + t * d; }
-
-  /**
-   * Returns the result of transforming the ray by the given transformation
-   * matrix.
-   */
-  Ray transform_by(const Matrix4x4& t) const {
-    const Vector4D& newO = t * Vector4D(o, 1.0);
-    return Ray((newO / newO.w).to3D(), (t * Vector4D(d, 0.0)).to3D());
-  }
 };
 
 // structure used for logging rays for subsequent visualization
 struct LoggedRay {
 
-    LoggedRay(const Ray& r, double hit_t)
+    LoggedRay(Ray& r, double hit_t)
         : o(r.o), d(r.d), hit_t(hit_t) {}
 
     Vector3D o;

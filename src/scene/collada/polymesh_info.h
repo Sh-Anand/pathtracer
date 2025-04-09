@@ -1,7 +1,7 @@
 #ifndef CGL_COLLADA_MESHINFO_H
 #define CGL_COLLADA_MESHINFO_H
 
-#include "CGL/vector2D.h"
+#include "util/vector2D.h"
 
 #include "collada_info.h"
 #include "material_info.h"

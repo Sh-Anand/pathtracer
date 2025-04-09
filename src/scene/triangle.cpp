@@ -21,9 +21,7 @@ Triangle::Triangle(const Mesh *mesh, size_t v1, size_t v2, size_t v3) {
 
 BBox Triangle::get_bbox() const { return bbox; }
 
-bool test_intersect(const Ray &r, const Vector3D &p1,
-                  const Vector3D &p2, const Vector3D &p3, double &t, double &u,
-                  double &v) {
+bool Triangle::test(Ray &r, double &t, double &u, double &v) const {
   Vector3D e1 = p2 - p1, e2 = p3 - p1;
   Vector3D normal = cross(e1, e2);
   // early termination
@@ -43,11 +41,7 @@ bool test_intersect(const Ray &r, const Vector3D &p1,
   return true;
 }
 
-bool Triangle::test(const Ray &r, double &t, double &u, double &v) const {
-  return test_intersect(r, p1, p2, p3, t, u, v);
-}
-
-bool Triangle::intersect(const Ray &r, Intersection *isect) const {
+bool Triangle::intersect(Ray &r, Intersection *isect) const {
   // Part 1, Task 3:
   // implement ray-triangle intersection. When an intersection takes
   // place, the Intersection data should be updated accordingly
@@ -59,18 +53,6 @@ bool Triangle::intersect(const Ray &r, Intersection *isect) const {
 
   isect->n = (1 - u - v) * n1 + u * n2 + v * n3;
   isect->t = t; isect->primitive = this; isect->bsdf = get_bsdf();
-
-  return true;
-}
-
-bool CudaTriangle::intersect(const Ray &r, CudaIntersection *isect) const {
-  double t,u,v;
-  if (!test_intersect(r, p1, p2, p3, t, u, v)) {
-    return false;
-  }
-
-  isect->n = (1 - u - v) * n1 + u * n2 + v * n3;
-  isect->t = t; isect->bsdf = bsdf;
 
   return true;
 }

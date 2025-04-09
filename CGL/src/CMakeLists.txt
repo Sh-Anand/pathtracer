@@ -7,11 +7,6 @@ include_directories(${PROJECT_SOURCE_DIR}/include/CGL)
 
 # CGL library source files
 set(CGL_SOURCE
-    vector2D.cpp
-    vector3D.cpp
-    vector4D.cpp
-    matrix3x3.cpp
-    matrix4x4.cpp
     quaternion.cpp
     complex.cpp
     color.cpp

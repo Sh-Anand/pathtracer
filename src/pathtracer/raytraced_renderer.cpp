@@ -8,8 +8,8 @@
 #include <sstream>
 
 #include "CGL/CGL.h"
-#include "CGL/vector3D.h"
-#include "CGL/matrix3x3.h"
+#include "util/vector3D.h"
+#include "util/matrix3x3.h"
 #include "CGL/lodepng.h"
 
 #include "scene/sphere.h"
@@ -44,7 +44,6 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
 
   pt->ns_aa = ns_aa;                                        // Number of samples per pixel
   pt->max_ray_depth = max_ray_depth;                        // Maximum recursion ray depth
-  pt->isAccumBounces = isAccumBounces;                      // Accumulate Bounces Along Path
   pt->ns_area_light = ns_area_light;                        // Number of samples for area light
   pt->ns_diff = ns_diff;                                    // Number of samples for diffuse surface
   pt->ns_glsy = ns_diff;                                    // Number of samples for glossy surface
@@ -55,15 +54,12 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
 
   this->filename = filename;
 
-  if (envmap) {
-    pt->envLight = new EnvironmentLight(envmap);
-  } else {
-    pt->envLight = NULL;
-  }
-
   bvh = NULL;
   scene = NULL;
   camera = NULL;
+
+  this->lights = std::vector<CudaLight>();
+  this->light_data = nullptr;
 }
 
 /**
@@ -81,11 +77,15 @@ RaytracedRenderer::~RaytracedRenderer() {
  * \param scene pointer to the new scene to be rendered
  */
 void RaytracedRenderer::set_scene(Scene *scene) {
-  if (pt->envLight != nullptr) {
-    scene->lights.push_back(pt->envLight);
+  this->scene = scene;
+
+  vector<Primitive *> primitives;
+  for (SceneObject *obj : scene->objects) {
+    const vector<Primitive *> &obj_prims = obj->get_primitives();
+    primitives.reserve(primitives.size() + obj_prims.size());
+    primitives.insert(primitives.end(), obj_prims.begin(), obj_prims.end());
   }
 
-  this->scene = scene;
   build_accel();
   build_lights();
 }
@@ -120,120 +120,18 @@ void RaytracedRenderer::render_to_file(string filename, size_t x, size_t y, size
   pt->clear();
   pt->set_frame_size(frameBuffer.w, frameBuffer.h);
 
-  pt->bvh = bvh_cuda;
-  pt->camera = camera;
-  pt->scene = scene;
+  pt->camera = CudaCamera(camera);
 
   bvh->total_isects = 0; bvh->total_rays = 0;
   // launch threads
   fprintf(stdout, "[PathTracer] Rendering... "); fflush(stdout);
 
-  // loop over all pixels opposite direction
-  for (size_t i = 0; i < frameBuffer.w; ++i)
-    for (size_t j = 0; j < frameBuffer.h; ++j)
-      pt->raytrace_pixel(i, j);
+  copy_host_device_pt();
 
-  for (size_t i = 0; i < frameBuffer.w; ++i)
-    for (size_t j = 0; j < frameBuffer.h; ++j)
-      pt->temporal_resampling(i, j);
+  gpu_raytrace();
 
-  for (size_t i = 0; i < frameBuffer.w; ++i)
-    for (size_t j = 0; j < frameBuffer.h; ++j)
-      pt->spatial_resampling(i, j);
-
-  for (size_t i = 0; i < frameBuffer.w; ++i)
-    for (size_t j = 0; j < frameBuffer.h; ++j)
-      pt->render_final_sample(i, j);
-
-  pt->write_to_framebuffer(frameBuffer, 0, 0, frameBuffer.w, frameBuffer.h);
   save_image(filename);
   fprintf(stdout, "[PathTracer] Job completed.\n");
-}
-
-
-void RaytracedRenderer::build_accel() {
-
-  // collect primitives //
-  fprintf(stdout, "[PathTracer] Collecting primitives... "); fflush(stdout);
-  timer.start();
-  vector<Primitive *> primitives;
-  for (SceneObject *obj : scene->objects) {
-    const vector<Primitive *> &obj_prims = obj->get_primitives();
-    primitives.reserve(primitives.size() + obj_prims.size());
-    primitives.insert(primitives.end(), obj_prims.begin(), obj_prims.end());
-  }
-  timer.stop();
-  fprintf(stdout, "Done! (%.4f sec)\n", timer.duration());
-
-  // build BVH //
-  fprintf(stdout, "[PathTracer] Building BVH from %lu primitives... ", primitives.size()); 
-  fflush(stdout);
-  timer.start();
-  bvh = new BVHAccel(primitives);
-  bvh_cuda = new BVHCuda(bvh);
-  timer.stop();
-  fprintf(stdout, "Done! (%.4f sec)\n", timer.duration());
-}
-
-void RaytracedRenderer::build_lights() {
-  // Build lights:
-  lights.clear();
-  if (light_data)
-    free(light_data);
-
-  light_data = new CudaLightBundle();
-  light_data->num_directional_lights = 0;
-  light_data->num_point_lights = 0;
-  light_data->num_area_lights = 0;
-
-  std::vector<CudaDirectionalLight> directional_lights;
-  std::vector<CudaPointLight> point_lights;
-  std::vector<CudaAreaLight> area_lights;
-
-  for (size_t i = 0; i < scene->lights.size(); i++) {
-    SceneLight *light = scene->lights[i];
-    CudaLight cuda_light;
-    if (dynamic_cast<DirectionalLight *>(light)) {
-      directional_lights.push_back(CudaDirectionalLight(*(DirectionalLight *) light));
-      cuda_light.type = CudaLightType_Directional;
-      cuda_light.idx = light_data->num_directional_lights++;
-    } else if (dynamic_cast<PointLight *>(light)) {
-      point_lights.push_back(CudaPointLight(*(PointLight *) light));
-      cuda_light.type = CudaLightType_Point;
-      cuda_light.idx = light_data->num_point_lights++;
-    } else if (dynamic_cast<AreaLight *>(light)) {
-      area_lights.push_back(CudaAreaLight(*(AreaLight *) light));
-      cuda_light.type = CudaLightType_Area;
-      cuda_light.idx = light_data->num_area_lights++;
-    } else {
-      std::cout<< "Here?";
-      std::cerr << "Unknown light type" << std::endl;
-      exit(1);
-    }
-    lights.push_back(cuda_light);
-  }
-
-  // copy lights to pt
-  pt->lights = (CudaLight *)malloc(lights.size() * sizeof(CudaLight));
-  pt->light_data = (CudaLightBundle *)malloc(sizeof(CudaLightBundle));
-
-  pt->light_data->num_directional_lights = light_data->num_directional_lights;
-  pt->light_data->num_point_lights = light_data->num_point_lights;
-  pt->light_data->num_area_lights = light_data->num_area_lights;
-  pt->light_data->directional_lights = (CudaDirectionalLight *)malloc(light_data->num_directional_lights * sizeof(CudaDirectionalLight));
-  pt->light_data->point_lights = (CudaPointLight *)malloc(light_data->num_point_lights * sizeof(CudaPointLight));
-  pt->light_data->area_lights = (CudaAreaLight *)malloc(light_data->num_area_lights * sizeof(CudaAreaLight));
-
-  memcpy(pt->lights, lights.data(), lights.size() * sizeof(CudaLight));
-  memcpy(pt->light_data->directional_lights, directional_lights.data(), light_data->num_directional_lights * sizeof(CudaDirectionalLight));
-  memcpy(pt->light_data->point_lights, point_lights.data(), light_data->num_point_lights * sizeof(CudaPointLight));
-  memcpy(pt->light_data->area_lights, area_lights.data(), light_data->num_area_lights * sizeof(CudaAreaLight));
-
-  pt->num_lights = lights.size();
-
-  std::cout << "CudaLights: " << light_data->num_directional_lights << " directional lights, "
-            << light_data->num_point_lights << " point lights, "
-            << light_data->num_area_lights << " area lights" << std::endl;
 }
 
 void RaytracedRenderer::save_image(string filename) {
@@ -250,6 +148,8 @@ void RaytracedRenderer::save_image(string filename) {
       << lt->tm_hour << "-" << lt->tm_min << "-" << lt->tm_sec << ".png";
     filename = ss.str();  
   }
+
+  cout << "[PathTracer] Saving to file: " << filename << endl;
 
   uint32_t* frame = &buffer->data[0];
   size_t w = buffer->w;

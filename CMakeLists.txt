@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
-project(Assignment3)
+project(pathtracer LANGUAGES CXX CUDA) 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 
 #-------------------------------------------------------------------------------
 # Build options
@@ -18,22 +19,28 @@ endif()
 #-------------------------------------------------------------------------------
 # Set target
 #-------------------------------------------------------------------------------
-set(APPLICATION_3_1_SOURCE
+set(APPLICATION_SOURCE
 
     # Scene Object & Structure
     src/scene/sphere.cpp
+    src/scene/sphere.cu
     src/scene/triangle.cpp
+    src/scene/triangle.cu
     src/scene/light.cpp
+    src/scene/light.cu
     src/scene/bvh.cpp
+    src/scene/bvh.cu
     src/scene/bbox.cpp
+    src/scene/bbox.cu
 
     # Pathtracer
     src/pathtracer/camera.cpp
+    src/pathtracer/camera.cu
     src/pathtracer/bsdf.cpp
+    src/pathtracer/bsdf.cu
     src/pathtracer/pathtracer.cpp
-)
+    src/pathtracer/pathtracer.cu
 
-set(APPLICATION_3_2_SOURCE
     src/scene/object.cpp
 
     # Collada Parser
@@ -51,15 +58,26 @@ set(APPLICATION_3_2_SOURCE
 
     # MeshEdit
     src/util/halfEdgeMesh.cpp
+    src/util/matrix3x3.cpp
+    src/util/matrix3x3.cu
+    src/util/matrix4x4.cpp
+    src/util/reservoir.cu
+    src/util/vector2D.cpp
+    src/util/vector3D.cpp
+    src/util/vector4D.cpp
 
     src/pathtracer/sampler.cpp
     src/pathtracer/advanced_bsdf.cpp
     src/scene/environment_light.cpp
     src/pathtracer/camera_lens.cpp
     src/pathtracer/raytraced_renderer.cpp
+    src/pathtracer/raytraced_renderer.cu
+    src/pathtracer/ray.cu
+
 
     # misc
     src/util/lodepng.cpp
+    src/util/image.cu
 
     # Application
     src/application/application.cpp
@@ -98,11 +116,18 @@ set(APPLICATION_HEADERS
     src/scene/sphere.h
     src/scene/triangle.h
     # MeshEdit
+    src/util/gpu_rand.h
     src/util/halfEdgeMesh.h
     src/util/image.h
     src/util/mutablePriorityQueue.h
     src/util/random_util.h
     src/util/work_queue.h
+    src/util/matrix3x3.h
+    src/util/matrix4x4.h
+    src/util/reservoir.h
+    src/util/vector2D.h
+    src/util/vector3D.h
+    src/util/vector4D.h
     # Pathtracer
     src/pathtracer/bsdf.h
     src/pathtracer/camera.h
@@ -117,23 +142,8 @@ set(APPLICATION_HEADERS
     src/application/application.h
 )
 
-if (WIN32)
-    list(APPEND APPLICATION_3_1_SOURCE src/util/win32/getopt.c)
-endif()
-
-if (WIN32 OR APPLE)
-  add_library(pt31 STATIC ${APPLICATION_3_1_SOURCE} ${APPLICATION_HEADERS})
-else()
-  add_library(pt31 SHARED ${APPLICATION_3_1_SOURCE} ${APPLICATION_HEADERS})
-endif()
-
-target_include_directories(pt31 PUBLIC src)
-
-add_executable(pathtracer ${APPLICATION_3_2_SOURCE} ${APPLICATION_HEADERS})
+add_executable(pathtracer ${APPLICATION_SOURCE} ${APPLICATION_HEADERS})
 target_include_directories(pathtracer PUBLIC src)
-
-target_link_libraries(pt31 PUBLIC CGL)
-target_link_libraries(pathtracer PUBLIC pt31)
 
 set(CGL_INCLUDE_DIRS CGL/include)
 
@@ -141,9 +151,19 @@ set(CGL_INCLUDE_DIRS CGL/include)
 # Find dependencies
 #-------------------------------------------------------------------------------
 add_subdirectory(CGL)
-target_include_directories(pt31 PUBLIC ${CGL_INCLUDE_DIRS})
 target_include_directories(pathtracer PUBLIC ${CGL_INCLUDE_DIRS})
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CGL_CXX_FLAGS}")
+
+set(OpenGL_GL_PREFERENCE LEGACY)
+find_package(OpenGL REQUIRED)
+
+target_link_libraries(pathtracer
+    PUBLIC
+    CGL
+    OpenGL::GL
+    OpenGL::GLU
+    pthread
+)
 
 #-------------------------------------------------------------------------------
 # Add subdirectories
