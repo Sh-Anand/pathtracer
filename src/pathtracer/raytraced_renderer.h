@@ -173,6 +173,8 @@ public:
    */
   void build_accel();
 
+  void build_lights();
+
   /**
    * Visualize acceleration structures.
    */
@@ -224,6 +226,9 @@ public:
   BVHCuda* bvh_cuda;             ///< BVH accelerator aggregate for cuda
   ImageBuffer frameBuffer;       ///< frame buffer
   Timer timer;                   ///< performance test timer
+
+  std::vector<CudaLight> lights;
+  CudaLightBundle *light_data;
 
   std::vector<int> sampleCountBuffer;   ///< sample count buffer
 

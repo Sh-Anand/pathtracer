@@ -67,7 +67,7 @@ PathTracer::estimate_direct_lighting_hemisphere(const Ray &r,
   // This is the same number of total samples as
   // estimate_direct_lighting_importance (outside of delta lights). We keep the
   // same number of samples for clarity of comparison.
-  int num_samples = scene->lights.size() * ns_area_light;
+  int num_samples = num_lights * ns_area_light;
   Vector3D L_out = Vector3D(0, 0, 0);
   CudaIntersection light_isect;
 
@@ -114,11 +114,12 @@ PathTracer::estimate_direct_lighting_importance(const Ray &r,
 
   //NOTE: wi here is in worldpsace, unlike in the previous function
   size_t sample_count = 0;
-  for (auto light : scene->lights) {
-    int num_samples = light->is_delta_light() ? 1 : ns_area_light;
+  for (size_t i = 0; i < num_lights; i++) {
+    CudaLight light = lights[i];
+    int num_samples = light_data->is_delta_light(light) ? 1 : ns_area_light;
     sample_count += num_samples;
     for (int j = 0; j < num_samples; j++) {
-      Vector3D radiance = light->sample_L(hit_p, &wi, &distToLight, &pdf);
+      Vector3D radiance = light_data->sample_L(light, hit_p, &wi, &distToLight, &pdf);
       Vector3D wi_o = w2o * wi;
       if (wi_o.z < 0 || radiance == 0) continue;
       Ray shadow_ray = Ray(hit_p, wi);

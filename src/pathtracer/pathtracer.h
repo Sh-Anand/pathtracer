@@ -4,6 +4,8 @@
 #include "CGL/timer.h"
 
 #include "scene/bvh.h"
+using CGL::SceneObjects::BVHCuda;
+
 #include "pathtracer/sampler.h"
 #include "pathtracer/intersection.h"
 
@@ -15,8 +17,9 @@ using CGL::SceneObjects::Scene;
 #include "scene/environment_light.h"
 using CGL::SceneObjects::EnvironmentLight;
 
-using CGL::SceneObjects::BVHCuda;
-
+#include "scene/light.h"
+using CGL::SceneObjects::CudaLight;
+using CGL::SceneObjects::CudaLightBundle;
 namespace CGL {
 
     class PathTracer {
@@ -94,6 +97,11 @@ namespace CGL {
 
         Scene* scene;         ///< current scene
         Camera* camera;       ///< current camera
+
+        // Lights
+        CudaLight *lights; 
+        CudaLightBundle *light_data ;
+        size_t num_lights;
 
         // Tonemapping Controls //
 

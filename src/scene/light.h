@@ -20,7 +20,6 @@ class DirectionalLight : public SceneLight {
                     double* pdf) const;
   bool is_delta_light() const { return true; }
 
- private:
   Vector3D radiance;
   Vector3D dirToLight;
 
@@ -122,6 +121,73 @@ class MeshLight : public SceneLight {
   Vector3D radiance;
 
 }; // class MeshLight
+
+enum CudaLightType {
+  CudaLightType_Directional = 0,
+  CudaLightType_InfiniteHemisphere = 1,
+  CudaLightType_Point = 2,
+  CudaLightType_Spot = 3,
+  CudaLightType_Area = 4,
+  CudaLightType_Sphere = 5,
+  CudaLightType_Mesh = 6,
+};
+
+struct CudaDirectionalLight {
+  CudaDirectionalLight(DirectionalLight &light) : radiance(light.radiance), dirToLight(light.dirToLight) {}
+  Vector3D sample_L(const Vector3D p, Vector3D* wi, double* distToLight,
+                    double* pdf) const;
+  bool is_delta_light() const { return true; }
+
+  Vector3D radiance;
+  Vector3D dirToLight;
+};
+
+struct CudaPointLight {
+  CudaPointLight(PointLight &light) : radiance(light.radiance), position(light.position) {}
+  Vector3D sample_L(const Vector3D p, Vector3D* wi, double* distToLight,
+                    double* pdf) const;
+  bool is_delta_light() const { return true; }
+
+  Vector3D radiance;
+  Vector3D position;
+};
+
+struct CudaAreaLight {
+  CudaAreaLight(AreaLight &light) : radiance(light.radiance), position(light.position), direction(light.direction), dim_x(light.dim_x), dim_y(light.dim_y), area(light.area) {}
+  Vector3D sample_L(const Vector3D p, Vector3D* wi, double* distToLight,
+                    double* pdf) const;
+  bool is_delta_light() const { return false; }
+
+  Vector3D radiance;
+  Vector3D position;
+  Vector3D direction;
+  Vector3D dim_x;
+  Vector3D dim_y;
+  UniformGridSampler2D sampler;
+  double area;
+};
+
+struct CudaLight {
+  size_t idx;
+  CudaLightType type;
+};
+
+struct CudaLightBundle {
+  CudaLightBundle() : directional_lights(nullptr), num_directional_lights(0),
+                      point_lights(nullptr), num_point_lights(0),
+                      area_lights(nullptr), num_area_lights(0) {}
+  bool is_delta_light(CudaLight light) const;
+  Vector3D sample_L(const CudaLight light, const Vector3D p, Vector3D* wi,
+                    double* distToLight, double* pdf) const;
+  CudaDirectionalLight* directional_lights;
+  size_t num_directional_lights;
+  CudaPointLight* point_lights;
+  size_t num_point_lights;
+  CudaAreaLight* area_lights;
+  size_t num_area_lights;
+};
+
+
 
 } // namespace SceneObjects
 } // namespace CGL
