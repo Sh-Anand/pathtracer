@@ -124,11 +124,11 @@ void draw_sphere(const Vector3D& p, double r) {
                 vPtr3[NORMAL_OFFSET + 1],
                 vPtr3[NORMAL_OFFSET + 2]);
     const Vector3D& n = (n1 + n2 + n3).unit();
-    glNormal3dv(&n1.x);
+    glNormal3dv((double *)&n1.x);
     glVertex3dv(vPtr1 + VERTEX_OFFSET);
-    glNormal3dv(&n2.x);
+    glNormal3dv((double *)&n2.x);
     glVertex3dv(vPtr2 + VERTEX_OFFSET);
-    glNormal3dv(&n3.x);
+    glNormal3dv((double *)&n3.x);
     glVertex3dv(vPtr3 + VERTEX_OFFSET);
     glEnd();
   }

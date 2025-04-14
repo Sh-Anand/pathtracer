@@ -34,7 +34,7 @@ struct Intersection {
 
 struct CudaIntersection {
   DEVICE CudaIntersection() : t (INFINITY) { }
-  double t;
+  float t;
   Vector3D n;
   CudaBSDF bsdf;
 };

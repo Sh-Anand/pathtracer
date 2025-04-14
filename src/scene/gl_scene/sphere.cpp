@@ -32,7 +32,7 @@ void Sphere::render_debugger_node()
 {
   if (ImGui::TreeNode(this, "Sphere"))
   {
-    DragDouble("Radius", &r, 0.005);
+    DragDouble("Radius", (float *)&r, 0.005);
     DragDouble3("Position", &p[0], 0.005);
 
     if (bsdf) bsdf->render_debugger_node();

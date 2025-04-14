@@ -2,18 +2,18 @@
 
 namespace CGL { namespace SceneObjects {
 
-DEVICE bool sphere_intersect(Ray &r, const Vector3D &o, double r2,
-                      double &t1, double &t2) {
+DEVICE bool sphere_intersect(Ray &r, const Vector3D &o, float r2,
+                      float &t1, float &t2) {
   Vector3D ominc = r.o - o;
-  double a = dot(r.d, r.d), b = 2 * dot(ominc, r.d), c = dot(ominc, ominc) - r2;
-  double discr = b*b - 4*a*c;
+  float a = dot(r.d, r.d), b = 2 * dot(ominc, r.d), c = dot(ominc, ominc) - r2;
+  float discr = b*b - 4*a*c;
 
   if (discr < 0) {
     return false;
   }
 
-  double r2a = 1/(2*a);
-  double b2a = -b*r2a, sqrt_discr_r2a = sqrt(discr) * r2a;
+  float r2a = 1/(2*a);
+  float b2a = -b*r2a, sqrt_discr_r2a = sqrt(discr) * r2a;
   t1 = b2a - sqrt_discr_r2a;
   t2 = b2a + sqrt_discr_r2a;
 
@@ -21,7 +21,7 @@ DEVICE bool sphere_intersect(Ray &r, const Vector3D &o, double r2,
 }
 
 DEVICE bool CudaSphere::intersect(Ray &r, CudaIntersection *i) {
-  double t1, t2;
+  float t1, t2;
   if (!sphere_intersect(r, o, r2, t1, t2)) {
     return false;
   }

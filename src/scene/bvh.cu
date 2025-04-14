@@ -67,6 +67,16 @@ BVHCuda::BVHCuda(BVHAccel *bvh) {
     }
   }
 
+  // print all CudaSpheres
+  for (size_t i = 0; i < spheres_vec.size(); i++) {
+    std::cout << "Sphere " << i << ": " << spheres_vec[i].o << ", " << spheres_vec[i].r << std::endl;
+  }
+
+  // print all CudaTriangles
+  for (size_t i = 0; i < triangles_vec.size(); i++) {
+    std::cout << "Triangle " << i << ": " << triangles_vec[i].p1 << ", " << triangles_vec[i].p2 << ", " << triangles_vec[i].p3 << std::endl;
+  }
+
   num_primitives = primitives_vec.size();
   num_nodes = bvh->nodes.size();
   
@@ -92,24 +102,25 @@ BVHCuda::BVHCuda(BVHAccel *bvh) {
   std::cout<< "root: " << root << std::endl;
 }
 
-DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i, uint16_t root_idx) const {
+DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i, uint32_t root_idx) const {
   constexpr int STACK_SIZE = 64;
-  uint16_t stack[STACK_SIZE];
+  uint32_t stack[STACK_SIZE];
   int stack_ptr = 0;
 
   stack[stack_ptr++] = root_idx;
   bool hit = false;
 
   while (stack_ptr > 0) {
-    uint16_t idx = stack[--stack_ptr];
+    uint32_t idx = stack[--stack_ptr];
     const BVHNode &node = nodes[idx];
 
-    double t0, t1;
+    float t0, t1;
     if (!node.bb.intersect(ray, t0, t1)) continue;
 
     if (node.isLeaf()) {
       CudaIntersection tmp;
-      for (uint16_t p = node.start; p < node.end; p++) {
+      tmp.t = INFINITY;
+      for (uint32_t p = node.start; p < node.end; p++) {
         switch (primitives[p].type) {
           case CudaPrimitiveType::TRIANGLE:
             if (triangles[primitives[p].idx].intersect(ray, &tmp) && tmp.t < i->t) {

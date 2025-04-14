@@ -105,8 +105,8 @@ struct CudaSphere {
     DEVICE bool intersect(Ray& r, CudaIntersection* i);
     
     Vector3D o; ///< origin of the sphere
-    double r;   ///< radius
-    double r2;  ///< radius squared
+    float r;   ///< radius
+    float r2;  ///< radius squared
     CudaBSDF bsdf;
 };
 

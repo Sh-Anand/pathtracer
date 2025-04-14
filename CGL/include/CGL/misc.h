@@ -9,6 +9,7 @@
 namespace CGL {
 
 #define PI (3.14159265358979323)
+#define PI_F (3.141592)
 #define EPS_D (0.00000000001)
 #define EPS_F (0.00001f)
 #define INF_D (std::numeric_limits<double>::infinity())

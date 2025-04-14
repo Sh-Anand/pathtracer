@@ -125,8 +125,8 @@ struct CudaCamera {
    * \param x x-coordinate of the ray sample in the view plane
    * \param y y-coordinate of the ray sample in the view plane
    */
-  DEVICE Ray generate_ray(double x, double y);
-  double hFov, vFov, nClip, fClip;
+  DEVICE Ray generate_ray(float x, float y);
+  float hFov, vFov, nClip, fClip;
   Vector3D pos;
   Matrix3x3 c2w;
 };

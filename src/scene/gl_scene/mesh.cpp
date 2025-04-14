@@ -99,10 +99,10 @@ void Mesh::draw_faces() const {
 
     glBegin(GL_POLYGON);
     Vector3D normal(f->normal());
-    glNormal3dv(&normal.x);
+    glNormal3dv((double *)&normal.x);
     HalfedgeCIter h = f->halfedge();
     do {
-      glVertex3dv(&h->vertex()->position.x);
+      glVertex3dv((double *)&h->vertex()->position.x);
       h = h->next();
     } while (h != f->halfedge());
     glEnd();
@@ -122,8 +122,8 @@ void Mesh::draw_edges() const {
     }
 
     glBegin(GL_LINES);
-    glVertex3dv(&e->halfedge()->vertex()->position.x);
-    glVertex3dv(&e->halfedge()->twin()->vertex()->position.x);
+    glVertex3dv((double *)&e->halfedge()->vertex()->position.x);
+    glVertex3dv((double *)&e->halfedge()->twin()->vertex()->position.x);
     glEnd();
 
     if (style != defaultStyle) {
@@ -180,9 +180,9 @@ void Mesh::draw_halfedge_arrow(const Halfedge *h) const {
   const Vector3D c = b + cos(theta) * s + sin(theta) * t;
 
   glBegin(GL_LINE_STRIP);
-  glVertex3dv(&a.x);
-  glVertex3dv(&b.x);
-  glVertex3dv(&c.x);
+  glVertex3dv((double *)&a.x);
+  glVertex3dv((double *)&b.x);
+  glVertex3dv((double *)&c.x);
   glEnd();
 
   get_draw_style(h)->style_reset();

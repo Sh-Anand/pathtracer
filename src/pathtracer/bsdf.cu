@@ -7,9 +7,9 @@ DEVICE void make_coord_space(Matrix3x3 &o2w, const Vector3D n) {
 
   Vector3D z = Vector3D(n.x, n.y, n.z);
   Vector3D h = z;
-  if (fabs(h.x) <= fabs(h.y) && fabs(h.x) <= fabs(h.z))
+  if (fabsf(h.x) <= fabsf(h.y) && fabsf(h.x) <= fabsf(h.z))
     h.x = 1.0;
-  else if (fabs(h.y) <= fabs(h.x) && fabs(h.y) <= fabs(h.z))
+  else if (fabsf(h.y) <= fabsf(h.x) && fabsf(h.y) <= fabsf(h.z))
     h.y = 1.0;
   else
     h.z = 1.0;
@@ -26,7 +26,7 @@ DEVICE void make_coord_space(Matrix3x3 &o2w, const Vector3D n) {
 }
 
 DEVICE Vector3D CudaDiffuseBSDF::f(const Vector3D wo, const Vector3D wi) {
-  return reflectance / PI;
+  return reflectance / PI_F;
 }
 
 DEVICE Vector3D CudaEmissionBSDF::f(const Vector3D wo, const Vector3D wi) {

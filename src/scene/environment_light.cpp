@@ -131,7 +131,7 @@ namespace CGL { namespace SceneObjects {
 
     // Uniform
     *wi = sampler_uniform_sphere.get_sample();
-    *distToLight = INF_D;
+    *distToLight = INF_F;
     *pdf = 1.0 / (4.0 * PI);
 
 

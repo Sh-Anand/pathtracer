@@ -17,7 +17,7 @@ DirectionalLight::DirectionalLight(const Vector3D rad,
 Vector3D DirectionalLight::sample_L(const Vector3D p, Vector3D* wi,
                                     double* distToLight, double* pdf) const {
   *wi = dirToLight;
-  *distToLight = INF_D;
+  *distToLight = INF_F;
   *pdf = 1.0;
   return radiance;
 }
@@ -36,7 +36,7 @@ Vector3D InfiniteHemisphereLight::sample_L(const Vector3D p, Vector3D* wi,
                                            double* pdf) const {
   Vector3D dir = sampler.get_sample();
   *wi = sampleToWorld* dir;
-  *distToLight = INF_D;
+  *distToLight = INF_F;
   *pdf = 1.0 / (2.0 * PI);
   return radiance;
 }

@@ -30,9 +30,9 @@ namespace CGL
     void render();
   };
 
-  bool DragDouble3(const char* label, const double* p_data, float v_speed);
+  bool DragDouble3(const char* label, const float* p_data, float v_speed);
 
-  bool DragDouble(const char* label, const double* p_data, float v_speed);
+  bool DragDouble(const char* label, const float* p_data, float v_speed);
 
-  bool SliderDouble3(const char* label, const double* p_data, float min, float max);
+  bool SliderDouble3(const char* label, const float* p_data, float min, float max);
 }

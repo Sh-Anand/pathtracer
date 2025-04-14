@@ -558,10 +558,10 @@ void Application::mouse_released(e_mouse_button b) {
     case LEFT:
       leftDown = false;
       if (mode == RENDER_MODE && renderer->render_cell) {
-        Vector2D tl(max(0.,min(renderer->cell_tl.x,renderer->cell_br.x)),
-                    max(0.,min(renderer->cell_tl.y,renderer->cell_br.y)));
-        Vector2D br(min(screenW*1.,max(renderer->cell_tl.x,renderer->cell_br.x)),
-                    min(screenH*1.,max(renderer->cell_tl.y,renderer->cell_br.y)));
+        Vector2D tl(max(0.f,min(renderer->cell_tl.x,renderer->cell_br.x)),
+                    max(0.f,min(renderer->cell_tl.y,renderer->cell_br.y)));
+        Vector2D br(min(screenW*1.f,max(renderer->cell_tl.x,renderer->cell_br.x)),
+                    min(screenH*1.f,max(renderer->cell_tl.y,renderer->cell_br.y)));
         renderer->cell_tl = tl;
         renderer->cell_br = br;
         cout << "[renderer] Selected cell measures " << (int)(br.x-tl.x) << "x" << (int)(br.y-tl.y) << " pixels" << endl;
@@ -641,8 +641,8 @@ void Application::set_up_pathtracer() {
 
 Matrix4x4 Application::get_world_to_3DH() {
   Matrix4x4 P, M;
-  glGetDoublev(GL_PROJECTION_MATRIX, &P(0, 0));
-  glGetDoublev(GL_MODELVIEW_MATRIX, &M(0, 0));
+  glGetDoublev(GL_PROJECTION_MATRIX, (double *)&P(0, 0));
+  glGetDoublev(GL_MODELVIEW_MATRIX, (double *)&M(0, 0));
   return P * M;
 }
 

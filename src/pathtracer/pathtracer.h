@@ -22,7 +22,7 @@ using CGL::SceneObjects::CudaLightBundle;
 #ifdef __CUDACC__
 #include <curand_kernel.h>
 #else
-struct curandState;
+struct curandStatePhilox4_32_10;
 #endif
 namespace CGL {
 
@@ -39,9 +39,9 @@ namespace CGL {
          * \param width width of the frame
          * \param height height of the frame
          */
-        void set_frame_size(uint16_t width, uint16_t height);
+        void set_frame_size(uint32_t width, uint32_t height);
 
-        void write_to_framebuffer(HDRImageBuffer &buffer, ImageBuffer& framebuffer, uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
+        void write_to_framebuffer(HDRImageBuffer &buffer, ImageBuffer& framebuffer, uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1);
 
         /**
          * If the pathtracer is in READY, delete all internal data, transition to INIT.
@@ -53,53 +53,50 @@ namespace CGL {
         /**
          * Trace an ray in the scene.
          */
-        DEVICE Vector3D estimate_direct_lighting_importance(Ray& r, const SceneObjects::CudaIntersection& isect);
-
-        DEVICE Vector3D est_radiance_global_illumination(Ray& r);
-        DEVICE Vector3D at_least_one_bounce_radiance(Ray& r, const SceneObjects::CudaIntersection& isect);
+        DEVICE Vector3D estimate_direct_lighting_importance(Ray& r, const SceneObjects::CudaIntersection& isect, curandStatePhilox4_32_10 *rand_state);
+        DEVICE Vector3D at_least_one_bounce_radiance(Ray& r, const SceneObjects::CudaIntersection& isect, curandStatePhilox4_32_10 *rand_state);
         
         DEVICE Vector3D p_sample_L(const CudaLight light, const Vector3D p,
-                             Vector3D* wi, double* distToLight,
-                             double* pdf, curandState *rand_state);
-        DEVICE Vector3D p_sample_f (CudaBSDF bsdf, const Vector3D wo, Vector3D *wi, double* pdf, curandState *rand_state);
+                             Vector3D* wi, float* distToLight,
+                             float* pdf, curandStatePhilox4_32_10 *rand_state);
+        DEVICE Vector3D p_sample_f (CudaBSDF bsdf, const Vector3D wo, Vector3D *wi, float* pdf, curandStatePhilox4_32_10 *rand_state);
 
         /**
          * Trace a camera ray given by the pixel coordinate.
          */
-        DEVICE void raytrace_pixel(uint16_t x, uint16_t y);
+        DEVICE void raytrace_pixel(uint32_t x, uint32_t y);
 
         // Integrator sampling settings //
 
-        uint16_t max_ray_depth; ///< maximum allowed ray depth (applies to all rays)
-        uint16_t ns_aa;         ///< number of camera rays in one pixel (along one axis)
-        uint16_t ns_area_light; ///< number samples per area light source
-        uint16_t ns_diff;       ///< number of samples - diffuse surfaces
-        uint16_t ns_glsy;       ///< number of samples - glossy surfaces
-        uint16_t ns_refr;       ///< number of samples - refractive surfaces
+        uint32_t max_ray_depth; ///< maximum allowed ray depth (applies to all rays)
+        uint32_t ns_aa;         ///< number of camera rays in one pixel (along one axis)
+        uint32_t ns_area_light; ///< number samples per area light source
+        uint32_t ns_diff;       ///< number of samples - diffuse surfaces
+        uint32_t ns_glsy;       ///< number of samples - glossy surfaces
+        uint32_t ns_refr;       ///< number of samples - refractive surfaces
 
-        uint16_t samplesPerBatch;
-        double maxTolerance;
+        uint32_t samplesPerBatch;
+        float maxTolerance;
         bool direct_hemisphere_sample; ///< true if sampling uniformly from hemisphere for direct lighting. Otherwise, light sample
 
         // Components //
 
         BVHCuda* bvh;                 ///< BVH accelerator aggregate
         HDRImageBuffer sampleBuffer;   ///< sample buffer
-        curandState* rand_states;       ///< random state for each thread
 
         CudaCamera camera;       ///< current camera
 
         // Lights
         CudaLight *lights; 
         CudaLightBundle *light_data ;
-        uint16_t num_lights;
+        uint32_t num_lights;
 
         // Tonemapping Controls //
 
-        double tm_gamma;                           ///< gamma
-        double tm_level;                           ///< exposure level
-        double tm_key;                             ///< key value
-        double tm_wht;                             ///< white point
+        float tm_gamma;                           ///< gamma
+        float tm_level;                           ///< exposure level
+        float tm_key;                             ///< key value
+        float tm_wht;                             ///< white point
     };
 
 }  // namespace CGL

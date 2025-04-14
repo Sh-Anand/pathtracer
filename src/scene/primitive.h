@@ -59,8 +59,8 @@ enum CudaPrimitiveType {
   SPHERE = 1,
 };
 struct CudaPrimitive {
-  CudaPrimitive(uint16_t idx, CudaPrimitiveType type) : idx(idx), type(type) {}
-  uint16_t idx;
+  CudaPrimitive(uint32_t idx, CudaPrimitiveType type) : idx(idx), type(type) {}
+  uint32_t idx;
   CudaPrimitiveType type;
 };
 

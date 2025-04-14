@@ -184,9 +184,9 @@ struct HDRImageBuffer {
     for (size_t y = y0; y < y1; ++y) {
       for (size_t x = x0; x < x1; ++x) {
         const Vector3D& s = data[x + y * w];
-        float r = std::max(0.0, std::min(pow(s.r * exposure, one_over_gamma), 1.0));
-        float g = std::max(0.0, std::min(pow(s.g * exposure, one_over_gamma), 1.0));
-        float b = std::max(0.0, std::min(pow(s.b * exposure, one_over_gamma), 1.0));
+        float r = std::max(0.0f, std::min(powf(s.r * exposure, one_over_gamma), 1.0f));
+        float g = std::max(0.0f, std::min(powf(s.g * exposure, one_over_gamma), 1.0f));
+        float b = std::max(0.0f, std::min(powf(s.b * exposure, one_over_gamma), 1.0f));
         target.update_pixel(Color(r, g, b), x, y);
       }
     }

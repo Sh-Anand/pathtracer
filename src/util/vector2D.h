@@ -16,7 +16,7 @@ class Vector2D {
  public:
 
   // components
-  double x, y;
+  float x, y;
 
   /**
    * Constructor.
@@ -28,7 +28,7 @@ class Vector2D {
    * Constructor.
    * Initializes to vector (a,b).
    */
-  HOST_DEVICE Vector2D( double x, double y ) : x( x ), y( y ) { }
+  HOST_DEVICE Vector2D( float x, float y ) : x( x ), y( y ) { }
 
   /**
    * Constructor.
@@ -37,12 +37,12 @@ class Vector2D {
   HOST_DEVICE Vector2D( const Vector2D& v ) : x( v.x ), y( v.y ) { }
 
   // returns reference to the specified component (0-based indexing: x, y)
-  HOST_DEVICE inline double& operator[] ( const int& index ) {
+  HOST_DEVICE inline float& operator[] ( const int& index ) {
     return ( &x )[ index ];
   }
 
   // returns const reference to the specified component (0-based indexing: x, y)
-  HOST_DEVICE inline const double& operator[] ( const int& index ) const {
+  HOST_DEVICE inline const float& operator[] ( const int& index ) const {
     return ( &x )[ index ];
   }
 
@@ -66,14 +66,14 @@ class Vector2D {
   }
 
   // right scalar multiplication
-  HOST_DEVICE inline Vector2D operator*( double r ) const {
+  HOST_DEVICE inline Vector2D operator*( float r ) const {
     Vector2D vr = *this;
     vr *= r;
     return vr;
   }
 
   // scalar division
-  HOST_DEVICE inline Vector2D operator/( double r ) const {
+  HOST_DEVICE inline Vector2D operator/( float r ) const {
     Vector2D vr = *this;
     vr /= r;
     return vr;
@@ -92,13 +92,13 @@ class Vector2D {
   }
 
   // scalar multiply by r
-  HOST_DEVICE inline void operator*=( double r ) {
+  HOST_DEVICE inline void operator*=( float r ) {
     x *= r;
     y *= r;
   }
 
   // scalar divide by r
-  HOST_DEVICE inline void operator/=( double r ) {
+  HOST_DEVICE inline void operator/=( float r ) {
     x /= r;
     y /= r;
   }
@@ -106,14 +106,14 @@ class Vector2D {
   /**
    * Returns norm.
    */
-  HOST_DEVICE inline double norm( void ) const {
+  HOST_DEVICE inline float norm( void ) const {
     return sqrt( x*x + y*y );
   }
 
   /**
    * Returns norm squared.
    */
-  HOST_DEVICE inline double norm2( void ) const {
+  HOST_DEVICE inline float norm2( void ) const {
     return x*x + y*y;
   }
 
@@ -127,17 +127,17 @@ class Vector2D {
 }; // class Vector2D
 
 // left scalar multiplication
-HOST_DEVICE inline Vector2D operator*( double r, const Vector2D& v ) {
+HOST_DEVICE inline Vector2D operator*( float r, const Vector2D& v ) {
    return v*r;
 }
 
 // inner product
-HOST_DEVICE inline double dot( const Vector2D& v1, const Vector2D& v2 ) {
+HOST_DEVICE inline float dot( const Vector2D& v1, const Vector2D& v2 ) {
   return v1.x*v2.x + v1.y*v2.y;
 }
 
 // cross product
-HOST_DEVICE inline double cross( const Vector2D& v1, const Vector2D& v2 ) {
+HOST_DEVICE inline float cross( const Vector2D& v1, const Vector2D& v2 ) {
   return v1.x*v2.y - v1.y*v2.x;
 }
 

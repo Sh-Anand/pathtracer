@@ -143,7 +143,7 @@ int BVHAccel::construct_bvh(size_t start, size_t end, size_t max_leaf_size) {
 bool BVHAccel::intersect(Ray &ray, Intersection *i, size_t idx) const {
   const BVHNode &node = nodes[idx];
 
-  double t0, t1;
+  float t0, t1;
   if (!node.bb.intersect(ray, t0, t1)) {
     return false;
   }

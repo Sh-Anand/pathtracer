@@ -85,7 +85,7 @@ void MicrofacetBSDF::render_debugger_node()
   {
     DragDouble3("eta", &eta[0], 0.005);
     DragDouble3("K", &k[0], 0.005);
-    DragDouble("alpha", &alpha, 0.005);
+    DragDouble("alpha", (float *)&alpha, 0.005);
     ImGui::TreePop();
   }
 }
@@ -110,7 +110,7 @@ void RefractionBSDF::render_debugger_node()
   if (ImGui::TreeNode(this, "Refraction BSDF"))
   {
     DragDouble3("Transmittance", &transmittance[0], 0.005);
-    DragDouble("ior", &ior, 0.005);
+    DragDouble("ior", (float *)&ior, 0.005);
     ImGui::TreePop();
   }
 }
@@ -139,7 +139,7 @@ void GlassBSDF::render_debugger_node()
   {
     DragDouble3("Reflectance", &reflectance[0], 0.005);
     DragDouble3("Transmittance", &transmittance[0], 0.005);
-    DragDouble("ior", &ior, 0.005);
+    DragDouble("ior", (float *)&ior, 0.005);
     ImGui::TreePop();
   }
 }

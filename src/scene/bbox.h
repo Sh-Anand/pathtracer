@@ -26,8 +26,8 @@ struct BBox {
    * points.
    */
   BBox() {
-    max = Vector3D(-INF_D, -INF_D, -INF_D);
-    min = Vector3D( INF_D,  INF_D,  INF_D);
+    max = Vector3D(-INF_F, -INF_F, -INF_F);
+    min = Vector3D( INF_F,  INF_F,  INF_F);
     extent = max - min;
   }
 
@@ -124,7 +124,7 @@ struct BBox {
    * \param t0 lower bound of intersection time
    * \param t1 upper bound of intersection time
    */
-  HOST_DEVICE bool intersect(Ray& r, double& t0, double& t1) const;
+  HOST_DEVICE bool intersect(Ray& r, float& t0, float& t1) const;
 
   /**
    * Draw box wireframe with OpenGL.

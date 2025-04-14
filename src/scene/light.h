@@ -158,7 +158,7 @@ struct CudaAreaLight {
 };
 
 struct CudaLight {
-  uint16_t idx;
+  uint32_t idx;
   CudaLightType type;
 };
 
@@ -168,11 +168,11 @@ struct CudaLightBundle {
                       area_lights(nullptr), num_area_lights(0) {}
   DEVICE bool is_delta_light(CudaLight light) const;
   CudaDirectionalLight* directional_lights;
-  uint16_t num_directional_lights;
+  uint32_t num_directional_lights;
   CudaPointLight* point_lights;
-  uint16_t num_point_lights;
+  uint32_t num_point_lights;
   CudaAreaLight* area_lights;
-  uint16_t num_area_lights;
+  uint32_t num_area_lights;
 };
 
 } // namespace SceneObjects

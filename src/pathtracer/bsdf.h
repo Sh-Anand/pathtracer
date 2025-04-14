@@ -13,34 +13,34 @@ namespace CGL {
 
 // Helper math functions. Assume all vectors are in unit hemisphere //
 
-inline double clamp (double n, double lower, double upper) {
+inline float clamp (float n, float lower, float upper) {
   return std::max(lower, std::min(n, upper));
 }
 
-inline double cos_theta(const Vector3D w) {
+inline float cos_theta(const Vector3D w) {
   return w.z;
 }
 
-HOST_DEVICE inline double abs_cos_theta(const Vector3D w) {
+HOST_DEVICE inline float abs_cos_theta(const Vector3D w) {
   return fabsf(w.z);
 }
 
-inline double sin_theta2(const Vector3D w) {
-  return fmax(0.0, 1.0 - cos_theta(w) * cos_theta(w));
+inline float sin_theta2(const Vector3D w) {
+  return fmaxf(0.0, 1.0 - cos_theta(w) * cos_theta(w));
 }
 
-inline double sin_theta(const Vector3D w) {
-  return sqrt(sin_theta2(w));
+inline float sin_theta(const Vector3D w) {
+  return sqrtf(sin_theta2(w));
 }
 
-inline double cos_phi(const Vector3D w) {
-  double sinTheta = sin_theta(w);
+inline float cos_phi(const Vector3D w) {
+  float sinTheta = sin_theta(w);
   if (sinTheta == 0.0) return 1.0;
   return clamp(w.x / sinTheta, -1.0, 1.0);
 }
 
-inline double sin_phi(const Vector3D w) {
-  double sinTheta = sin_theta(w);
+inline float sin_phi(const Vector3D w) {
+  float sinTheta = sin_theta(w);
   if (sinTheta) return 0.0;
   return clamp(w.y / sinTheta, -1.0, 1.0);
 }
@@ -288,7 +288,7 @@ enum CudaBSDFType {
 };
 
 struct CudaBSDF {
-  uint16_t idx;
+  uint32_t idx;
   CudaBSDFType type;
 };
 

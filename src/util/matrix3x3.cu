@@ -2,11 +2,11 @@
 
 namespace CGL {
 
-  HOST_DEVICE double& Matrix3x3::operator()( int i, int j ) {
+  HOST_DEVICE float& Matrix3x3::operator()( int i, int j ) {
     return entries[j][i];
   }
 
-  HOST_DEVICE const double& Matrix3x3::operator()( int i, int j ) const {
+  HOST_DEVICE const float& Matrix3x3::operator()( int i, int j ) const {
     return entries[j][i];
   }
 
@@ -31,7 +31,7 @@ namespace CGL {
     return B;
   }
 
-  HOST_DEVICE Matrix3x3 Matrix3x3::operator*( double c ) const {
+  HOST_DEVICE Matrix3x3 Matrix3x3::operator*( float c ) const {
     const Matrix3x3& A( *this );
     Matrix3x3 B;
 
@@ -42,7 +42,7 @@ namespace CGL {
     return B;
   }
 
-  HOST_DEVICE Matrix3x3 operator*( double c, const Matrix3x3& A ) {
+  HOST_DEVICE Matrix3x3 operator*( float c, const Matrix3x3& A ) {
     Matrix3x3 cA;
 
     cA[0] = A[0] * c;
@@ -69,7 +69,7 @@ namespace CGL {
            x.z * entries[2];
   }
 
-  HOST_DEVICE double Matrix3x3::det( void ) const {
+  HOST_DEVICE float Matrix3x3::det( void ) const {
     const Matrix3x3& A( *this );
 
     return -A(0,2)*A(1,1)*A(2,0) + A(0,1)*A(1,2)*A(2,0) +

@@ -32,17 +32,17 @@ namespace CGL
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
   }
 
-  bool DragDouble3(const char* label, const double* p_data, float v_speed)
+  bool DragDouble3(const char* label, const float* p_data, float v_speed)
   {
     return ImGui::DragScalarN(label, ImGuiDataType_Double, (void*)p_data, 3, v_speed);
   }
 
-  bool DragDouble(const char* label, const double* p_data, float v_speed)
+  bool DragDouble(const char* label, const float* p_data, float v_speed)
   {
     return ImGui::DragScalar(label, ImGuiDataType_Double, (void*)p_data, v_speed);
   }
 
-  bool SliderDouble3(const char* label, const double* p_data, float min, float max)
+  bool SliderDouble3(const char* label, const float* p_data, float min, float max)
   {
     return ImGui::SliderScalarN(label, ImGuiDataType_Double, (void*)p_data, 3, &min, &max, "%f");
   }

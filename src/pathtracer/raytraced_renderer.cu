@@ -160,8 +160,6 @@ void RaytracedRenderer::copy_host_device_pt() {
     cudaMalloc(&pt->bvh, sizeof(BVHCuda));
     cudaMemcpy(pt->bvh, bvh_cuda, sizeof(BVHCuda), cudaMemcpyHostToDevice);
 
-    cudaMalloc(&pt->rand_states, sizeof(curandState) * frameBuffer.w * frameBuffer.h);
-
     cudaMalloc(&pt->sampleBuffer.data, frameBuffer.w * frameBuffer.h * sizeof(Vector3D));
     
     PathTracer *pt_cuda;

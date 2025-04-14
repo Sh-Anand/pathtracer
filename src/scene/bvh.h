@@ -25,9 +25,9 @@ struct BVHNode {
   BBox bb;        ///< bounding box of the node
   bool leaf;
   HOST_DEVICE inline bool isLeaf() const { return leaf;}
-  uint16_t start;
-  uint16_t end;
-  uint16_t l, r;
+  uint32_t start;
+  uint32_t end;
+  uint32_t l, r;
 
   BVHNode(BBox b) : bb(b) { }
 };
@@ -141,25 +141,25 @@ class BVHCuda {
       return intersect(r, i, root);
     }
 
-    DEVICE bool intersect(Ray& r, CudaIntersection* i, uint16_t node) const;
+    DEVICE bool intersect(Ray& r, CudaIntersection* i, uint32_t node) const;
   
     CudaPrimitive* primitives;
-    uint16_t num_primitives;
+    uint32_t num_primitives;
 
     CudaTriangle* triangles;
-    uint16_t num_triangles;
+    uint32_t num_triangles;
     CudaSphere* spheres;
-    uint16_t num_spheres;
+    uint32_t num_spheres;
 
     BVHNode* nodes;
-    uint16_t num_nodes;
-    uint16_t root;
+    uint32_t num_nodes;
+    uint32_t root;
 
     //BSDFs
     CudaDiffuseBSDF* diffuse_bsdfs;
-    uint16_t num_diffuse_bsdfs;
+    uint32_t num_diffuse_bsdfs;
     CudaEmissionBSDF* emission_bsdfs;
-    uint16_t num_emission_bsdfs;
+    uint32_t num_emission_bsdfs;
 
     DEVICE Vector3D f (CudaBSDF bsdf, const Vector3D wo, const Vector3D wi) const;
 
