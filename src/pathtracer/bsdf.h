@@ -4,7 +4,6 @@
 #include "util/vector3D.h"
 #include "util/matrix3x3.h"
 
-#include "pathtracer/sampler.h"
 #include "util/image.h"
 
 #include <algorithm>
@@ -57,59 +56,9 @@ DEVICE void make_coord_space(Matrix3x3& o2w, const Vector3D n);
  */
 class BSDF {
  public:
-
-  /**
-   * Evaluate BSDF.
-   * Given incident light direction wi and outgoing light direction wo. Note
-   * that both wi and wo are defined in the local coordinate system at the
-   * point of intersection.
-   * \param wo outgoing light direction in local space of point of intersection
-   * \param wi incident light direction in local space of point of intersection
-   * \return reflectance in the given incident/outgoing directions
-   */
-  virtual Vector3D f (const Vector3D wo, const Vector3D wi) = 0;
-
-  /**
-   * Evaluate BSDF.
-   * Given the outgoing light direction wo, samplea incident light
-   * direction and store it in wi. Store the pdf of the sampled direction in pdf.
-   * Again, note that wo and wi should both be defined in the local coordinate
-   * system at the point of intersection.
-   * \param wo outgoing light direction in local space of point of intersection
-   * \param wi address to store incident light direction
-   * \param pdf address to store the pdf of the sampled incident direction
-   * \return reflectance in the output incident and given outgoing directions
-   */
-  virtual Vector3D sample_f (const Vector3D wo, Vector3D* wi, double* pdf) = 0;
-
-  /**
-   * Get the emission value of the surface material. For non-emitting surfaces
-   * this would be a zero energy Vector3D.
-   * \return emission Vector3D of the surface material
-   */
-  virtual Vector3D get_emission () const = 0;
-
-  /**
-   * If the BSDF is a delta distribution. Materials that are perfectly specular,
-   * (e.g. water, glass, mirror) only scatter light from a single incident angle
-   * to a single outgoing angle. These BSDFs are best described with alpha
-   * distributions that are zero except for the single direction where light is
-   * scattered.
-   */
-  virtual bool is_delta() const = 0;
-
-  /**
-   * Reflection helper
-   */
-  virtual void reflect(const Vector3D wo, Vector3D* wi);
-
-  /**
-   * Refraction helper
-   */
-  virtual bool refract(const Vector3D wo, Vector3D* wi, double ior);
-
   const HDRImageBuffer* reflectanceMap;
   const HDRImageBuffer* normalMap;
+  virtual ~BSDF() = default;
 
 }; // class BSDF
 
@@ -124,26 +73,7 @@ class DiffuseBSDF : public BSDF {
    * which is stored into the member variable `reflectance`.
    */
   DiffuseBSDF(const Vector3D a) : reflectance(a) { }
-
-  Vector3D f(const Vector3D wo, const Vector3D wi);
-  Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
-  Vector3D get_emission() const { return Vector3D(); }
-  bool is_delta() const { return false; }
-
-  /*
-   * Reflectance is also commonly called the "albedo" of a surface,
-   * which ranges from [0,1] in RGB, representing a range of
-   * total absorption(0) vs. total reflection(1) per color channel.
-   */
   Vector3D reflectance;
-  /*
-   * A sampler object that can be used to obtain
-   * a random Vector3D sampled according to a 
-   * cosine-weighted hemisphere distribution.
-   * See pathtracer/sampler.cpp.
-   */
-  CosineWeightedHemisphereSampler3D sampler;
-
 }; // class DiffuseBSDF
 
 /**
@@ -172,16 +102,9 @@ public:
 
   double D(const Vector3D h);
 
-  Vector3D f(const Vector3D wo, const Vector3D wi);
-  Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
-  Vector3D get_emission() const { return Vector3D(); }
-  bool is_delta() const { return false; }
-
 private:
   Vector3D eta, k;
   double alpha;
-  UniformGridSampler2D sampler;
-  CosineWeightedHemisphereSampler3D cosineHemisphereSampler;
 }; // class MicrofacetBSDF
 
 /**
@@ -191,11 +114,6 @@ class MirrorBSDF : public BSDF {
  public:
 
   MirrorBSDF(const Vector3D reflectance) : reflectance(reflectance) { }
-
-  Vector3D f(const Vector3D wo, const Vector3D wi);
-  Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
-  Vector3D get_emission() const { return Vector3D(); }
-  bool is_delta() const { return true; }
 
 private:
 
@@ -212,11 +130,6 @@ class RefractionBSDF : public BSDF {
 
   RefractionBSDF(const Vector3D transmittance, double roughness, double ior)
     : transmittance(transmittance), roughness(roughness), ior(ior) { }
-
-  Vector3D f(const Vector3D wo, const Vector3D wi);
-  Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
-  Vector3D get_emission() const { return Vector3D(); }
-  bool is_delta() const { return true; }
 
  private:
 
@@ -237,11 +150,6 @@ class GlassBSDF : public BSDF {
     transmittance(transmittance), reflectance(reflectance),
     roughness(roughness), ior(ior) { }
 
-  Vector3D f(const Vector3D wo, const Vector3D wi);
-  Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
-  Vector3D get_emission() const { return Vector3D(); }
-  bool is_delta() const { return true; }
-
  private:
 
   double ior;
@@ -259,13 +167,7 @@ class EmissionBSDF : public BSDF {
 
   EmissionBSDF(const Vector3D radiance) : radiance(radiance) { }
 
-  Vector3D f(const Vector3D wo, const Vector3D wi);
-  Vector3D sample_f(const Vector3D wo, Vector3D* wi, double* pdf);
-  Vector3D get_emission() const { return radiance; }
-  bool is_delta() const { return false; }
-
   Vector3D radiance;
-  CosineWeightedHemisphereSampler3D sampler;
 
 }; // class EmissionBSDF
 
@@ -278,25 +180,60 @@ enum CudaBSDFType {
   CudaBSDFType_Emission
 };
 
-struct CudaBSDF {
-  uint16_t idx;
-  CudaBSDFType type;
-};
-
 struct CudaDiffuseBSDF {
   Vector3D reflectance;
 
-  HOST_DEVICE CudaDiffuseBSDF(const DiffuseBSDF *bsdf) : reflectance(bsdf->reflectance) {}
-  DEVICE Vector3D f(const Vector3D wo, const Vector3D wi);
+  DEVICE Vector3D f(const Vector3D wo, const Vector3D wi) const;
   DEVICE Vector3D get_emission() const { return Vector3D(); }
 };
 
 struct CudaEmissionBSDF {
   Vector3D radiance;
 
-  HOST_DEVICE CudaEmissionBSDF(const EmissionBSDF *bsdf) : radiance(bsdf->radiance) {}
-  DEVICE Vector3D f(const Vector3D wo, const Vector3D wi);
+  DEVICE Vector3D f(const Vector3D wo, const Vector3D wi) const;
   DEVICE Vector3D get_emission() const { return radiance; }
+};
+
+union BSDFData {
+  BSDFData() {}
+  CudaDiffuseBSDF diffuse;
+  CudaEmissionBSDF emission;
+};
+struct CudaBSDF {
+  CudaBSDFType type;
+  BSDFData bsdf;
+  CudaBSDF() : type(CudaBSDFType_Diffuse) {}
+  CudaBSDF(const CudaBSDF& b) : type(b.type) {
+    switch (type) {
+      case CudaBSDFType_Diffuse:
+        bsdf.diffuse = b.bsdf.diffuse;
+        break;
+      case CudaBSDFType_Emission:
+        bsdf.emission = b.bsdf.emission;
+        break;
+      default:
+        break;
+    }
+  }
+  DEVICE Vector3D f(const Vector3D wo, const Vector3D wi) const {
+    switch (type) {
+      case CudaBSDFType_Diffuse:
+        return bsdf.diffuse.f(wo, wi);
+      case CudaBSDFType_Emission:
+        return bsdf.emission.f(wo, wi);
+      default:
+        return Vector3D();
+    }
+  }
+
+  DEVICE Vector3D get_emission() const {
+    switch (type) {
+      case CudaBSDFType_Emission:
+        return bsdf.emission.get_emission();
+      default:
+        return Vector3D();
+    }
+  }
 };
 
 

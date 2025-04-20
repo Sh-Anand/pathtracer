@@ -1,7 +1,6 @@
 #ifndef CGL_MATRIX4X4_H
 #define CGL_MATRIX4X4_H
 
-#include "CGL.h"
 #include "vector4D.h"
 
 #include <iosfwd>

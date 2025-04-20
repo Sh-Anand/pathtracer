@@ -146,8 +146,6 @@
 #include <utility>
 #include <iostream>
 
-#include "CGL/CGL.h"  // Standard 462 Vectors, etc.
-
 #include "scene/collada/polymesh_info.h"
 
 using namespace std;

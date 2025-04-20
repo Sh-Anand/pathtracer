@@ -1,7 +1,6 @@
 #ifndef CGL_COLLADA_MATERIALINFO_H
 #define CGL_COLLADA_MATERIALINFO_H
 
-#include "CGL/color.h"
 #include "collada_info.h"
 
 namespace CGL {

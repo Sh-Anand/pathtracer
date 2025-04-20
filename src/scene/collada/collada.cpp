@@ -32,25 +32,11 @@ inline Vector3D spectrum_from_string ( string Vector3D_string ) {
   Vector3D s;
 
   stringstream ss (Vector3D_string);
-  ss >> s.r;
-  ss >> s.g;
-  ss >> s.b;
+  ss >> s.x;
+  ss >> s.y;
+  ss >> s.z;
 
   return s;
-
-}
-
-inline Color color_from_string ( string color_string ) {
-
-  Color c;
-
-  stringstream ss (color_string);
-  ss >> c.r;
-  ss >> c.g;
-  ss >> c.b;
-  //ss >> c.a;
-
-  return c;
 
 }
 

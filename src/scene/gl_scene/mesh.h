@@ -1,10 +1,10 @@
 #ifndef CGL_GLSCENE_MESH_H
 #define CGL_GLSCENE_MESH_H
 
-#include "scene.h"
-
+#include "scene/primitive.h"
 #include "scene/collada/polymesh_info.h"
 #include "util/halfEdgeMesh.h"
+#include "scene/gl_scene/scene.h"
 
 namespace CGL { namespace GLScene {
 
@@ -31,6 +31,7 @@ class MeshFeature {
   Vector3D bCoords;         ///< Barycentric coordinates of selection
   HalfedgeElement* element; ///< element selected
   double w;                 ///< depth value of selection
+  
 };
 
 
@@ -39,14 +40,9 @@ class Mesh : public SceneObject {
 
   Mesh(Collada::PolymeshInfo& polyMesh, const Matrix4x4& transform);
 
-  ~Mesh();
-
   BBox get_bbox();
 
   BSDF *get_bsdf();
-  SceneObjects::SceneObject *get_static_object();
-
- private:
 
   /**
    * Returns w for collision, and writes barycentric coordinates to baryPtr.
@@ -62,18 +58,18 @@ class Mesh : public SceneObject {
                                   const Vector2D& B, const Vector2D& C,
                                   float *uPtr, float *vPtr);
 
-  /**
-   * Given that hoveredFeature is pointing to a face, determines which
-	 * subfeature (vertex, edge, halfedge, face) it's pointing to within
-	 * that face.
-   */
-  void choose_hovered_subfeature();
+  void get_triangles(vector<CGL::SceneObjects::CudaPrimitive>& triangles, uint32_t bsdf_idx) const;
 
   // halfEdge mesh
   HalfedgeMesh mesh;
 
   // material
   BSDF* bsdf;
+
+  Vector3D *positions;  ///< position array
+  Vector3D *normals;    ///< normal array
+
+  vector<size_t> indices;  ///< triangles defined by indices
 };
 
 } // namespace GLScene

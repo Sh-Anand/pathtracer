@@ -1,12 +1,13 @@
 #ifndef CGL_IMAGE_H
 #define CGL_IMAGE_H
 
-#include "CGL/color.h"
 #include "vector3D.h"
 
 #include <vector>
 #include <string.h>
 #include <cassert>
+
+#include "util/cuda_defs.h"
 
 namespace CGL {
 
@@ -50,13 +51,14 @@ struct ImageBuffer {
    * \param x row of the pixel
    * \param y column of the pixel
    */
-  void update_pixel(const Color& c, size_t x, size_t y) {
+  void update_pixel(const Vector3D& c, size_t x, size_t y) {
+    // x y z = r g b
     assert(x < w);
     assert(y < h);
     uint32_t p = 0;
-    p |= ((uint32_t) (clamp(0.f, 1.f, c.b) * 255)) << 16;
-    p |= ((uint32_t) (clamp(0.f, 1.f, c.g) * 255)) << 8;
-    p |= ((uint32_t) (clamp(0.f, 1.f, c.r) * 255));
+    p |= ((uint32_t) (clamp_T(0., 1., c.x) * 255)) << 16;
+    p |= ((uint32_t) (clamp_T(0., 1., c.y) * 255)) << 8;
+    p |= ((uint32_t) (clamp_T(0., 1., c.z) * 255));
     p |= 0xFF000000;
     data[x + y * w] = p;
   }
@@ -164,10 +166,10 @@ struct HDRImageBuffer {
         float l = s.illum();
         s *= key / avg;
         s *= ((l + 1) / (wht * wht)) / (l + 1);
-        float r = pow(s.r * exposure, one_over_gamma);
-        float g = pow(s.g * exposure, one_over_gamma);
-        float b = pow(s.b * exposure, one_over_gamma);
-        target.update_pixel(Color(r, g, b), x, y);
+        float r = pow(s.x * exposure, one_over_gamma);
+        float g = pow(s.y * exposure, one_over_gamma);
+        float b = pow(s.z * exposure, one_over_gamma);
+        target.update_pixel(Vector3D(r, g, b), x, y);
       }
     }
   }
@@ -184,10 +186,10 @@ struct HDRImageBuffer {
     for (size_t y = y0; y < y1; ++y) {
       for (size_t x = x0; x < x1; ++x) {
         const Vector3D& s = data[x + y * w];
-        float r = std::max(0.0, std::min(pow(s.r * exposure, one_over_gamma), 1.0));
-        float g = std::max(0.0, std::min(pow(s.g * exposure, one_over_gamma), 1.0));
-        float b = std::max(0.0, std::min(pow(s.b * exposure, one_over_gamma), 1.0));
-        target.update_pixel(Color(r, g, b), x, y);
+        float r = std::max(0.0, std::min(pow(s.x * exposure, one_over_gamma), 1.0));
+        float g = std::max(0.0, std::min(pow(s.y * exposure, one_over_gamma), 1.0));
+        float b = std::max(0.0, std::min(pow(s.z * exposure, one_over_gamma), 1.0));
+        target.update_pixel(Vector3D(r, g, b), x, y);
       }
     }
   }

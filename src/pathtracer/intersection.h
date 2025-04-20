@@ -8,38 +8,14 @@
 #include "pathtracer/bsdf.h"
 
 namespace CGL {
-    
-namespace SceneObjects {
-
-class Primitive;
-
-/**
- * A record of an intersection point which includes the time of intersection
- * and other information needed for shading
- */
-struct Intersection {
-
-  Intersection() : t (INFINITY), primitive(NULL), bsdf(NULL) { }
-
-  double t;    ///< time of intersection
-
-  const Primitive* primitive;  ///< the primitive intersected
-
-  Vector3D n;  ///< normal at point of intersection
-
-  BSDF* bsdf; ///< BSDF of the surface at point of intersection
-
-  // More to follow.
-};
 
 struct CudaIntersection {
   DEVICE CudaIntersection() : t (INFINITY) { }
   double t;
   Vector3D n;
-  CudaBSDF bsdf;
+  uint32_t bsdf_idx;
 };
 
-} // namespace SceneObjects
 } // namespace CGL
 
 #endif // CGL_INTERSECT_H

@@ -4,8 +4,7 @@
 #include <map>
 #include <string>
 
-#include "CGL/CGL.h"
-#include "CGL/tinyxml2.h"
+#include "util/tinyxml2.h"
 
 #include "camera_info.h"
 #include "collada_info.h"

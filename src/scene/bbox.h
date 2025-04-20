@@ -26,8 +26,8 @@ struct BBox {
    * points.
    */
   BBox() {
-    max = Vector3D(-INF_D, -INF_D, -INF_D);
-    min = Vector3D( INF_D,  INF_D,  INF_D);
+    max = Vector3D(-INFINITY, -INFINITY, -INFINITY);
+    min = Vector3D( INFINITY,  INFINITY,  INFINITY);
     extent = max - min;
   }
 

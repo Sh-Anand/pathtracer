@@ -1,7 +1,6 @@
 #ifndef CGL_VECTOR4D_H
 #define CGL_VECTOR4D_H
 
-#include "CGL.h"
 #include "vector3D.h"
 
 #include <ostream>
@@ -16,14 +15,7 @@ class Vector4D {
 public:
 
   // components
-  union {
-    struct {
-      double x, y, z, w;
-    };
-    struct {
-      double r, g, b, a;
-    };
-  };
+  double x, y, z, w;
 
   /**
    * Constructor.

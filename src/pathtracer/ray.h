@@ -1,7 +1,6 @@
 #ifndef CGL_RAY_H
 #define CGL_RAY_H
 
-#include "CGL/CGL.h"
 #include "util/vector3D.h"
 #include "util/matrix4x4.h"
 

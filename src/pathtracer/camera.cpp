@@ -4,7 +4,6 @@
 #include <sstream>
 #include <fstream>
 
-#include "CGL/misc.h"
 #include "util/vector2D.h"
 #include "util/vector3D.h"
 
@@ -112,7 +111,7 @@ void Camera::move_forward(const double dist) {
  * This function rotates the camera position
  */
 void Camera::rotate_by(const double dPhi, const double dTheta) {
-  phi = clamp(phi + dPhi, 0.0, (double) PI);
+  phi = clamp_T(phi + dPhi, 0.0, (double) PI);
   theta += dTheta;
   compute_position();
 }

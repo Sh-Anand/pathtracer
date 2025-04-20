@@ -6,49 +6,86 @@
 
 namespace CGL { namespace SceneObjects {
 
-/**
- * The abstract base class primitive is the bridge between geometry processing
- * and the shading subsystem. As such, its interface contains methods related
- * to both.
- */
-class Primitive {
- public:
+struct CudaSphere {
+    CudaSphere(const Vector3D& o, double r) : o(o), r(r), r2(r * r) {}
+    DEVICE Vector3D normal(Vector3D p) const {
+      return (p - o).unit();
+    }
+    DEVICE bool intersect(Ray& r, CudaIntersection* i);
+    BBox get_bbox() const {
+      return BBox(o - Vector3D(r,r,r), o + Vector3D(r,r,r));
+    }
+    
+    Vector3D o; ///< origin of the sphere
+    double r;   ///< radius
+    double r2;  ///< radius squared
+};
 
-  /**
-   * Get the world space bounding box of the primitive.
-   * \return world space bounding box of the primitive
-   */
-  virtual BBox get_bbox() const = 0;
+struct CudaTriangle {
+  DEVICE bool intersect(Ray& r, CudaIntersection* i);
+  BBox get_bbox() const { 
+    BBox bbox(p1);
+    bbox.expand(p2);
+    bbox.expand(p3);
+    return bbox;
+  }
 
-  /**
-   * Ray - Primitive intersection 2.
-   * Check if the given ray intersects with the primitive, if so, the input
-   * intersection data is updated to contain intersection information for the
-   * point of intersection.
-   * \param r ray to test intersection with
-   * \param i address to store intersection info
-   * \return true if the given ray intersects with the primitive,
-             false otherwise
-   */
-  virtual bool intersect(Ray& r, Intersection* i) const = 0;
-
-  /**
-   * Get BSDF.
-   * Return the BSDF of the surface material of the primitive.
-   * Note that the BSDFs are not stored in each primitive but in the
-   * SceneObjects the primitive belongs to.
-   */
-  virtual BSDF* get_bsdf() const = 0;
+  Vector3D p1, p2, p3;
+  Vector3D n1, n2, n3;  
 };
 
 enum CudaPrimitiveType {
   TRIANGLE = 0,
   SPHERE = 1,
 };
+
+union PrimitiveData {
+  PrimitiveData() {}
+  CudaTriangle triangle;
+  CudaSphere sphere;
+};
+
 struct CudaPrimitive {
-  CudaPrimitive(uint16_t idx, CudaPrimitiveType type) : idx(idx), type(type) {}
-  uint16_t idx;
+  PrimitiveData primitive;
   CudaPrimitiveType type;
+  uint16_t bsdf_idx;
+
+  CudaPrimitive() : type(TRIANGLE), bsdf_idx(0) {}
+  CudaPrimitive(const CudaPrimitive& p) : type(p.type), bsdf_idx(p.bsdf_idx) {
+    switch (type) {
+      case TRIANGLE:
+        primitive.triangle = p.primitive.triangle;
+        break;
+      case SPHERE:
+        primitive.sphere = p.primitive.sphere;
+        break;
+      default:
+        break;
+    }
+  }
+
+  DEVICE bool intersect(Ray& r, CudaIntersection* isect) {
+    isect->bsdf_idx = bsdf_idx;
+    switch (type) {
+      case TRIANGLE:
+        return primitive.triangle.intersect(r, isect);
+      case SPHERE:
+        return primitive.sphere.intersect(r, isect);
+      default:
+        return false;
+    }
+  }
+
+  BBox get_bbox() const {
+    switch (type) {
+      case TRIANGLE:
+        return primitive.triangle.get_bbox();
+      case SPHERE:
+        return primitive.sphere.get_bbox();
+      default:
+        return BBox();
+    }
+  }
 };
 
 

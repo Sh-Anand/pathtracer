@@ -22,39 +22,24 @@ endif()
 set(APPLICATION_SOURCE
 
     # Scene Object & Structure
-    src/scene/sphere.cpp
-    src/scene/sphere.cu
-    src/scene/triangle.cpp
-    src/scene/triangle.cu
-    src/scene/light.cpp
-    src/scene/light.cu
     src/scene/bvh.cpp
     src/scene/bvh.cu
-    src/scene/bbox.cpp
     src/scene/bbox.cu
+    src/scene/primitive.cu
 
     # Pathtracer
     src/pathtracer/camera.cpp
     src/pathtracer/camera.cu
-    src/pathtracer/bsdf.cpp
     src/pathtracer/bsdf.cu
     src/pathtracer/pathtracer.cpp
     src/pathtracer/pathtracer.cu
 
-    src/scene/object.cpp
-
     # Collada Parser
     src/scene/collada/collada.cpp
-    src/scene/collada/camera_info.cpp
-    src/scene/collada/light_info.cpp
-    src/scene/collada/sphere_info.cpp
-    src/scene/collada/polymesh_info.cpp
-    src/scene/collada/material_info.cpp
 
     # Dynamic Scene
     src/scene/gl_scene/mesh.cpp
     src/scene/gl_scene/scene.cpp
-    src/scene/gl_scene/sphere.cpp
 
     # MeshEdit
     src/util/halfEdgeMesh.cpp
@@ -62,14 +47,12 @@ set(APPLICATION_SOURCE
     src/util/matrix3x3.cu
     src/util/matrix4x4.cpp
     src/util/reservoir.cu
+    src/util/tinyxml2.cpp
     src/util/vector2D.cpp
     src/util/vector3D.cpp
     src/util/vector4D.cpp
 
-    src/pathtracer/sampler.cpp
     src/pathtracer/advanced_bsdf.cpp
-    src/scene/environment_light.cpp
-    src/pathtracer/camera_lens.cpp
     src/pathtracer/raytraced_renderer.cpp
     src/pathtracer/raytraced_renderer.cu
     src/pathtracer/ray.cu
@@ -94,34 +77,17 @@ set(APPLICATION_HEADERS
     src/scene/collada/polymesh_info.h
     src/scene/collada/sphere_info.h
     # Dynamic Scene
-    src/scene/gl_scene/ambient_light.h
-    src/scene/gl_scene/area_light.h
-    src/scene/gl_scene/directional_light.h
-    src/scene/gl_scene/environment_light.h
-    src/scene/gl_scene/material.h
     src/scene/gl_scene/mesh.h
-    src/scene/gl_scene/point_light.h
     src/scene/gl_scene/scene.h
-    src/scene/gl_scene/sphere.h
-    src/scene/gl_scene/spot_light.h
     # Scene Object & Structure
-    src/scene/aggregate.h
     src/scene/bbox.h
     src/scene/bvh.h
-    src/scene/environment_light.h
     src/scene/light.h
-    src/scene/object.h
     src/scene/primitive.h
-    src/scene/scene.h
-    src/scene/sphere.h
-    src/scene/triangle.h
     # MeshEdit
     src/util/gpu_rand.h
     src/util/halfEdgeMesh.h
     src/util/image.h
-    src/util/mutablePriorityQueue.h
-    src/util/random_util.h
-    src/util/work_queue.h
     src/util/matrix3x3.h
     src/util/matrix4x4.h
     src/util/reservoir.h
@@ -135,7 +101,6 @@ set(APPLICATION_HEADERS
     src/pathtracer/pathtracer.h
     src/pathtracer/ray.h
     src/pathtracer/raytraced_renderer.h
-    src/pathtracer/sampler.h
     # misc
     src/util/lodepng.h
     # Application
@@ -145,21 +110,17 @@ set(APPLICATION_HEADERS
 add_executable(pathtracer ${APPLICATION_SOURCE} ${APPLICATION_HEADERS})
 target_include_directories(pathtracer PUBLIC src)
 
-set(CGL_INCLUDE_DIRS CGL/include)
-
 #-------------------------------------------------------------------------------
 # Find dependencies
 #-------------------------------------------------------------------------------
-add_subdirectory(CGL)
-target_include_directories(pathtracer PUBLIC ${CGL_INCLUDE_DIRS})
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CGL_CXX_FLAGS}")
+target_include_directories(pathtracer PUBLIC)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
 set(OpenGL_GL_PREFERENCE LEGACY)
 find_package(OpenGL REQUIRED)
 
 target_link_libraries(pathtracer
     PUBLIC
-    CGL
     OpenGL::GL
     OpenGL::GLU
     pthread

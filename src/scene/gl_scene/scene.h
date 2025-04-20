@@ -5,11 +5,7 @@
 #include <vector>
 #include <iostream>
 
-#include "CGL/CGL.h"
-#include "CGL/color.h"
-
 #include "scene/bbox.h"
-#include "scene/scene.h"
 
 #include "pathtracer/ray.h"
 
@@ -34,13 +30,6 @@ public:
    * to be the smallest possible bbox, in case that's difficult to compute.
    */
   virtual BBox get_bbox() = 0;
-
-  /**
-   * Converts this object to an immutable, raytracer-friendly form. Passes in a
-   * local-space-to-world-space transformation matrix, because the raytracer
-   * expects all the objects to be
-   */
-  virtual SceneObjects::SceneObject *get_static_object() = 0;
 };
 
 
@@ -49,7 +38,6 @@ public:
  */
 class SceneLight {
  public:
-  virtual SceneObjects::SceneLight *get_static_light() const = 0;
 };
 
 /**
@@ -70,11 +58,6 @@ class Scene {
    */
   BBox get_bbox();
 
-  /**
-   * Builds a static scene that's equivalent to the current scene and is easier
-   * to use in raytracing, but doesn't allow modifications.
-   */
-  SceneObjects::Scene *get_static_scene();
 
   std::vector<SceneObject*> objects;
   std::vector<SceneLight*> lights;

@@ -2,27 +2,18 @@
 
 #include <cuda_runtime.h>
 
-#include "scene/sphere.h"
-#include "scene/triangle.h"
 #include "scene/light.h"
 
 using namespace CGL::SceneObjects;
 
 namespace CGL {
 
-__global__ void kernel_raytrace(PathTracer* pt) {
+__global__ void kernel_raytrace_temporal(PathTracer* pt) {
     assert (pt != nullptr);
     size_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
     size_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
     
     pt->raytrace_pixel(x,y);
-}
-
-__global__ void kernel_temporal_sample(PathTracer* pt) {
-    assert (pt != nullptr);
-    size_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
-    size_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
-    
     pt->temporal_resampling(x,y);
 }
 
@@ -32,13 +23,6 @@ __global__ void kernel_spatial_sample(PathTracer* pt) {
     size_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
     
     pt->spatial_resampling(x,y);
-}
-
-__global__ void kernel_render_final(PathTracer* pt) {
-    assert (pt != nullptr);
-    size_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
-    size_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
-    
     pt->render_final_sample(x,y);
 }
 
@@ -46,7 +30,7 @@ void RaytracedRenderer::gpu_raytrace() {
     size_t width = frameBuffer.w;
     size_t height = frameBuffer.h;
 
-    cout << "Raytracing on GPU..." << endl;
+    std::cout << "Raytracing on GPU..." << std::endl;
 
 
     dim3 blockDim(16, 16);
@@ -55,32 +39,26 @@ void RaytracedRenderer::gpu_raytrace() {
         (height + blockDim.y - 1) / blockDim.y
     );
     
-    cout << "Frame size: " << width << " x " << height << endl;
-    cout << "BlockDim: " << blockDim.x << " x " << blockDim.y << endl;
-    cout << "GridDim: " << gridDim.x << " x " << gridDim.y << endl;
+    std::cout << "Frame size: " << width << " x " << height << std::endl;
+    std::cout << "BlockDim: " << blockDim.x << " x " << blockDim.y << std::endl;
+    std::cout << "GridDim: " << gridDim.x << " x " << gridDim.y << std::endl;
 
     // cudaDeviceSetLimit(cudaLimitStackSize, 8192);
 
-    Timer timer;
-    timer.start();
+    std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now();
 
-    kernel_raytrace<<<gridDim, blockDim>>>(pt_cuda);
-    CUDA_ERR(cudaGetLastError());
-    CUDA_ERR(cudaDeviceSynchronize());
-    kernel_temporal_sample<<<gridDim, blockDim>>>(pt_cuda);
+
+    kernel_raytrace_temporal<<<gridDim, blockDim>>>(pt_cuda);
     CUDA_ERR(cudaGetLastError());
     CUDA_ERR(cudaDeviceSynchronize());
     kernel_spatial_sample<<<gridDim, blockDim>>>(pt_cuda);
     CUDA_ERR(cudaGetLastError());
     CUDA_ERR(cudaDeviceSynchronize());
-    kernel_render_final<<<gridDim, blockDim>>>(pt_cuda);
-    CUDA_ERR(cudaGetLastError());
-    CUDA_ERR(cudaDeviceSynchronize());
 
-    timer.stop();
+    std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
 
-    cout << "Raytracing on GPU done!" << endl;
-    cout << "Time: " << timer.duration() << " sec" << endl;
+    std::cout << "Raytracing on GPU done!" << std::endl;
+    std::cout << "Time: " << (std::chrono::duration<double>(t1 - t0)).count() << " sec" << std::endl;
     
     PathTracer *pt_tmp = (PathTracer*) malloc(sizeof(PathTracer));
     CUDA_ERR(cudaMemcpy(pt_tmp, pt_cuda, sizeof(PathTracer), cudaMemcpyDeviceToHost));
@@ -93,98 +71,30 @@ void RaytracedRenderer::gpu_raytrace() {
     free(pt_tmp);
 }
 
-void RaytracedRenderer::build_accel() {
-
-  // collect primitives //
-  fprintf(stdout, "[PathTracer] Collecting primitives... "); fflush(stdout);
-  timer.start();
-  vector<Primitive *> primitives;
-  for (SceneObject *obj : scene->objects) {
-    const vector<Primitive *> &obj_prims = obj->get_primitives();
-    primitives.reserve(primitives.size() + obj_prims.size());
-    primitives.insert(primitives.end(), obj_prims.begin(), obj_prims.end());
-  }
-  timer.stop();
-  fprintf(stdout, "Done! (%.4f sec)\n", timer.duration());
-
+void RaytracedRenderer::build_accel(std::vector<CudaPrimitive> &primitives) {
   // build BVH //
   fprintf(stdout, "[PathTracer] Building BVH from %lu primitives... ", primitives.size()); 
   fflush(stdout);
-  timer.start();
+  std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now();
 
-  bvh = new BVHAccel(primitives);
-  bvh_cuda = new BVHCuda(bvh);
-  timer.stop();
-  fprintf(stdout, "Done! (%.4f sec)\n", timer.duration());
+  bvh_cuda = new BVHCuda(primitives);
+  std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
+  fprintf(stdout, "Done! (%.4f sec)\n", (std::chrono::duration<double>(t1 - t0)).count());
 }
 
-void RaytracedRenderer::build_lights() {
-  // Build lights:
-  lights.clear();
-  if (light_data)
-    cudaFree(light_data);
+void RaytracedRenderer::copy_host_device_pt(std::vector<CudaLight> &lights, std::vector<CudaBSDF> &bsdfs) {
+    std::cout << "Copying PathTracer to GPU..." << std::endl;
+    std::cout << "BSDFs size: " << bsdfs.size() << std::endl;
 
-  light_data = new CudaLightBundle();
-  light_data->num_directional_lights = 0;
-  light_data->num_point_lights = 0;
-  light_data->num_area_lights = 0;
+    cudaMalloc(&pt->lights, lights.size() * sizeof(CudaLight));
+    cudaMemcpy(pt->lights, lights.data(), lights.size() * sizeof(CudaLight), cudaMemcpyHostToDevice);
 
-  std::vector<CudaDirectionalLight> directional_lights;
-  std::vector<CudaPointLight> point_lights;
-  std::vector<CudaAreaLight> area_lights;
+    cudaMalloc(&pt->bsdfs, bsdfs.size() * sizeof(CudaBSDF));
+    cudaMemcpy(pt->bsdfs, bsdfs.data(), bsdfs.size() * sizeof(CudaBSDF), cudaMemcpyHostToDevice);
 
-  for (size_t i = 0; i < scene->lights.size(); i++) {
-    SceneLight *light = scene->lights[i];
-    CudaLight cuda_light;
-    if (dynamic_cast<DirectionalLight *>(light)) {
-      directional_lights.push_back(CudaDirectionalLight(*(DirectionalLight *) light));
-      cuda_light.type = CudaLightType_Directional;
-      cuda_light.idx = light_data->num_directional_lights++;
-    } else if (dynamic_cast<PointLight *>(light)) {
-      point_lights.push_back(CudaPointLight(*(PointLight *) light));
-      cuda_light.type = CudaLightType_Point;
-      cuda_light.idx = light_data->num_point_lights++;
-    } else if (dynamic_cast<AreaLight *>(light)) {
-      area_lights.push_back(CudaAreaLight(*(AreaLight *) light));
-      cuda_light.type = CudaLightType_Area;
-      cuda_light.idx = light_data->num_area_lights++;
-    } else {
-      std::cout<< "Here?";
-      std::cerr << "Unknown light type" << std::endl;
-      exit(1);
-    }
-    lights.push_back(cuda_light);
-  }
+    pt->num_lights = lights.size();
+    pt->num_bsdfs = bsdfs.size();
 
-  CudaLightBundle *light_data_cuda = new CudaLightBundle();
-  // copy lights to pt
-  cudaMalloc(&pt->lights, lights.size() * sizeof(CudaLight));
-
-  light_data_cuda->num_directional_lights = light_data->num_directional_lights;
-  light_data_cuda->num_point_lights = light_data->num_point_lights;
-  light_data_cuda->num_area_lights = light_data->num_area_lights;
-  cudaMalloc(&light_data_cuda->directional_lights, light_data->num_directional_lights * sizeof(CudaDirectionalLight));
-  cudaMalloc(&light_data_cuda->point_lights, light_data->num_point_lights * sizeof(CudaPointLight));
-  cudaMalloc(&light_data_cuda->area_lights, light_data->num_area_lights * sizeof(CudaAreaLight));
-
-  cudaMemcpy(pt->lights, lights.data(), lights.size() * sizeof(CudaLight), cudaMemcpyHostToDevice);
-  cudaMemcpy(light_data_cuda->directional_lights, directional_lights.data(), light_data->num_directional_lights * sizeof(CudaDirectionalLight), cudaMemcpyHostToDevice);
-  cudaMemcpy(light_data_cuda->point_lights, point_lights.data(), light_data->num_point_lights * sizeof(CudaPointLight), cudaMemcpyHostToDevice);
-  cudaMemcpy(light_data_cuda->area_lights, area_lights.data(), light_data->num_area_lights * sizeof(CudaAreaLight), cudaMemcpyHostToDevice);
-
-  cudaMalloc(&pt->light_data, sizeof(CudaLightBundle));
-  cudaMemcpy(pt->light_data, light_data_cuda, sizeof(CudaLightBundle), cudaMemcpyHostToDevice);
-
-  free (light_data_cuda);
-
-  pt->num_lights = lights.size();
-
-  std::cout << "CudaLights: " << light_data->num_directional_lights << " directional lights, "
-            << light_data->num_point_lights << " point lights, "
-            << light_data->num_area_lights << " area lights" << std::endl;
-}
-
-void RaytracedRenderer::copy_host_device_pt() {
     cudaMalloc(&pt->bvh, sizeof(BVHCuda));
     cudaMemcpy(pt->bvh, bvh_cuda, sizeof(BVHCuda), cudaMemcpyHostToDevice);
 

@@ -22,7 +22,24 @@ namespace LightType {
 class LightInfo : public Instance {
  public:
   
-  LightInfo();
+  LightInfo() {
+
+  light_type = LightType::NONE;
+
+  spectrum = Vector3D(1,1,1);
+
+  position  = Vector3D(0, 0,  0);  // COLLADA default
+  direction = Vector3D(0, 0, -1);  // COLLADA default
+  up = Vector3D(0,1,0);            // CGL default
+
+  float falloff_deg = 45;
+  float falloff_exp = 0.15;
+
+  constant_att = 1;
+  linear_att = 0;
+  quadratic_att = 0;
+
+  }
 
   LightType::T light_type;  ///< type 
 

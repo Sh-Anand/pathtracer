@@ -3,12 +3,17 @@
 #include <cassert>
 #include <sstream>
 
-#include "scene/scene.h"
 #include "scene/light.h"
 
 #include "pathtracer/bsdf.h"
 
+#include <unordered_map>
+
 using std::ostringstream;
+using std::unordered_map;
+
+using CGL::SceneObjects::CudaPrimitive;
+using CGL::SceneObjects::CudaTriangle;
 
 namespace CGL { namespace GLScene {
 
@@ -38,6 +43,33 @@ Mesh::Mesh(Collada::PolymeshInfo& polyMesh, const Matrix4x4& transform) {
   } else {
     bsdf = new DiffuseBSDF(Vector3D(0.5f,0.5f,0.5f));
   }
+
+  unordered_map<const Vertex *, int> vertexLabels;
+  vector<const Vertex *> verts;
+
+  size_t vertexI = 0;
+  for (VertexCIter it = mesh.verticesBegin(); it != mesh.verticesEnd(); it++) {
+    const Vertex *v = &*it;
+    verts.push_back(v);
+    vertexLabels[v] = vertexI;
+    vertexI++;
+  }
+
+  positions = new Vector3D[vertexI];
+  normals   = new Vector3D[vertexI];
+  for (int i = 0; i < vertexI; i++) {
+    positions[i] = verts[i]->position;
+    normals[i]   = verts[i]->normal;
+  }
+
+  for (FaceCIter f = mesh.facesBegin(); f != mesh.facesEnd(); f++) {
+    HalfedgeCIter h = f->halfedge();
+    indices.push_back(vertexLabels[&*h->vertex()]);
+    indices.push_back(vertexLabels[&*h->next()->vertex()]);
+    indices.push_back(vertexLabels[&*h->next()->next()->vertex()]);
+  }
+
+  this->bsdf = bsdf;
 }
 
 BBox Mesh::get_bbox() {
@@ -46,6 +78,24 @@ BBox Mesh::get_bbox() {
     bbox.expand(it->position);
   }
   return bbox;
+}
+
+void Mesh::get_triangles(vector<CudaPrimitive>& primitives, uint32_t bsdf_idx) const {
+  size_t num_triangles = indices.size() / 3;
+  for (size_t i = 0; i < num_triangles; ++i) {
+
+    CudaPrimitive primitive {};
+    primitive.type = CGL::SceneObjects::CudaPrimitiveType::TRIANGLE;
+    primitive.primitive.triangle = CudaTriangle {
+      positions[indices[i * 3 + 0]],
+      positions[indices[i * 3 + 1]],
+      positions[indices[i * 3 + 2]],
+      normals[indices[i * 3 + 0]],
+      normals[indices[i * 3 + 1]],
+      normals[indices[i * 3 + 2]]};
+    primitive.bsdf_idx = bsdf_idx;
+    primitives.push_back(primitive);
+  }
 }
 
 double Mesh::triangle_selection_test_4d(const Vector2D& p, const Vector4D& A,
@@ -99,10 +149,6 @@ bool Mesh::triangle_selection_test_2d(const Vector2D& p, const Vector2D& A,
 
 BSDF* Mesh::get_bsdf() {
   return bsdf;
-}
-
-SceneObjects::SceneObject *Mesh::get_static_object() {
-  return new SceneObjects::Mesh(mesh, bsdf);
 }
 
 

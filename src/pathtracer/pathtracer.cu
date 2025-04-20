@@ -17,18 +17,12 @@ DEVICE __inline__ void cosine_weighted_hemisphere_sample_3d(RNGState &rand_state
   *wi = Vector3D(r*cos(theta), r*sin(theta), sqrt(1-Xi1));
 }
 
-DEVICE __inline__ Vector3D sample_f(CudaDiffuseBSDF *bsdf, const Vector3D wo, Vector3D *wi, double *pdf, RNGState &rand_state) {
+DEVICE __inline__ Vector3D sample_f(const CudaBSDF *bsdf, const Vector3D wo, Vector3D *wi, double *pdf, RNGState &rand_state) {
   cosine_weighted_hemisphere_sample_3d(rand_state, wi, pdf);
   return bsdf->f(wo, *wi);
 }
 
-DEVICE __inline__ Vector3D sample_f(CudaEmissionBSDF *bsdf, const Vector3D wo, Vector3D *wi, double *pdf, RNGState &rand_state) {
-  *pdf = 1.0 / PI;
-  cosine_weighted_hemisphere_sample_3d(rand_state, wi, pdf);
-  return Vector3D();
-}
-
-DEVICE __inline__ Vector3D sample_L(CudaDirectionalLight *light, const Vector3D p, Vector3D* wi,
+DEVICE __inline__ Vector3D sample_L(const CudaDirectionalLight *light, const Vector3D p, Vector3D* wi,
                                     double* distToLight, double* pdf) {
   *wi = light->dirToLight;
   *distToLight = INFINITY;
@@ -36,7 +30,7 @@ DEVICE __inline__ Vector3D sample_L(CudaDirectionalLight *light, const Vector3D 
   return light->radiance;
 }
 
-DEVICE __inline__ Vector3D sample_L(CudaPointLight *light, const Vector3D p, Vector3D* wi,
+DEVICE __inline__ Vector3D sample_L(const CudaPointLight *light, const Vector3D p, Vector3D* wi,
                              double* distToLight,
                              double* pdf) {
   Vector3D d = light->position - p;
@@ -46,7 +40,7 @@ DEVICE __inline__ Vector3D sample_L(CudaPointLight *light, const Vector3D p, Vec
   return light->radiance;
 }
 
-DEVICE __inline__ Vector3D sample_L(CudaAreaLight *light, const Vector3D p, Vector3D* wi, 
+DEVICE __inline__ Vector3D sample_L(const CudaAreaLight *light, const Vector3D p, Vector3D* wi, 
                              double* distToLight, double* pdf, RNGState &rand_state) {
   Vector2D sample = Vector2D(next_double(rand_state), next_double(rand_state)) - Vector2D(0.5f, 0.5f);
   Vector3D d = light->position + sample.x * light->dim_x + sample.y * light->dim_y - p;
@@ -59,31 +53,20 @@ DEVICE __inline__ Vector3D sample_L(CudaAreaLight *light, const Vector3D p, Vect
   return cosTheta < 0 ? light->radiance : Vector3D();
 }
 
-DEVICE __inline__ Vector3D p_sample_L(const CudaLight light, const CudaLightBundle *light_data, const Vector3D p,
+DEVICE __inline__ Vector3D p_sample_L(const CudaLight *light, const Vector3D p,
                              Vector3D* wi, double* distToLight,
                              double* pdf, RNGState &rand_state) {
-  switch (light.type) {
-    case CudaLightType_Directional:
-      return sample_L(&light_data->directional_lights[light.idx], p ,wi, distToLight, pdf);
-    case CudaLightType_Point:
-      return sample_L(&light_data->point_lights[light.idx], p, wi, distToLight, pdf);
-    case CudaLightType_Area:
-      return sample_L(&light_data->area_lights[light.idx], p, wi, distToLight, pdf, rand_state);
+  switch (light->type) {
+    case DIRECTIONAL:
+      return sample_L(&light->light.directional, p ,wi, distToLight, pdf);
+    case POINT:
+      return sample_L(&light->light.point, p, wi, distToLight, pdf);
+    case AREA:
+      return sample_L(&light->light.area, p, wi, distToLight, pdf, rand_state);
     default:
       return Vector3D(0, 0, 0);
   }
   return Vector3D();
-}
-
-DEVICE __inline__ Vector3D p_sample_f(const CudaBSDF bsdf, const BVHCuda *bvh, const Vector3D wo, Vector3D *wi, double* pdf, RNGState &rand_state) {
-  switch (bsdf.type) {
-      case CudaBSDFType_Diffuse:
-          return sample_f(&bvh->diffuse_bsdfs[bsdf.idx], wo, wi, pdf, rand_state);
-      case CudaBSDFType_Emission:
-          return sample_f(&bvh->emission_bsdfs[bsdf.idx], wo, wi, pdf, rand_state);
-      default:
-          return Vector3D(0, 0, 0);
-  }
 }
 
 DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
@@ -104,7 +87,6 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
   const Vector3D hit_p = r.o + r.d * isect.t;
   const Vector3D w_out = w2o * (-r.d);
   Vector3D L_out = Vector3D(0, 0, 0);
-  CudaIntersection light_isect;
   Vector3D wi;
   double distToLight, pdf;
 
@@ -114,18 +96,19 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
   uint16_t x = blockIdx.x * blockDim.x + threadIdx.x;
   uint16_t y = blockIdx.y * blockDim.y + threadIdx.y;
   for (uint16_t i = 0; i < num_lights; i++) {
-    CudaLight light = lights[i];
-    int num_samples = light_data->is_delta_light(light) ? 1 : ns_area_light;
+    CudaLight *light = &lights[i];
+    int num_samples = light->is_delta_light() ? 1 : ns_area_light;
     sample_count += num_samples;
     for (int j = 0; j < num_samples; j++) {
-      Vector3D radiance = p_sample_L(light, light_data, hit_p, &wi, &distToLight, &pdf, rand_states[x + y*sampleBuffer.w]);
+      Vector3D radiance = p_sample_L(light, hit_p, &wi, &distToLight, &pdf, rand_states[x + y*sampleBuffer.w]);
       Vector3D wi_o = w2o * wi;
       if (wi_o.z < 0 || radiance == 0) continue;
       Ray shadow_ray = Ray(hit_p, wi);
       shadow_ray.min_t = EPS_D;
       shadow_ray.max_t = distToLight;
+      CudaIntersection light_isect;
       if (!bvh->intersect(shadow_ray, &light_isect)) {
-        L_out += bvh->f(isect.bsdf, w_out, wi_o) * radiance * abs_cos_theta(wi_o) / pdf;
+        L_out += bsdfs[isect.bsdf_idx].f(w_out, wi_o) * radiance * abs_cos_theta(wi_o) / pdf;
       }
     }
   }
@@ -168,7 +151,7 @@ DEVICE Vector3D PathTracer::at_least_one_bounce_radiance(Ray& r, const CudaInter
 
     Vector3D wi;
     double pdf;
-    Vector3D f = p_sample_f(isect.bsdf, bvh, w_out, &wi, &pdf,
+    Vector3D f = sample_f(&bsdfs[isect.bsdf_idx], w_out, &wi, &pdf,
                             rand_states[current_ray.x + current_ray.y * sampleBuffer.w]);
 
     if (pdf == 0 || f == Vector3D(0.0)) break;
@@ -216,7 +199,7 @@ DEVICE Vector3D PathTracer::est_radiance_global_illumination(Ray &r) {
   if (!bvh->intersect(r, &isect))
     return L_out;
 
-  L_out = bvh->get_emission(isect.bsdf) + at_least_one_bounce_radiance(r, isect);
+  L_out = bsdfs[isect.bsdf_idx].get_emission() + at_least_one_bounce_radiance(r, isect);
 
   return L_out;
 }
@@ -239,7 +222,7 @@ DEVICE void PathTracer::raytrace_pixel(uint16_t x, uint16_t y) {
     initialSampleBuffer[x + y * sampleBuffer.w].L = Vector3D(0, 0, 0);
   } else {
     Vector3D L = at_least_one_bounce_radiance(r, isect);
-    initialSampleBuffer[r.x + r.y * sampleBuffer.w].emittance += bvh->get_emission(isect.bsdf);
+    initialSampleBuffer[r.x + r.y * sampleBuffer.w].emittance += bsdfs[isect.bsdf_idx].get_emission();
   }
 }
 

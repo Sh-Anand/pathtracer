@@ -1,7 +1,5 @@
 #include "bvh.h"
 
-#include "triangle.h"
-
 #include <iostream>
 #include <stack>
 
@@ -10,29 +8,12 @@ using namespace std;
 namespace CGL {
 namespace SceneObjects {
 
-BVHAccel::BVHAccel(const std::vector<Primitive *> &_primitives,
-                   size_t max_leaf_size) {
-
-  primitives = std::vector<Primitive *>(_primitives);
-  nodes = std::vector<BVHNode>();
-  root = construct_bvh(0, primitives.size(), max_leaf_size);
-}
-
-BVHAccel::~BVHAccel() {
-  primitives.clear();
-  nodes.clear();
-}
-
 BVHCuda::~BVHCuda() {
   free(primitives);
-  free(spheres);
-  free(triangles);
   free(nodes);
 }
 
-BBox BVHAccel::get_bbox() const { return nodes[root].bb; }
-
-int BVHAccel::construct_bvh(size_t start, size_t end, size_t max_leaf_size) {
+int BVHCuda::construct_bvh(size_t start, size_t end, size_t max_leaf_size, vector<CudaPrimitive> &primitives, vector<BVHNode>& nodes) {
 
   // TODO (Part 2.1):
   // Construct a BVH from the given vector of primitives and maximum leaf
@@ -43,7 +24,7 @@ int BVHAccel::construct_bvh(size_t start, size_t end, size_t max_leaf_size) {
   BBox bbox;
 
   for (size_t p = start; p < end; p++) {
-    BBox bb = (primitives[p])->get_bbox();
+    BBox bb = (primitives[p]).get_bbox();
     bbox.expand(bb);
   }
 
@@ -56,14 +37,14 @@ int BVHAccel::construct_bvh(size_t start, size_t end, size_t max_leaf_size) {
     node.l = 0;
     node.r = 0;
   } else {
-    auto sort_x = [](Primitive *a, Primitive *b) {
-      return a->get_bbox().centroid().x < b->get_bbox().centroid().x;
+    auto sort_x = [](CudaPrimitive a, CudaPrimitive b) {
+      return a.get_bbox().centroid().x < b.get_bbox().centroid().x;
     };
-    auto sort_y = [](Primitive *a, Primitive *b) {
-      return a->get_bbox().centroid().y < b->get_bbox().centroid().y;
+    auto sort_y = [](CudaPrimitive a, CudaPrimitive b) {
+      return a.get_bbox().centroid().y < b.get_bbox().centroid().y;
     };
-    auto sort_z = [](Primitive *a, Primitive *b) {
-      return a->get_bbox().centroid().z < b->get_bbox().centroid().z;
+    auto sort_z = [](CudaPrimitive a, CudaPrimitive b) {
+      return a.get_bbox().centroid().z < b.get_bbox().centroid().z;
     };
     
 
@@ -85,11 +66,11 @@ int BVHAccel::construct_bvh(size_t start, size_t end, size_t max_leaf_size) {
       std::vector<BBox> left(end-start+1), right(end-start+1);
       BBox s_bbox, e_bbox;
       for (size_t p = start; p < end; p++) {
-        s_bbox.expand((primitives[p])->get_bbox());
+        s_bbox.expand(primitives[p].get_bbox());
         left[p - start] = s_bbox;
       }
       for (size_t p = end; p-- > start;) {
-        e_bbox.expand(primitives[p]->get_bbox());
+        e_bbox.expand(primitives[p].get_bbox());
         right[p - start] = e_bbox;
       }
 
@@ -112,7 +93,7 @@ int BVHAccel::construct_bvh(size_t start, size_t end, size_t max_leaf_size) {
     }
 
     auto mid = start + best_index;
-    size_t l = construct_bvh(start, mid, max_leaf_size), r = construct_bvh(mid, end, max_leaf_size);
+    size_t l = construct_bvh(start, mid, max_leaf_size, primitives, nodes), r = construct_bvh(mid, end, max_leaf_size, primitives, nodes);
     node.leaf = false;
     node.l = l;
     node.r = r;
@@ -120,32 +101,6 @@ int BVHAccel::construct_bvh(size_t start, size_t end, size_t max_leaf_size) {
 
   nodes.push_back(node);
   return nodes.size() - 1;
-}
-
-bool BVHAccel::intersect(Ray &ray, Intersection *i, size_t idx) const {
-  const BVHNode &node = nodes[idx];
-
-  double t0, t1;
-  if (!node.bb.intersect(ray, t0, t1)) {
-    return false;
-  }
-
-  if (node.isLeaf()) {
-    bool hit = false;
-    Intersection tmp;
-    for (size_t p = node.start; p < node.end; p++) {
-      total_isects++;
-      if (primitives[p]->intersect(ray, &tmp) && tmp.t < i->t) {
-        hit = true;
-        *i = tmp;
-      }
-    }
-    return hit;
-  }
-
-  bool hit_left  = intersect(ray, i, node.l);
-  bool hit_right = intersect(ray, i, node.r);
-  return hit_left || hit_right;
 }
 
 } // namespace SceneObjects

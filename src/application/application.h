@@ -9,10 +9,6 @@
 #include <string>
 #include <vector>
 
-// libCGL
-#include "CGL/CGL.h"
-#include "CGL/renderer.h"
-
 // COLLADA
 #include "scene/collada/collada.h"
 #include "scene/collada/light_info.h"
@@ -25,7 +21,6 @@
 #include "util/halfEdgeMesh.h"
 
 // RaytracedRenderer
-#include "scene/scene.h"
 #include "pathtracer/raytraced_renderer.h"
 #include "util/image.h"
 
@@ -109,7 +104,7 @@ class Application {
   void load(Collada::SceneInfo* sceneInfo);
   void render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy) { 
     set_up_pathtracer();
-    renderer->render_to_file(filename, x, y, dx, dy); 
+    renderer->render_to_file(filename, x, y, dx, dy, lights, bsdfs); 
   }
 
   void load_camera(std::string filename) {
@@ -137,10 +132,11 @@ private:
 
   // Initialization functions to get the opengl cooking with oil.
   void init_camera(Collada::CameraInfo& camera, const Matrix4x4& transform);
-  GLScene::SceneLight *init_light(Collada::LightInfo& light, const Matrix4x4& transform);
-  GLScene::SceneObject *init_sphere(Collada::SphereInfo& polymesh, const Matrix4x4& transform);
-  GLScene::SceneObject *init_polymesh(Collada::PolymeshInfo& polymesh, const Matrix4x4& transform);
   void init_material(Collada::MaterialInfo& material);
+
+  std::vector<CudaPrimitive> primitives;
+  std::vector<CudaBSDF> bsdfs;
+  std::vector<CudaLight> lights;
 
   std::string filename;
 

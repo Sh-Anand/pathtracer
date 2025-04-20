@@ -10,20 +10,6 @@ using std::swap;
 
 namespace CGL {
 
-// Mirror BSDF //
-
-Vector3D MirrorBSDF::f(const Vector3D wo, const Vector3D wi) {
-  return Vector3D();
-}
-
-Vector3D MirrorBSDF::sample_f(const Vector3D wo, Vector3D* wi, double* pdf) {
-
-  // TODO:
-  // Implement MirrorBSDF
-  
-  return Vector3D();
-}
-
 // Microfacet BSDF //
 
 double MicrofacetBSDF::G(const Vector3D wo, const Vector3D wi) {
@@ -46,83 +32,6 @@ Vector3D MicrofacetBSDF::F(const Vector3D wi) {
   double cosTheta = cos_theta(wi);
   
   return Vector3D();
-}
-
-Vector3D MicrofacetBSDF::f(const Vector3D wo, const Vector3D wi) {
-  // TODO: proj3-2, part 3
-  // Implement microfacet model here.
-
-  return Vector3D();
-}
-
-Vector3D MicrofacetBSDF::sample_f(const Vector3D wo, Vector3D* wi, double* pdf) {
-  // TODO: proj3-2, part 3
-  // *Importance* sample Beckmann normal distribution function (NDF) here.
-  // Note: You should fill in the sampled direction *wi and the corresponding *pdf,
-  //       and return the sampled BRDF value.
-
-
-
-  *wi = cosineHemisphereSampler.get_sample(pdf);
-
-  return MicrofacetBSDF::f(wo, *wi);
-}
-
-// Refraction BSDF //
-
-Vector3D RefractionBSDF::f(const Vector3D wo, const Vector3D wi) {
-  return Vector3D();
-}
-
-Vector3D RefractionBSDF::sample_f(const Vector3D wo, Vector3D* wi, double* pdf) {
-
-  // TODO:
-  // Implement RefractionBSDF
-  
-  
-  return Vector3D();
-}
-
-// Glass BSDF //
-
-Vector3D GlassBSDF::f(const Vector3D wo, const Vector3D wi) {
-  return Vector3D();
-}
-
-Vector3D GlassBSDF::sample_f(const Vector3D wo, Vector3D* wi, double* pdf) {
-
-  // TODO:
-  // Compute Fresnel coefficient and either reflect or refract based on it.
-
-  // compute Fresnel coefficient and use it as the probability of reflection
-  // - Fundamentals of Computer Graphics page 305
-
-
-  return Vector3D();
-}
-
-void BSDF::reflect(const Vector3D wo, Vector3D* wi) {
-
-  // TODO:
-  // Implement reflection of wo about normal (0,0,1) and store result in wi.
-  
-
-
-}
-
-bool BSDF::refract(const Vector3D wo, Vector3D* wi, double ior) {
-
-  // TODO:
-  // Use Snell's Law to refract wo surface and store result ray in wi.
-  // Return false if refraction does not occur due to total internal reflection
-  // and true otherwise. When dot(wo,n) is positive, then wo corresponds to a
-  // ray entering the surface through vacuum.
-
-
-
-
-  return true;
-
 }
 
 } // namespace CGL

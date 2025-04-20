@@ -1,8 +1,6 @@
 #ifndef CGL_VECTOR3D_H
 #define CGL_VECTOR3D_H
 
-#include "CGL.h"
-#include "color.h"
 #include "cuda_defs.h"
 
 #include <cmath>
@@ -21,14 +19,7 @@ class Vector3D {
 public:
 
   // components
-  union {
-    struct {
-      double x, y, z;
-    };
-    struct {
-      double r, g, b;
-    };
-  };
+  double x, y, z;
 
   HOST_DEVICE Vector3D() : x(0.0), y(0.0), z(0.0) { }
 
@@ -117,18 +108,10 @@ public:
     (*this) /= norm();
   }
 
-  HOST_DEVICE inline Color toColor() const {
-    return Color(r, g, b);
-  }
-
   HOST_DEVICE inline float illum() const {
-    return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+    return 0.2126f * x + 0.7152f * y + 0.0722f * z;
   }
-
-  HOST_DEVICE static Vector3D fromColor(const Color& c) {
-    return Vector3D(c.r, c.g, c.b);
-  }
-
+  
 }; // class Vector3D
 
 HOST_DEVICE inline Vector3D operator*(const double& c, const Vector3D& v) {

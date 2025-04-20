@@ -1,12 +1,5 @@
 #include "application.h"
 
-#include "scene/gl_scene/ambient_light.h"
-#include "scene/gl_scene/environment_light.h"
-#include "scene/gl_scene/directional_light.h"
-#include "scene/gl_scene/area_light.h"
-#include "scene/gl_scene/point_light.h"
-#include "scene/gl_scene/spot_light.h"
-#include "scene/gl_scene/sphere.h"
 #include "scene/gl_scene/mesh.h"
 
 using Collada::CameraInfo;
@@ -15,6 +8,14 @@ using Collada::MaterialInfo;
 using Collada::PolymeshInfo;
 using Collada::SceneInfo;
 using Collada::SphereInfo;
+
+using CGL::SceneObjects::CudaAreaLight;
+using CGL::SceneObjects::CudaDirectionalLight;
+using CGL::SceneObjects::CudaPointLight;
+using CGL::SceneObjects::CudaLightType;
+using CGL::SceneObjects::CudaPrimitive;
+using CGL::SceneObjects::CudaTriangle;
+using CGL::SceneObjects::CudaSphere;
 
 namespace CGL {
 
@@ -65,14 +66,34 @@ void Application::resize(size_t w, size_t h) {
   screenW = w;
   screenH = h;
   camera.set_screen_size(w, h);
-  //renderer->set_frame_size(w, h);
+  renderer->set_frame_size(w, h);
+}
+
+void push_cuda_bsdf(const BSDF *bsdf, vector<CudaBSDF> &bsdfs) {
+  // dynamic cst BSDF and figure out type:
+  CudaBSDF cuda_bsdf {};
+  if (const DiffuseBSDF *diffuse_bsdf = dynamic_cast<const DiffuseBSDF *>(bsdf)) {
+    cuda_bsdf.type = CudaBSDFType_Diffuse;
+    cuda_bsdf.bsdf.diffuse = CudaDiffuseBSDF{diffuse_bsdf->reflectance};
+  } else if (const EmissionBSDF *emission_bsdf = dynamic_cast<const EmissionBSDF *>(bsdf)) {
+    cuda_bsdf.type = CudaBSDFType_Emission;
+    cuda_bsdf.bsdf.emission = CudaEmissionBSDF{emission_bsdf->radiance};
+  } else {
+    std::cerr << "Unknown BSDF type" << std::endl;
+    exit(1);
+  }
+  bsdfs.push_back(cuda_bsdf);
 }
 
 void Application::load(SceneInfo* sceneInfo) {
 
   vector<Collada::Node>& nodes = sceneInfo->nodes;
-  vector<GLScene::SceneLight *> lights;
+  vector<GLScene::SceneLight *> scene_lights;
   vector<GLScene::SceneObject *> objects;
+
+  lights.clear();
+  primitives.clear();
+  bsdfs.clear();
 
   // save camera position to update camera control later
   CameraInfo *c;
@@ -94,27 +115,77 @@ void Application::load(SceneInfo* sceneInfo) {
         break;
       case Collada::Instance::LIGHT:
       {
-        lights.push_back(
-          init_light(static_cast<LightInfo&>(*instance), transform));
+        LightInfo& light_info = static_cast<LightInfo&>(*instance);
+        CudaLight light {};
+        light.type = (CudaLightType) light_info.light_type;
+        switch(light_info.light_type) {
+          case Collada::LightType::NONE:
+            break;
+          case Collada::LightType::AMBIENT:
+            std::cerr << "Ambient light type unsupported" << std::endl;
+            exit(1);
+          case Collada::LightType::DIRECTIONAL:
+            light.light.directional = CudaDirectionalLight {light_info.spectrum, (transform * Vector4D(light_info.direction, 1)).to3D().unit()};
+            break;
+          case Collada::LightType::AREA: {
+            Vector3D position = (transform * Vector4D(light_info.position, 1)).to3D();
+            Vector3D direction = (transform * Vector4D(light_info.direction, 1)).to3D() - position;
+            direction.normalize();
+            Vector3D dim_y = (transform * Vector4D(light_info.up, 1)).to3D() - position;
+            Vector3D dim_x = (transform * Vector4D(cross(light_info.up, light_info.direction), 1)).to3D() - position;
+            light.light.area = CudaAreaLight(light_info.spectrum, position, direction, dim_x, dim_y);
+            break;
+          }
+          case Collada::LightType::POINT:
+            light.light.point = CudaPointLight{light_info.spectrum, (transform * Vector4D(light_info.position, 1)).to3D()};
+            break;
+          case Collada::LightType::SPOT:
+            std::cerr << "Spot light type unsupported" << std::endl;
+            exit(1);
+          default:
+            break;
+        }
+        lights.push_back(light);
         break;
       }
       case Collada::Instance::SPHERE:
-        objects.push_back(
-          init_sphere(static_cast<SphereInfo&>(*instance), transform));
+      {
+        SphereInfo& sphere = static_cast<SphereInfo&>(*instance);
+        double r = sphere.radius * (transform * Vector4D(1, 0, 0, 0)).to3D().norm();
+        Vector3D o = (transform * Vector4D(0, 0, 0, 1)).projectTo3D();
+        BSDF* bsdf = sphere.material ? sphere.material->bsdf : new DiffuseBSDF(Vector3D(0.5f, 0.5f, 0.5f));
+        push_cuda_bsdf(bsdf, bsdfs);
+        
+        CudaPrimitive primitive {};
+        primitive.type = CGL::SceneObjects::CudaPrimitiveType::SPHERE;
+        primitive.primitive.sphere = CudaSphere{o, r};
+        primitive.bsdf_idx = bsdfs.size() - 1;
+        primitives.push_back(primitive);
         break;
+      }
       case Collada::Instance::POLYMESH:
-        objects.push_back(
-          init_polymesh(static_cast<PolymeshInfo&>(*instance), transform));
+      {
+        GLScene::Mesh mesh(static_cast<PolymeshInfo&>(*instance), transform);
+        BSDF* bsdf = mesh.bsdf;
+        push_cuda_bsdf(bsdf, bsdfs);
+
+        CudaPrimitive primitive {};
+        mesh.get_triangles(primitives, bsdfs.size() - 1);
         break;
+      }
       case Collada::Instance::MATERIAL:
         init_material(static_cast<MaterialInfo&>(*instance));
         break;
      }
   }
 
-  scene = new GLScene::Scene(objects, lights);
+  scene = new GLScene::Scene(objects, scene_lights);
 
-  const BBox& bbox = scene->get_bbox();
+  BBox bbox;
+  for (auto& primitive: primitives) {
+    bbox.expand(primitive.get_bbox());
+  }
+
   if (!bbox.empty()) {
 
     Vector3D target = bbox.centroid();
@@ -146,55 +217,16 @@ void Application::init_camera(CameraInfo& cameraInfo,
   canonicalCamera.configure(cameraInfo, screenW, screenH);
 }
 
-GLScene::SceneLight *Application::init_light(LightInfo& light,
-                                        const Matrix4x4& transform) {
-  switch(light.light_type) {
-    case Collada::LightType::NONE:
-      break;
-    case Collada::LightType::AMBIENT:
-      return new GLScene::AmbientLight(light);
-    case Collada::LightType::DIRECTIONAL:
-      return new GLScene::DirectionalLight(light, transform);
-    case Collada::LightType::AREA:
-      return new GLScene::AreaLight(light, transform);
-    case Collada::LightType::POINT:
-      return new GLScene::PointLight(light, transform);
-    case Collada::LightType::SPOT:
-      return new GLScene::SpotLight(light, transform);
-    default:
-      break;
-  }
-  return nullptr;
-}
-
-/**
- * The transform is assumed to be composed of translation, rotation, and
- * scaling, where the scaling is uniform across the three dimensions; these
- * assumptions are necessary to ensure the sphere is still spherical. Rotation
- * is ignored since it's a sphere, translation is determined by transforming the
- * origin, and scaling is determined by transforming an arbitrary unit vector.
- */
-GLScene::SceneObject *Application::init_sphere(
-    SphereInfo& sphere, const Matrix4x4& transform) {
-  const Vector3D& position = (transform * Vector4D(0, 0, 0, 1)).projectTo3D();
-  double scale = (transform * Vector4D(1, 0, 0, 0)).to3D().norm();
-  return new GLScene::Sphere(sphere, position, scale);
-}
-
-GLScene::SceneObject *Application::init_polymesh(
-    PolymeshInfo& polymesh, const Matrix4x4& transform) {
-  return new GLScene::Mesh(polymesh, transform);
-}
 
 void Application::init_material(MaterialInfo& material) {
-  // TODO : Support Materials.
+  std::cerr << "Materials not implemented" << std::endl;
+  exit(1);
 }
 
 void Application::set_up_pathtracer() {
   renderer->set_camera(&camera);
-  renderer->set_scene(scene->get_static_scene());
   renderer->set_frame_size(screenW, screenH);
-
+  renderer->build_accel(primitives);
 }
 
 } // namespace CGL

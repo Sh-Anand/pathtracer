@@ -1,7 +1,6 @@
 #ifndef CGL_MATRIX3X3_H
 #define CGL_MATRIX3X3_H
 
-#include "CGL.h"
 #include "vector3D.h"
 
 #include <iosfwd>

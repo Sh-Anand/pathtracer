@@ -4,17 +4,17 @@
 #include "scene/bvh.h"
 using CGL::SceneObjects::BVHCuda;
 
-#include "pathtracer/sampler.h"
 #include "pathtracer/intersection.h"
 
 #include "util/reservoir.h"
 
 #include "scene/light.h"
 using CGL::SceneObjects::CudaLight;
-using CGL::SceneObjects::CudaLightBundle;
 
 #include "pathtracer/camera.h"
 using CGL::CudaCamera;
+
+#include "util/vector2D.h"
 
 namespace CGL {
 
@@ -33,19 +33,12 @@ namespace CGL {
         void write_to_framebuffer(HDRImageBuffer &buffer, ImageBuffer& framebuffer, uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
 
         /**
-         * If the pathtracer is in READY, delete all internal data, transition to INIT.
-         */
-        void clear();
-
-        // void autofocus(Vector2D loc);
-
-        /**
          * Trace an ray in the scene.
          */
-        DEVICE Vector3D estimate_direct_lighting_importance(Ray& r, const SceneObjects::CudaIntersection& isect);
+        DEVICE Vector3D estimate_direct_lighting_importance(Ray& r, const CudaIntersection& isect);
 
         DEVICE Vector3D est_radiance_global_illumination(Ray& r);
-        DEVICE Vector3D at_least_one_bounce_radiance(Ray& r, const SceneObjects::CudaIntersection& isect);
+        DEVICE Vector3D at_least_one_bounce_radiance(Ray& r, const CudaIntersection& isect);
 
         // ReSTIR GI //
         Sample* initialSampleBuffer;
@@ -80,8 +73,11 @@ namespace CGL {
 
         // Lights
         CudaLight *lights; 
-        CudaLightBundle *light_data ;
         size_t num_lights;
+
+        // BSDFs
+        CudaBSDF *bsdfs;
+        size_t num_bsdfs;
     };
 
 }  // namespace CGL

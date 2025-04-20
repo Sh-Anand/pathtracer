@@ -1,7 +1,6 @@
 #ifndef CGL_VECTOR2D_H
 #define CGL_VECTOR2D_H
 
-#include "CGL.h"
 #include "cuda_defs.h"
 
 #include <ostream>

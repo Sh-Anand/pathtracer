@@ -7,13 +7,10 @@
 #include <algorithm>
 #include <sstream>
 
-#include "CGL/CGL.h"
 #include "util/vector3D.h"
 #include "util/matrix3x3.h"
-#include "CGL/lodepng.h"
+#include "util/lodepng.h"
 
-#include "scene/sphere.h"
-#include "scene/triangle.h"
 #include "scene/light.h"
 
 using namespace CGL::SceneObjects;
@@ -54,12 +51,7 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
 
   this->filename = filename;
 
-  bvh = NULL;
-  scene = NULL;
   camera = NULL;
-
-  this->lights = std::vector<CudaLight>();
-  this->light_data = nullptr;
 }
 
 /**
@@ -67,27 +59,7 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
  * Frees all the internal resources used by the pathtracer.
  */
 RaytracedRenderer::~RaytracedRenderer() {
-  delete bvh;
   delete pt;
-}
-
-/**
- * This DOES take ownership of the scene, and therefore deletes it if a new
- * scene is later passed in.
- * \param scene pointer to the new scene to be rendered
- */
-void RaytracedRenderer::set_scene(Scene *scene) {
-  this->scene = scene;
-
-  vector<Primitive *> primitives;
-  for (SceneObject *obj : scene->objects) {
-    const vector<Primitive *> &obj_prims = obj->get_primitives();
-    primitives.reserve(primitives.size() + obj_prims.size());
-    primitives.insert(primitives.end(), obj_prims.begin(), obj_prims.end());
-  }
-
-  build_accel();
-  build_lights();
 }
 
 /**
@@ -113,20 +85,19 @@ void RaytracedRenderer::set_frame_size(size_t width, size_t height) {
 }
 
 bool RaytracedRenderer::has_valid_configuration() {
-  return scene && camera;
+  return camera;
 }
 
-void RaytracedRenderer::render_to_file(string filename, size_t x, size_t y, size_t dx, size_t dy) {
-  pt->clear();
+void RaytracedRenderer::render_to_file(string filename, size_t x, size_t y, size_t dx, size_t dy, 
+                                       std::vector<CudaLight> &lights, std::vector<CudaBSDF> &bsdfs) {
   pt->set_frame_size(frameBuffer.w, frameBuffer.h);
 
   pt->camera = CudaCamera(camera);
 
-  bvh->total_isects = 0; bvh->total_rays = 0;
   // launch threads
   fprintf(stdout, "[PathTracer] Rendering... "); fflush(stdout);
 
-  copy_host_device_pt();
+  copy_host_device_pt(lights, bsdfs);
 
   gpu_raytrace();
 
@@ -143,13 +114,13 @@ void RaytracedRenderer::save_image(string filename) {
 
     time_t t = time(nullptr);
     tm *lt = localtime(&t);
-    stringstream ss;
+    std::stringstream ss;
     ss << this->filename << "_screenshot_" << lt->tm_mon+1 << "-" << lt->tm_mday << "_" 
       << lt->tm_hour << "-" << lt->tm_min << "-" << lt->tm_sec << ".png";
     filename = ss.str();  
   }
 
-  cout << "[PathTracer] Saving to file: " << filename << endl;
+  std::cout << "[PathTracer] Saving to file: " << filename << std::endl;
 
   uint32_t* frame = &buffer->data[0];
   size_t w = buffer->w;

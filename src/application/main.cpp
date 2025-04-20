@@ -1,5 +1,3 @@
-#include "CGL/CGL.h"
-
 #include "application.h"
 typedef uint32_t gid_t;
 #include "util/image.h"

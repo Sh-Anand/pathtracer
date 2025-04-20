@@ -24,11 +24,11 @@ DEVICE void make_coord_space(Matrix3x3 &o2w, const Vector3D n) {
   o2w[2] = z;
 }
 
-DEVICE Vector3D CudaDiffuseBSDF::f(const Vector3D wo, const Vector3D wi) {
+DEVICE Vector3D CudaDiffuseBSDF::f(const Vector3D wo, const Vector3D wi) const {
   return reflectance / PI;
 }
 
-DEVICE Vector3D CudaEmissionBSDF::f(const Vector3D wo, const Vector3D wi) {
+DEVICE Vector3D CudaEmissionBSDF::f(const Vector3D wo, const Vector3D wi) const {
   return Vector3D();
 }
 
