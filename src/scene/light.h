@@ -14,6 +14,18 @@ namespace CGL { namespace SceneObjects {
     SPOT
   };
 
+struct CudaAmbientLight {
+ public:
+  bool is_delta_light() const { return false; }
+  CudaAmbientLight(Vector3D rad) : radiance(rad) {
+    sampleToWorld[0] = Vector3D(1,  0,  0);
+    sampleToWorld[1] = Vector3D(0,  0, -1);
+    sampleToWorld[2] = Vector3D(0,  1,  0);
+  }
+  Vector3D radiance;
+  Matrix3x3 sampleToWorld;
+}; // class InfiniteHemisphereLight
+
 struct CudaDirectionalLight {
   DEVICE bool is_delta_light() const { return true; }
   Vector3D radiance;
@@ -46,8 +58,10 @@ struct CudaAreaLight {
   Vector3D dim_y;
   double area;
 };
+
 union LightData {
   LightData() {}
+  CudaAmbientLight ambient;
   CudaDirectionalLight directional;
   CudaPointLight point;
   CudaAreaLight area;
@@ -58,6 +72,9 @@ struct CudaLight {
   CudaLight() : type(CudaLightType::NONE) {}
   CudaLight(const CudaLight& l) : type(l.type) {
     switch (type) {
+      case CudaLightType::AMBIENT:
+        light.ambient = l.light.ambient;
+        break;
       case CudaLightType::DIRECTIONAL:
         light.directional = l.light.directional;
         break;

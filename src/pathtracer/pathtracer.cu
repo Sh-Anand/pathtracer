@@ -17,9 +17,28 @@ DEVICE __inline__ void cosine_weighted_hemisphere_sample_3d(RNGState &rand_state
   *wi = Vector3D(r*cos(theta), r*sin(theta), sqrt(1-Xi1));
 }
 
+
+DEVICE __inline__ Vector3D uniform_hemisphere_sample_3d(RNGState &rand_state) {
+  float z = next_float(rand_state) * 2 - 1;
+  float sinTheta = sqrtf(fmaxf(0.0f, 1.0f - z * z));
+
+  float phi = 2.0f * PI_F * next_float(rand_state);
+
+  return Vector3D(cos(phi) * sinTheta, sin(phi) * sinTheta, z);
+}
+
 DEVICE __inline__ Vector3D sample_f(const CudaBSDF *bsdf, const Vector3D wo, Vector3D *wi, float *pdf, RNGState &rand_state) {
   cosine_weighted_hemisphere_sample_3d(rand_state, wi, pdf);
   return bsdf->f(wo, *wi);
+}
+
+DEVICE __inline__ Vector3D sample_L(const CudaAmbientLight *light, const Vector3D p, Vector3D* wi,
+                             float* distToLight, float* pdf, RNGState &rand_state) {
+  Vector3D dir = uniform_hemisphere_sample_3d(rand_state);
+  *wi = light->sampleToWorld * dir;
+  *distToLight = INFINITY;
+  *pdf = 1.0 / (2.0 * PI_F);
+  return light->radiance;
 }
 
 DEVICE __inline__ Vector3D sample_L(const CudaDirectionalLight *light, const Vector3D p, Vector3D* wi,

@@ -9,6 +9,7 @@ using Collada::PolymeshInfo;
 using Collada::SceneInfo;
 using Collada::SphereInfo;
 
+using CGL::SceneObjects::CudaAmbientLight;
 using CGL::SceneObjects::CudaAreaLight;
 using CGL::SceneObjects::CudaDirectionalLight;
 using CGL::SceneObjects::CudaPointLight;
@@ -122,8 +123,8 @@ void Application::load(SceneInfo* sceneInfo) {
           case Collada::LightType::NONE:
             break;
           case Collada::LightType::AMBIENT:
-            std::cerr << "Ambient light type unsupported" << std::endl;
-            exit(1);
+            light.light.ambient = CudaAmbientLight {light_info.spectrum};
+            break;
           case Collada::LightType::DIRECTIONAL:
             light.light.directional = CudaDirectionalLight {light_info.spectrum, (transform * Vector4D(light_info.direction, 1)).to3D().unit()};
             break;
