@@ -31,7 +31,7 @@ DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i, uint32_t root_idx)
     uint32_t idx = stack[--stack_ptr];
     const BVHNode &node = nodes[idx];
 
-    double t0, t1;
+    float t0, t1;
     if (!node.bb.intersect(ray, t0, t1)) continue;
 
     if (node.leaf) {

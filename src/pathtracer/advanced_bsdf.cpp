@@ -12,11 +12,11 @@ namespace CGL {
 
 // Microfacet BSDF //
 
-double MicrofacetBSDF::G(const Vector3D wo, const Vector3D wi) {
+float MicrofacetBSDF::G(const Vector3D wo, const Vector3D wi) {
   return 1.0 / (1.0 + Lambda(wi) + Lambda(wo));
 }
 
-double MicrofacetBSDF::D(const Vector3D h) {
+float MicrofacetBSDF::D(const Vector3D h) {
   // TODO: proj3-2, part 3
   // Compute Beckmann normal distribution function (NDF) here.
   // You will need the roughness alpha.

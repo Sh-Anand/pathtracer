@@ -50,8 +50,8 @@ struct BBox {
    * Constructor.
    * Creates a bounding box with given bounds (component wise).
    */
-  BBox(const double minX, const double minY, const double minZ,
-       const double maxX, const double maxY, const double maxZ) {
+  BBox(const float minX, const float minY, const float minZ,
+       const float maxX, const float maxY, const float maxZ) {
     min = Vector3D(minX, minY, minZ);
     max = Vector3D(maxX, maxY, maxZ);
 		extent = max - min;
@@ -99,7 +99,7 @@ struct BBox {
    * Compute the surface area of the bounding box.
    * \return surface area of the bounding box.
    */
-  double surface_area() const {
+  float surface_area() const {
     if (empty()) return 0.0;
     return 2 * (extent.x * extent.z +
                 extent.x * extent.y +
@@ -124,7 +124,7 @@ struct BBox {
    * \param t0 lower bound of intersection time
    * \param t1 upper bound of intersection time
    */
-  HOST_DEVICE bool intersect(Ray& r, double& t0, double& t1) const;
+  HOST_DEVICE bool intersect(Ray& r, float& t0, float& t1) const;
 };
 
 std::ostream& operator<<(std::ostream& os, const BBox& b);

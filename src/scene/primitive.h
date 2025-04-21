@@ -7,7 +7,7 @@
 namespace CGL { namespace SceneObjects {
 
 struct CudaSphere {
-    CudaSphere(const Vector3D& o, double r) : o(o), r(r), r2(r * r) {}
+    CudaSphere(const Vector3D& o, float r) : o(o), r(r), r2(r * r) {}
     DEVICE Vector3D normal(Vector3D p) const {
       return (p - o).unit();
     }
@@ -17,8 +17,8 @@ struct CudaSphere {
     }
     
     Vector3D o; ///< origin of the sphere
-    double r;   ///< radius
-    double r2;  ///< radius squared
+    float r;   ///< radius
+    float r2;  ///< radius squared
 };
 
 struct CudaTriangle {

@@ -94,6 +94,13 @@ set(APPLICATION_HEADERS
     src/util/vector2D.h
     src/util/vector3D.h
     src/util/vector4D.h
+
+    # tinygltf
+    src/util/json.hpp
+    src/util/stb_image.h
+    src/util/stb_image_write.h
+    src/util/tiny_gltf.h
+
     # Pathtracer
     src/pathtracer/bsdf.h
     src/pathtracer/camera.h

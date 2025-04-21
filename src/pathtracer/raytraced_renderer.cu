@@ -43,7 +43,7 @@ void RaytracedRenderer::gpu_raytrace() {
     std::cout << "BlockDim: " << blockDim.x << " x " << blockDim.y << std::endl;
     std::cout << "GridDim: " << gridDim.x << " x " << gridDim.y << std::endl;
 
-    // cudaDeviceSetLimit(cudaLimitStackSize, 8192);
+    // cudaDeviceSetLimit(cudaLimitStackSize, 131072);
 
     std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now();
 

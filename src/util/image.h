@@ -56,9 +56,9 @@ struct ImageBuffer {
     assert(x < w);
     assert(y < h);
     uint32_t p = 0;
-    p |= ((uint32_t) (clamp_T(0., 1., c.x) * 255)) << 16;
-    p |= ((uint32_t) (clamp_T(0., 1., c.y) * 255)) << 8;
-    p |= ((uint32_t) (clamp_T(0., 1., c.z) * 255));
+    p |= ((uint32_t) (clamp_T(0.f, 1.f, c.x) * 255)) << 16;
+    p |= ((uint32_t) (clamp_T(0.f, 1.f, c.y) * 255)) << 8;
+    p |= ((uint32_t) (clamp_T(0.f, 1.f, c.z) * 255));
     p |= 0xFF000000;
     data[x + y * w] = p;
   }
@@ -182,13 +182,13 @@ struct HDRImageBuffer {
     float gamma = 2.2f;
     float level = 1.0f;
     float one_over_gamma = 1.0f / gamma;
-    float exposure = sqrt(pow(2,level));
+    float exposure = sqrtf(powf(2,level));
     for (size_t y = y0; y < y1; ++y) {
       for (size_t x = x0; x < x1; ++x) {
         const Vector3D& s = data[x + y * w];
-        float r = std::max(0.0, std::min(pow(s.x * exposure, one_over_gamma), 1.0));
-        float g = std::max(0.0, std::min(pow(s.y * exposure, one_over_gamma), 1.0));
-        float b = std::max(0.0, std::min(pow(s.z * exposure, one_over_gamma), 1.0));
+        float r = std::max(0.0f, std::min(powf(s.x * exposure, one_over_gamma), 1.0f));
+        float g = std::max(0.0f, std::min(powf(s.y * exposure, one_over_gamma), 1.0f));
+        float b = std::max(0.0f, std::min(powf(s.z * exposure, one_over_gamma), 1.0f));
         target.update_pixel(Vector3D(r, g, b), x, y);
       }
     }

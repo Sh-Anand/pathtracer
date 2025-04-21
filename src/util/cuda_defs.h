@@ -23,7 +23,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line) {
 #endif
 
 #define PI (3.14159265358979323)
-#define EPS_D (0.00000000001)
+#define PI_F (3.1415927f)
 #define EPS_F (0.00001f)
 
 #include <cmath>
@@ -35,7 +35,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line) {
 */
 template<typename T>
 inline T radians(T deg) {
-  return deg * (PI / 180);
+  return deg * (PI_F / 180);
 }
 
 /*
@@ -43,7 +43,7 @@ inline T radians(T deg) {
 */
 template<typename T>
 inline T degrees(T rad) {
-  return rad * (180 / PI);
+  return rad * (180 / PI_F);
 }
 
 /*

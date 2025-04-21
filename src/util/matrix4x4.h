@@ -29,7 +29,7 @@ class Matrix4x4 {
   // Constructor for row major form data.
   // Transposes to the internal column major form.
   // REQUIRES: data should be of size 16.
-  Matrix4x4(double * data)
+  Matrix4x4(float * data)
   {
     for( int i = 0; i < 4; i++ )
     for( int j = 0; j < 4; j++ )
@@ -44,17 +44,17 @@ class Matrix4x4 {
   /**
    * Sets all elements to val.
    */
-  void zero(double val = 0.0);
+  void zero(float val = 0.0);
 
   /**
    * Returns the determinant of A.
    */
-  double det( void ) const;
+  float det( void ) const;
 
   /**
    * Returns the Frobenius norm of A.
    */
-  double norm( void ) const;
+  float norm( void ) const;
 
   /**
    * Returns a fresh 4x4 identity matrix.
@@ -81,8 +81,8 @@ class Matrix4x4 {
 
   // accesses element (i,j) of A using 0-based indexing
   // where (i, j) is (row, column).
-        double& operator()( int i, int j );
-  const double& operator()( int i, int j ) const;
+        float& operator()( int i, int j );
+  const float& operator()( int i, int j ) const;
 
   // accesses the ith column of A
         Vector4D& operator[]( int i );
@@ -98,7 +98,7 @@ class Matrix4x4 {
   Matrix4x4 operator-( const Matrix4x4& B ) const;
 
   // returns c*A
-  Matrix4x4 operator*( double c ) const;
+  Matrix4x4 operator*( float c ) const;
 
   // returns A*B
   Matrix4x4 operator*( const Matrix4x4& B ) const;
@@ -107,7 +107,7 @@ class Matrix4x4 {
   Vector4D operator*( const Vector4D& x ) const;
 
   // divides each element by x
-  void operator/=( double x );
+  void operator/=( float x );
 
   protected:
 
@@ -120,7 +120,7 @@ class Matrix4x4 {
 Matrix4x4 outer( const Vector4D& u, const Vector4D& v );
 
 // returns c*A
-Matrix4x4 operator*( double c, const Matrix4x4& A );
+Matrix4x4 operator*( float c, const Matrix4x4& A );
 
 // prints entries
 std::ostream& operator<<( std::ostream& os, const Matrix4x4& A );

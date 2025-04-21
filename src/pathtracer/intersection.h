@@ -11,7 +11,7 @@ namespace CGL {
 
 struct CudaIntersection {
   DEVICE CudaIntersection() : t (INFINITY) { }
-  double t;
+  float t;
   Vector3D n;
   uint32_t bsdf_idx;
 };

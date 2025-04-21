@@ -19,22 +19,22 @@ class Vector3D {
 public:
 
   // components
-  double x, y, z;
+  float x, y, z;
 
   HOST_DEVICE Vector3D() : x(0.0), y(0.0), z(0.0) { }
 
-  HOST_DEVICE Vector3D(double x, double y, double z) : x(x), y(y), z(z) { }
+  HOST_DEVICE Vector3D(float x, float y, float z) : x(x), y(y), z(z) { }
 
-  HOST_DEVICE Vector3D(double c) : x(c), y(c), z(c) { }
+  HOST_DEVICE Vector3D(float c) : x(c), y(c), z(c) { }
 
 
   HOST_DEVICE Vector3D(const Vector3D& v) : x(v.x), y(v.y), z(v.z) { }
 
-  HOST_DEVICE inline double& operator[](const int& index) {
+  HOST_DEVICE inline float& operator[](const int& index) {
     return (&x)[index];
   }
 
-  HOST_DEVICE inline const double& operator[](const int& index) const {
+  HOST_DEVICE inline const float& operator[](const int& index) const {
     return (&x)[index];
   }
 
@@ -62,12 +62,12 @@ public:
     return Vector3D(x / v.x, y / v.y, z / v.z);
   }
 
-  HOST_DEVICE inline Vector3D operator*(const double& c) const {
+  HOST_DEVICE inline Vector3D operator*(const float& c) const {
     return Vector3D(x * c, y * c, z * c);
   }
 
-  HOST_DEVICE inline Vector3D operator/(const double& c) const {
-    const double rc = 1.0 / c;
+  HOST_DEVICE inline Vector3D operator/(const float& c) const {
+    const float rc = 1.0 / c;
     return Vector3D(rc * x, rc * y, rc * z);
   }
 
@@ -79,11 +79,11 @@ public:
     x -= v.x; y -= v.y; z -= v.z;
   }
 
-  HOST_DEVICE inline void operator*=(const double& c) {
+  HOST_DEVICE inline void operator*=(const float& c) {
     x *= c; y *= c; z *= c;
   }
 
-  HOST_DEVICE inline void operator/=(const double& c) {
+  HOST_DEVICE inline void operator/=(const float& c) {
     (*this) *= (1. / c);
   }
 
@@ -91,16 +91,16 @@ public:
     return Vector3D(1.0 / x, 1.0 / y, 1.0 / z);
   }
 
-  HOST_DEVICE inline double norm(void) const {
-    return sqrt(x * x + y * y + z * z);
+  HOST_DEVICE inline float norm(void) const {
+    return sqrtf(x * x + y * y + z * z);
   }
 
-  HOST_DEVICE inline double norm2(void) const {
+  HOST_DEVICE inline float norm2(void) const {
     return x * x + y * y + z * z;
   }
 
   HOST_DEVICE inline Vector3D unit(void) const {
-    double rNorm = 1. / norm();
+    float rNorm = 1. / norm();
     return (*this) * rNorm;
   }
 
@@ -114,15 +114,15 @@ public:
   
 }; // class Vector3D
 
-HOST_DEVICE inline Vector3D operator*(const double& c, const Vector3D& v) {
+HOST_DEVICE inline Vector3D operator*(const float& c, const Vector3D& v) {
   return Vector3D(c * v.x, c * v.y, c * v.z);
 }
 
-HOST_DEVICE inline Vector3D operator/(const double& c, const Vector3D& v) {
+HOST_DEVICE inline Vector3D operator/(const float& c, const Vector3D& v) {
   return Vector3D(c / v.x, c / v.y, c / v.z);
 }
 
-HOST_DEVICE inline double dot(const Vector3D& u, const Vector3D& v) {
+HOST_DEVICE inline float dot(const Vector3D& u, const Vector3D& v) {
   return u.x * v.x + u.y * v.y + u.z * v.z;
 }
 

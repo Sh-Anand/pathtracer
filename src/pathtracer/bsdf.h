@@ -12,36 +12,36 @@ namespace CGL {
 
 // Helper math functions. Assume all vectors are in unit hemisphere //
 
-inline double clamp (double n, double lower, double upper) {
+inline float clamp (float n, float lower, float upper) {
   return std::max(lower, std::min(n, upper));
 }
 
-inline double cos_theta(const Vector3D w) {
+inline float cos_theta(const Vector3D w) {
   return w.z;
 }
 
-HOST_DEVICE inline double abs_cos_theta(const Vector3D w) {
+HOST_DEVICE inline float abs_cos_theta(const Vector3D w) {
   return fabsf(w.z);
 }
 
-inline double sin_theta2(const Vector3D w) {
-  return fmax(0.0, 1.0 - cos_theta(w) * cos_theta(w));
+inline float sin_theta2(const Vector3D w) {
+  return fmaxf(0.0, 1.0 - cos_theta(w) * cos_theta(w));
 }
 
-inline double sin_theta(const Vector3D w) {
-  return sqrt(sin_theta2(w));
+inline float sin_theta(const Vector3D w) {
+  return sqrtf(sin_theta2(w));
 }
 
-inline double cos_phi(const Vector3D w) {
-  double sinTheta = sin_theta(w);
+inline float cos_phi(const Vector3D w) {
+  float sinTheta = sin_theta(w);
   if (sinTheta == 0.0) return 1.0;
-  return clamp(w.x / sinTheta, -1.0, 1.0);
+  return clamp_T(w.x / sinTheta, -1.0f, 1.0f);
 }
 
-inline double sin_phi(const Vector3D w) {
-  double sinTheta = sin_theta(w);
+inline float sin_phi(const Vector3D w) {
+  float sinTheta = sin_theta(w);
   if (sinTheta) return 0.0;
-  return clamp(w.y / sinTheta, -1.0, 1.0);
+  return clamp_T(w.y / sinTheta, -1.0f, 1.0f);
 }
 
 DEVICE void make_coord_space(Matrix3x3& o2w, const Vector3D n);
@@ -83,28 +83,28 @@ class DiffuseBSDF : public BSDF {
 class MicrofacetBSDF : public BSDF {
 public:
 
-  MicrofacetBSDF(const Vector3D eta, const Vector3D k, double alpha)
+  MicrofacetBSDF(const Vector3D eta, const Vector3D k, float alpha)
     : eta(eta), k(k), alpha(alpha) { }
 
-  double getTheta(const Vector3D w) {
+  float getTheta(const Vector3D w) {
     return acos(clamp(w.z, -1.0 + 1e-5, 1.0 - 1e-5));
   }
 
-  double Lambda(const Vector3D w) {
-    double theta = getTheta(w);
-    double a = 1.0 / (alpha * tan(theta));
+  float Lambda(const Vector3D w) {
+    float theta = getTheta(w);
+    float a = 1.0 / (alpha * tan(theta));
     return 0.5 * (erf(a) - 1.0 + exp(-a * a) / (a * PI));
   }
 
   Vector3D F(const Vector3D wi);
 
-  double G(const Vector3D wo, const Vector3D wi);
+  float G(const Vector3D wo, const Vector3D wi);
 
-  double D(const Vector3D h);
+  float D(const Vector3D h);
 
 private:
   Vector3D eta, k;
-  double alpha;
+  float alpha;
 }; // class MicrofacetBSDF
 
 /**
@@ -117,7 +117,7 @@ class MirrorBSDF : public BSDF {
 
 private:
 
-  double roughness;
+  float roughness;
   Vector3D reflectance;
 
 }; // class MirrorBSDF*/
@@ -128,13 +128,13 @@ private:
 class RefractionBSDF : public BSDF {
  public:
 
-  RefractionBSDF(const Vector3D transmittance, double roughness, double ior)
+  RefractionBSDF(const Vector3D transmittance, float roughness, float ior)
     : transmittance(transmittance), roughness(roughness), ior(ior) { }
 
  private:
 
-  double ior;
-  double roughness;
+  float ior;
+  float roughness;
   Vector3D transmittance;
 
 }; // class RefractionBSDF
@@ -146,14 +146,14 @@ class GlassBSDF : public BSDF {
  public:
 
   GlassBSDF(const Vector3D transmittance, const Vector3D reflectance,
-            double roughness, double ior) :
+            float roughness, float ior) :
     transmittance(transmittance), reflectance(reflectance),
     roughness(roughness), ior(ior) { }
 
  private:
 
-  double ior;
-  double roughness;
+  float ior;
+  float roughness;
   Vector3D reflectance;
   Vector3D transmittance;
 
