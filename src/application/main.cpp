@@ -1,7 +1,14 @@
 #include "application.h"
 typedef uint32_t gid_t;
-#include "util/image.h"
+#include "../util/image.h"
 typedef uint32_t gid_t;
+
+// gltf stuff
+#define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+// #define TINYGLTF_NOEXCEPTION // optional. disable exception handling.
+#include "../util/tiny_gltf.h"
 
 #include <iostream>
 #include <unistd.h>
@@ -29,6 +36,11 @@ void usage(const char *binaryName) {
   printf("  -h               Print this help message\n");
   printf("\n");
 }
+
+tinygltf::Model model;
+tinygltf::TinyGLTF loader;
+std::string err;
+std::string warn;
 
 int main(int argc, char **argv) {
 
@@ -113,12 +125,29 @@ int main(int argc, char **argv) {
   sceneFile = sceneFile.substr(0, sceneFile.find(".dae"));
   config.pathtracer_filename = sceneFile;
 
-  // parse scene
-  Collada::SceneInfo *sceneInfo = new Collada::SceneInfo();
-  if (Collada::ColladaParser::load(sceneFilePath.c_str(), sceneInfo) < 0) {
-    delete sceneInfo;
-    exit(0);
+    // bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, argv[1]);
+  bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, sceneFilePath); // for binary glTF(.glb)
+
+  if (!warn.empty()) {
+    printf("Warn: %s\n", warn.c_str());
   }
+
+  if (!err.empty()) {
+    printf("Err: %s\n", err.c_str());
+  }
+
+  if (!ret) {
+    printf("Failed to parse glTF\n");
+    return -1;
+  }
+
+
+  // // parse scene
+  // Collada::SceneInfo *sceneInfo = new Collada::SceneInfo();
+  // if (Collada::ColladaParser::load(sceneFilePath.c_str(), sceneInfo) < 0) {
+  //   delete sceneInfo;
+  //   exit(0);
+  // }
 
   // create application
   Application *app = new Application(config, false);
@@ -127,8 +156,10 @@ int main(int argc, char **argv) {
 
   // write straight to file without opening a window if -f option provided
   app->init();
-  app->load(sceneInfo);
-  delete sceneInfo;
+  // app->load(sceneInfo);
+  // delete sceneInfo;
+
+  app->load_from_gltf_model(model);
 
   if (w && h)
     app->resize(w, h);

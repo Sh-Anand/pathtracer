@@ -15,6 +15,7 @@
 #include "scene/collada/sphere_info.h"
 #include "scene/collada/polymesh_info.h"
 #include "scene/collada/material_info.h"
+#include "scene/collada/camera_info.h"
 
 // MeshEdit
 #include "scene/gl_scene/scene.h"
@@ -26,6 +27,10 @@
 
 // Shared modules
 #include "pathtracer/camera.h"
+
+// GLTF parser
+#include "util/tiny_gltf.h"
+#include "util/vector3D.h"
 
 using namespace std;
 
@@ -102,6 +107,7 @@ class Application {
 
   void resize(size_t w, size_t h);
   void load(Collada::SceneInfo* sceneInfo);
+  void load_from_gltf_model(const tinygltf::Model &model);
   void render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy) { 
     set_up_pathtracer();
     renderer->render_to_file(filename, x, y, dx, dy, lights, bsdfs); 
@@ -133,6 +139,7 @@ private:
   // Initialization functions to get the opengl cooking with oil.
   void init_camera(Collada::CameraInfo& camera, const Matrix4x4& transform);
   void init_material(Collada::MaterialInfo& material);
+  void ParseNode(const tinygltf::Model &model, int nodeIdx, const Matrix4x4 &parentTransform);
 
   std::vector<CudaPrimitive> primitives;
   std::vector<CudaBSDF> bsdfs;

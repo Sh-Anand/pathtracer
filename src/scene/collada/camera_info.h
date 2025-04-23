@@ -2,6 +2,7 @@
 #define CGL_COLLADA_CAMERAINFO_H
 
 #include "collada_info.h"
+#include "util/vector3D.h"
 
 namespace CGL { namespace Collada {
 
@@ -12,6 +13,7 @@ struct CameraInfo : public Instance {
 
 	Vector3D view_dir;
 	Vector3D up_dir;
+  Vector3D position;
 
   float hFov, vFov, nClip, fClip;
 };

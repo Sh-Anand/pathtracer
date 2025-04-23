@@ -2,6 +2,15 @@
 
 #include "scene/gl_scene/mesh.h"
 
+#include "scene/primitive.h"
+#include "util/matrix3x3.h"
+#include "util/matrix4x4.h"
+#include "util/quaternion.h"
+#include "util/tiny_gltf.h"
+#include "util/transforms.h"
+#include "util/vector3D.h"
+#include "util/vector4D.h"
+
 using Collada::CameraInfo;
 using Collada::LightInfo;
 using Collada::MaterialInfo;
@@ -84,6 +93,232 @@ void push_cuda_bsdf(const BSDF *bsdf, vector<CudaBSDF> &bsdfs) {
     exit(1);
   }
   bsdfs.push_back(cuda_bsdf);
+}
+
+Vector3D computeDiffuseBSDF(const Vector3D& baseColor, float metallic) {
+  Vector3D diffuseColor = (1.0f - metallic) * baseColor;
+  return diffuseColor / M_PI;
+}
+
+Matrix4x4 GetNodeTransform(const tinygltf::Node &node) {
+  Matrix4x4 T(1.0f);
+
+  // if (!node.matrix.empty()) {
+  //     return glm::make_mat4(node.matrix.data());
+  // }
+
+  Vector3D translation(0.0f), _scale(1.0f);
+  Quaternion rotation = Quaternion(0, 0, 0, 1);
+
+  if (!node.translation.empty())
+      translation = Vector3D(node.translation[0], node.translation[1], node.translation[2]);
+  if (!node.rotation.empty())
+      rotation = Quaternion(node.rotation[0], node.rotation[1], -node.rotation[2], node.rotation[3]);
+  if (!node.scale.empty())
+      _scale = Vector3D(node.scale[0], node.scale[1], node.scale[2]);
+
+  T = translate(translation.x, translation.y, translation.z)
+    * rotation.rotationMatrix().to4x4()
+    * scale(_scale.x, _scale.y, _scale.z);
+
+  return T;
+}
+
+CameraInfo cam;
+
+void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Matrix4x4 &parentTransform){
+  const auto &node = model.nodes[nodeIdx];
+  Matrix4x4 worldTransform = parentTransform * GetNodeTransform(node);
+  Matrix3x3 normalMatrix = Matrix3x3(worldTransform).inv().T();
+  
+  if (node.mesh >= 0) {
+    const auto &mesh = model.meshes[node.mesh];
+    for (const auto &primitive : mesh.primitives) {
+        if (primitive.mode != TINYGLTF_MODE_TRIANGLES) continue;
+        const auto &posAccessor = model.accessors[primitive.attributes.at("POSITION")];
+        const auto &normAccessor = model.accessors[primitive.attributes.at("NORMAL")];
+
+        const auto &posView = model.bufferViews[posAccessor.bufferView];
+        const auto &normView = model.bufferViews[normAccessor.bufferView];
+
+        const auto &posBuffer = model.buffers[posView.buffer];
+        const auto &normBuffer = model.buffers[normView.buffer];
+
+        const float *posData = reinterpret_cast<const float*>(&posBuffer.data[posView.byteOffset + posAccessor.byteOffset]);
+        const float *normData = reinterpret_cast<const float*>(&normBuffer.data[normView.byteOffset + normAccessor.byteOffset]);
+
+        const auto &indexAccessor = model.accessors[primitive.indices];
+        const auto &indexView = model.bufferViews[indexAccessor.bufferView];
+        const auto &indexBuffer = model.buffers[indexView.buffer];
+        const void *indexData = &indexBuffer.data[indexView.byteOffset + indexAccessor.byteOffset];
+
+        auto getIndex = [&](size_t i) -> uint32_t {
+            switch (indexAccessor.componentType) {
+                case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT: return reinterpret_cast<const uint16_t*>(indexData)[i];
+                case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:   return reinterpret_cast<const uint32_t*>(indexData)[i];
+                case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:  return reinterpret_cast<const uint8_t*>(indexData)[i];
+                default: throw std::runtime_error("Unsupported index type");
+            }
+        };
+
+        for (size_t i = 0; i < indexAccessor.count; i += 3) {
+            uint32_t i0 = getIndex(i);
+            uint32_t i1 = getIndex(i + 1);
+            uint32_t i2 = getIndex(i + 2);
+
+            Vector3D p1 = Vector3D(posData[i0 * 3 + 0], posData[i0 * 3 + 1], posData[i0 * 3 + 2]);
+            Vector3D p2 = Vector3D(posData[i1 * 3 + 0], posData[i1 * 3 + 1], posData[i1 * 3 + 2]);
+            Vector3D p3 = Vector3D(posData[i2 * 3 + 0], posData[i2 * 3 + 1], posData[i2 * 3 + 2]);
+
+            Vector3D n1 = Vector3D(normData[i0 * 3 + 0], normData[i0 * 3 + 1], normData[i0 * 3 + 2]);
+            Vector3D n2 = Vector3D(normData[i1 * 3 + 0], normData[i1 * 3 + 1], normData[i1 * 3 + 2]);
+            Vector3D n3 = Vector3D(normData[i2 * 3 + 0], normData[i2 * 3 + 1], normData[i2 * 3 + 2]);
+
+            // Transform to world space
+            p1 = (worldTransform * Vector4D(p1, 1.0f)).to3D();
+            p2 = (worldTransform * Vector4D(p2, 1.0f)).to3D();
+            p3 = (worldTransform * Vector4D(p3, 1.0f)).to3D();
+
+            n1 = (normalMatrix * n1);
+            n2 = (normalMatrix * n2);
+            n3 = (normalMatrix * n3);
+
+            n1.normalize(); n2.normalize(); n3.normalize();
+
+            CudaTriangle ct = CudaTriangle();
+            ct.p1 = p1; ct.p2 = p2; ct.p3 = p3;
+            ct.n1 = n1; ct.n2 = n2; ct.n3 = n3;
+            CudaPrimitive cprimitive {};
+
+            if( node.name == "ceiling" || node.name == "floor" || node.name == "rightWall" || node.name == "Mesh" || node.name == "leftWall" || node.name == "floor"){ 
+              // std::cout << i0 << "," << i1 << "," << i2 << std::endl;
+              // std::cout << p1 << "," << p2 << "," << p3 << std::endl;
+              // std::cout << node.rotation[0] << "," << node.rotation[1] << "," << node.rotation[2] << "," << node.rotation[3] << std::endl;
+
+              cprimitive.type = CGL::SceneObjects::CudaPrimitiveType::TRIANGLE;
+              cprimitive.primitive.triangle = ct;
+
+              int materialIndex = primitive.material;
+              const tinygltf::Material& material = model.materials[materialIndex];
+              Vector3D baseColor = Vector3D(
+                material.pbrMetallicRoughness.baseColorFactor[0],
+                material.pbrMetallicRoughness.baseColorFactor[1],
+                material.pbrMetallicRoughness.baseColorFactor[2]
+              );
+              float metallic = material.pbrMetallicRoughness.metallicFactor;
+
+              BSDF* bsdf = new DiffuseBSDF(computeDiffuseBSDF(baseColor, metallic));
+              push_cuda_bsdf(bsdf, bsdfs);
+              cprimitive.bsdf_idx = bsdfs.size() - 1;
+              primitives.push_back(cprimitive);
+  
+            }
+
+            // CudaPrimitive primitive {};
+            // primitive.type = CGL::SceneObjects::CudaPrimitiveType::TRIANGLE;
+            // primitive.primitive.triangle = ct;
+            // // need to add bsdf supports, now it is a hack
+            // primitive.bsdf_idx = 0;
+            // primitives.push_back(primitive);
+        }
+    }
+  }else if(node.light >= 0){
+    // adding lights
+    std::cout << "light" << std::endl;
+    CudaLight clight {};
+    clight.type = (CudaLightType) Collada::LightType::AREA;
+    Vector3D spectrum = Vector3D(10, 10, 10);
+    // this is a hack, since we don't have a light type, treat point light as area light
+    Vector3D direction = Vector3D(0, -1, 0);
+    Vector3D dim_x = Vector3D(0.6, 0, 0);
+    Vector3D dim_y = Vector3D(0, 1, 0.8);
+
+    auto ext = node.extensions.find("KHR_lights_punctual");
+    if (ext != node.extensions.end()) {
+        int lightIndex = ext->second.Get("light").Get<int>();
+        const auto& light = model.extensions.at("KHR_lights_punctual").Get("lights").Get(lightIndex);
+
+        if (light.Get("type").Get<std::string>() == "point") {
+            // Position is from the node's transform
+            Vector3D position = (worldTransform * Vector4D(0, 0, 0, 1)).to3D();
+            // Vector3D position = Vector3D(0, 1.49, 0);
+            // clight.light.point = CudaPointLight{spectrum, position};
+            clight.light.area = CudaAreaLight(spectrum, position, direction, dim_x, dim_y);
+            std::cout << "Point light position: (" << position.x << ", " << position.y << ", " << position.z << ")\n";
+        }
+    }
+    
+    lights.push_back(clight);
+  }else if(node.camera >= 0){
+    // adding camera code
+    auto gltfCam = model.cameras[node.camera];
+
+    cam.vFov  = degrees(gltfCam.perspective.yfov);
+    cam.hFov  = degrees(2.0f * atan(tan(gltfCam.perspective.yfov / 2.0f) * gltfCam.perspective.aspectRatio));
+    cam.nClip = gltfCam.perspective.znear;
+    cam.fClip = gltfCam.perspective.zfar;
+
+    // Get transform from camera node
+    Matrix4x4 camTransform = worldTransform;
+    // std::cout << node.translation[0] << "," << node.translation[1] << "," << node.translation[2] << std::endl;
+
+    Vector3D view = -camTransform[2].to3D(); // -Z
+    view.normalize();
+    Vector3D up   = camTransform[1].to3D();  // +Y
+    up.normalize();
+
+    cam.view_dir = view;
+    cam.up_dir   = up;
+    cam.position = (camTransform * Vector4D(0, 0, 0, 1)).to3D();
+
+    init_camera(cam, camTransform);
+
+  }
+  for (int childIdx : node.children) {
+    ParseNode(model, childIdx, worldTransform);
+  }
+}
+
+void Application::load_from_gltf_model(const tinygltf::Model &model) {
+
+  const auto &scene = model.scenes[model.defaultScene > -1 ? model.defaultScene : 0];
+  for (int rootNode : scene.nodes) {
+    Matrix4x4 rootTransform = Matrix4x4(1.0f);
+    rootTransform[0][0] = -1.0f;
+    ParseNode(model, rootNode, rootTransform);
+  }
+
+  BBox bbox;
+  for (auto& primitive: primitives) {
+    bbox.expand(primitive.get_bbox());
+  }
+
+  if (!bbox.empty()) {
+
+    Vector3D target = bbox.centroid();
+    canonical_view_distance = bbox.extent.norm() / 2 * 1.5;
+
+    double view_distance = canonical_view_distance * 2;
+    double min_view_distance = canonical_view_distance / 10.0;
+    double max_view_distance = canonical_view_distance * 20.0;
+
+    std::cout << cam.view_dir << std::endl;
+    std::cout << target << std::endl;
+
+    canonicalCamera.place(target,
+                          acos(cam.view_dir.y),
+                          atan2(cam.view_dir.x, cam.view_dir.z),
+                          view_distance,
+                          min_view_distance,
+                          max_view_distance);
+
+    camera.place(target,
+                acos(cam.view_dir.y),
+                atan2(cam.view_dir.x, cam.view_dir.z),
+                view_distance,
+                min_view_distance,
+                max_view_distance);
+  }
 }
 
 void Application::load(SceneInfo* sceneInfo) {
@@ -178,6 +413,11 @@ void Application::load(SceneInfo* sceneInfo) {
         init_material(static_cast<MaterialInfo&>(*instance));
         break;
      }
+  }
+  
+  for(auto& primitive: primitives){
+    auto& triangle = primitive.primitive.triangle;
+    std::cout << triangle.p1 << "," << triangle.p2 << "," << triangle.p3 << std::endl;
   }
 
   scene = new GLScene::Scene(objects, scene_lights);
