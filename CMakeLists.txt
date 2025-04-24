@@ -51,6 +51,7 @@ set(APPLICATION_SOURCE
     src/util/vector2D.cpp
     src/util/vector3D.cpp
     src/util/vector4D.cpp
+    src/util/quaternion.cpp
 
     src/pathtracer/advanced_bsdf.cpp
     src/pathtracer/raytraced_renderer.cpp

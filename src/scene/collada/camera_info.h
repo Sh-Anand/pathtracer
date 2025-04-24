@@ -2,6 +2,7 @@
 #define CGL_COLLADA_CAMERAINFO_H
 
 #include "collada_info.h"
+#include "util/vector3D.h"
 
 namespace CGL { namespace Collada {
 
