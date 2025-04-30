@@ -40,6 +40,30 @@ DEVICE __inline__ Vector3D sample_L(const CudaPointLight *light, const Vector3D 
   return light->radiance;
 }
 
+DEVICE __inline__ Vector3D sample_L(const CudaTriangleLight *light, const Vector3D p, Vector3D* wi,
+                            double* distToLight, double* pdf, RNGState &rand_state) {
+  // sample a light on the triangle 
+  double a = next_double(rand_state), b = next_double(rand_state);
+  if (a + b > 1) {
+    a = 1 - a;
+    b = 1 - b;
+  }
+  double c = 1 - a - b;
+  Vector3D sample = a * light->triangle.p1 +
+                   b * light->triangle.p2 +
+                   c * light->triangle.p3;
+  Vector3D n = a*light->triangle.n1 +
+               b*light->triangle.n2 +
+               c*light->triangle.n3;
+  Vector3D d = sample - p;
+  *wi = d.unit();
+  *distToLight = d.norm();
+  double costheta = dot(d.unit(), n.unit());
+  *pdf = 1.0;
+  // printf("pdf: %lf\n", *pdf);
+  return costheta < 0 ? light->radiance : Vector3D();
+}
+
 DEVICE __inline__ Vector3D sample_L(const CudaAreaLight *light, const Vector3D p, Vector3D* wi, 
                              double* distToLight, double* pdf, RNGState &rand_state) {
   Vector2D sample = Vector2D(next_double(rand_state), next_double(rand_state)) - Vector2D(0.5f, 0.5f);
@@ -63,6 +87,8 @@ DEVICE __inline__ Vector3D p_sample_L(const CudaLight *light, const Vector3D p,
       return sample_L(&light->light.point, p, wi, distToLight, pdf);
     case AREA:
       return sample_L(&light->light.area, p, wi, distToLight, pdf, rand_state);
+    case TRIANGLELight:
+      return sample_L(&light->light.triangle, p, wi, distToLight, pdf, rand_state);
     default:
       return Vector3D(0, 0, 0);
   }

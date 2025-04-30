@@ -1,6 +1,7 @@
 #ifndef CGL_STATICSCENE_LIGHT_H
 #define CGL_STATICSCENE_LIGHT_H
 
+#include "scene/primitive.h"
 #include "util/vector3D.h"
 
 namespace CGL { namespace SceneObjects {
@@ -11,7 +12,8 @@ namespace CGL { namespace SceneObjects {
     DIRECTIONAL,
     AREA,
     POINT,
-    SPOT
+    SPOT,
+    TRIANGLELight
   };
 
 struct CudaDirectionalLight {
@@ -46,12 +48,32 @@ struct CudaAreaLight {
   Vector3D dim_y;
   double area;
 };
+
+struct CudaTriangleLight {
+  CudaTriangleLight(const Vector3D rad, 
+                const Vector3D dir, 
+                const CudaTriangle tri) 
+      : radiance(rad), 
+        direction(dir), 
+        triangle(tri),  
+        area(tri.area()) {}
+  DEVICE bool is_delta_light() const { return false; }
+
+  Vector3D radiance;
+  Vector3D direction;
+  CudaTriangle triangle;
+
+  double area;
+};
+
 union LightData {
   LightData() {}
   CudaDirectionalLight directional;
   CudaPointLight point;
   CudaAreaLight area;
+  CudaTriangleLight triangle;
 };
+
 struct CudaLight {
   CudaLightType type;
   LightData light;
@@ -67,6 +89,9 @@ struct CudaLight {
       case CudaLightType::AREA:
         light.area = l.light.area;
         break;
+      case CudaLightType::TRIANGLELight:
+        light.triangle = l.light.triangle;
+        break;
       default:
         break;
     }
@@ -79,6 +104,8 @@ struct CudaLight {
         return light.point.is_delta_light();
       case CudaLightType::AREA:
         return light.area.is_delta_light();
+        case CudaLightType::TRIANGLELight:
+        return light.triangle.is_delta_light();
       default:
         return false;
     }

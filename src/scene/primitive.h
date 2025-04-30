@@ -29,6 +29,12 @@ struct CudaTriangle {
     bbox.expand(p3);
     return bbox;
   }
+  
+  double area() const {
+    Vector3D e1 = p2 - p1;
+    Vector3D e2 = p3 - p1;
+    return 0.5 * cross(e1, e2).norm();
+  }
 
   Vector3D p1, p2, p3;
   Vector3D n1, n2, n3;  

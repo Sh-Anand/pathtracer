@@ -141,6 +141,8 @@ private:
   void init_material(Collada::MaterialInfo& material);
   void ParseNode(const tinygltf::Model &model, int nodeIdx, const Matrix4x4 &parentTransform);
 
+  std::vector<Vector3D> vertices;
+  std::vector<Vector3D> normals;
   std::vector<CudaPrimitive> primitives;
   std::vector<CudaBSDF> bsdfs;
   std::vector<CudaLight> lights;

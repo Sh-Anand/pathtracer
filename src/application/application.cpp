@@ -162,17 +162,28 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
         };
         int materialIndex = primitive.material;
         const tinygltf::Material& material = model.materials[materialIndex];
-        Vector3D baseColor = Vector3D(
-          material.pbrMetallicRoughness.baseColorFactor[0],
-          material.pbrMetallicRoughness.baseColorFactor[1],
-          material.pbrMetallicRoughness.baseColorFactor[2]
-        );
-        float metallic = material.pbrMetallicRoughness.metallicFactor;
-        if(node.name == "light" ) { 
+        
+        if(!material.emissiveFactor.empty() && material.emissiveFactor[0] > 0.0f){ 
           // std::cout << "light" << std::endl;
-          BSDF* bsdf = new EmissionBSDF(Vector3D(1.f, 1.f, 1.f));
+          Vector3D rad;
+          rad.x = (float)material.emissiveFactor[0];
+          rad.y = (float)material.emissiveFactor[1];
+          rad.z = (float)material.emissiveFactor[2];
+          double emissiveStrength = 1.0f;
+          if (material.extensions.count("KHR_materials_emissive_strength")) {
+            const auto& ext = material.extensions.at("KHR_materials_emissive_strength").Get("emissiveStrength");
+            emissiveStrength = (float)ext.Get<double>();
+          }
+          rad *= emissiveStrength;
+          BSDF* bsdf = new EmissionBSDF(rad);
           push_cuda_bsdf(bsdf, bsdfs);
-        }else{
+        } else{
+          Vector3D baseColor = Vector3D(
+            material.pbrMetallicRoughness.baseColorFactor[0],
+            material.pbrMetallicRoughness.baseColorFactor[1],
+            material.pbrMetallicRoughness.baseColorFactor[2]
+          );
+          float metallic = material.pbrMetallicRoughness.metallicFactor;
           BSDF* bsdf = new DiffuseBSDF(computeDiffuseBSDF(baseColor, metallic));
           push_cuda_bsdf(bsdf, bsdfs);
         }
@@ -205,23 +216,24 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             ct.p1 = p1; ct.p2 = p2; ct.p3 = p3;
             ct.n1 = n1; ct.n2 = n2; ct.n3 = n3;
             CudaPrimitive cprimitive {};
-
             cprimitive.type = CGL::SceneObjects::CudaPrimitiveType::TRIANGLE;
             cprimitive.primitive.triangle = ct;            
             cprimitive.bsdf_idx = bsdfs.size() - 1;
             primitives.push_back(cprimitive);
+
+            if(!material.emissiveFactor.empty() && material.emissiveFactor[0] > 0.0f){
+              CudaLight clight {};
+              clight.type = (CudaLightType) CGL::SceneObjects::CudaLightType::TRIANGLELight;
+              clight.light.triangle = CGL::SceneObjects::CudaTriangleLight{Vector3D(100, 100, 100), Vector3D(0, -1, 0), ct};
+              lights.push_back(clight);
+              std::cout << "light pushed" << std::endl;
+            }
         }
     }
   }else if(node.light >= 0){
     // adding lights
     std::cout << "light" << std::endl;
     CudaLight clight {};
-    clight.type = (CudaLightType) Collada::LightType::AREA;
-    Vector3D spectrum = Vector3D(10, 10, 10);
-    // this is a hack, since we don't have a light type, treat point light as area light
-    Vector3D direction = Vector3D(0, -1, 0);
-    Vector3D dim_x = Vector3D(0.6, 0, 0);
-    Vector3D dim_y = Vector3D(0, 1, 0.8);
 
     auto ext = node.extensions.find("KHR_lights_punctual");
     if (ext != node.extensions.end()) {
@@ -229,12 +241,18 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
         const auto& light = model.extensions.at("KHR_lights_punctual").Get("lights").Get(lightIndex);
 
         if (light.Get("type").Get<std::string>() == "point") {
-            // Position is from the node's transform
-            Vector3D position = (worldTransform * Vector4D(0, 0, 0, 1)).to3D();
-            // Vector3D position = Vector3D(0, 1.49, 0);
-            // clight.light.point = CudaPointLight{spectrum, position};
-            clight.light.area = CudaAreaLight(spectrum, position, direction, dim_x, dim_y);
-            std::cout << "Point light position: (" << position.x << ", " << position.y << ", " << position.z << ")\n";
+          // this is a hack, since we don't have a light type, treat point light as area light
+          clight.type = (CudaLightType) Collada::LightType::AREA;
+          Vector3D spectrum = Vector3D(10, 10, 10);
+          Vector3D direction = Vector3D(0, -1, 0);
+          Vector3D dim_x = Vector3D(0.6, 0, 0);
+          Vector3D dim_y = Vector3D(0, 1, 0.8);
+          // Position is from the node's transform
+          Vector3D position = (worldTransform * Vector4D(0, 0, 0, 1)).to3D();
+          // Vector3D position = Vector3D(0, 1.49, 0);
+          // clight.light.point = CudaPointLight{spectrum, position};
+          clight.light.area = CudaAreaLight(spectrum, position, direction, dim_x, dim_y);
+          std::cout << "Point light position: (" << position.x << ", " << position.y << ", " << position.z << ")\n";
         }
     }
     
@@ -272,8 +290,7 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
 
   const auto &scene = model.scenes[model.defaultScene > -1 ? model.defaultScene : 0];
   for (int rootNode : scene.nodes) {
-    Matrix4x4 rootTransform = Matrix4x4(1.0f);
-    ParseNode(model, rootNode, rootTransform);
+    ParseNode(model, rootNode, Matrix4x4(1.0f));
   }
 
   BBox bbox;
