@@ -55,8 +55,9 @@ struct CudaTriangleLight {
                 const CudaPrimitive tri) 
       : radiance(rad), 
         direction(dir), 
-        triangle(tri),  
-        area(tri.area) {}
+        triangle(tri) {
+          area = 0.5 * cross(tri.p2 - tri.p1, tri.p3 - tri.p1).norm();
+        }
   DEVICE bool is_delta_light() const { return false; }
 
   Vector3D radiance;

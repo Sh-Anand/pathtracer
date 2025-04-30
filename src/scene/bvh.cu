@@ -4,10 +4,31 @@ namespace CGL { namespace SceneObjects {
 
 BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec, size_t max_leaf_size) {
 
+  std::vector<BBox> bboxes;
+  bboxes.reserve(primitives_vec.size());
+  std::vector<uint32_t> indices(primitives_vec.size());
+  for (uint32_t i = 0; i < primitives_vec.size(); i++) {
+    indices[i] = i;
+    CudaPrimitive &primitive = primitives_vec[i];
+    BBox bbox(primitive.p1);
+    bbox.expand(primitive.p2);
+    bbox.expand(primitive.p3);
+    bboxes.push_back(bbox);
+  }
+
   std::vector<BVHNode> nodes_vec;
-  root = construct_bvh(0, primitives_vec.size(), max_leaf_size, primitives_vec, nodes_vec);
-  num_primitives = primitives_vec.size();
-  num_nodes = nodes_vec.size();
+  root = construct_bvh(0, primitives_vec.size(), max_leaf_size, indices, bboxes, nodes_vec);
+
+  //reorder primitives according to reordered indices inplace
+  std::vector<CudaPrimitive> primitives_vec_reordered(primitives_vec.size());
+  for (uint32_t i = 0; i < indices.size(); i++) {
+    primitives_vec_reordered[i] = primitives_vec[indices[i]];
+  }
+  primitives_vec = std::move(primitives_vec_reordered);
+
+  
+  size_t num_primitives = primitives_vec.size();
+  size_t num_nodes = nodes_vec.size();
 
   CUDA_ERR(cudaMalloc(&primitives, num_primitives * sizeof(CudaPrimitive)));
   CUDA_ERR(cudaMalloc(&nodes, num_nodes * sizeof(BVHNode)));
@@ -16,7 +37,6 @@ BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec, size_t max_leaf_siz
   CUDA_ERR(cudaMemcpy(nodes, nodes_vec.data(), num_nodes * sizeof(BVHNode), cudaMemcpyHostToDevice));
 
   std::cout<< "BVHCuda: " << num_primitives << " primitives, " << num_nodes << " nodes, " << std::endl;
-  std::cout<< "root: " << root << std::endl;
 }
 
 DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i, uint32_t root_idx) const {

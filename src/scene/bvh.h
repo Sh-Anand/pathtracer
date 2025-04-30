@@ -41,12 +41,10 @@ class BVHCuda {
     DEVICE bool intersect(Ray& r, CudaIntersection* i, uint32_t node) const;
     
     CudaPrimitive *primitives;
-    size_t num_primitives;
     BVHNode* nodes;
-    uint32_t num_nodes;
     uint32_t root;
 
-    int construct_bvh(size_t start, size_t end, size_t max_leaf_size, std::vector<CudaPrimitive> &primitives, std::vector<BVHNode>& nodes);
+    int construct_bvh(size_t start, size_t end, size_t max_leaf_size, std::vector<uint32_t> &primitives, std::vector<BBox> &bboxes, std::vector<BVHNode>& nodes);
   
 };
 

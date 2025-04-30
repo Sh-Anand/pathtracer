@@ -15,12 +15,13 @@ BVHCuda::~BVHCuda() {
 
 int BVHCuda::construct_bvh(size_t start, size_t end,
                            size_t max_leaf_size,
-                           std::vector<CudaPrimitive> &prims,
+                           std::vector<uint32_t> &prims,
+                           std::vector<BBox> &bboxes,
                            std::vector<BVHNode> &nodes) {
   // 1) Compute object and centroid bounds
   BBox node_bbox, cent_bbox;
   for (size_t i = start; i < end; ++i) {
-    BBox b = prims[i].get_bbox();
+    BBox b = bboxes[prims[i]];
     node_bbox.expand(b);
     cent_bbox.expand(b.centroid());
   }
@@ -52,10 +53,10 @@ int BVHCuda::construct_bvh(size_t start, size_t end,
 
   // fill buckets
   for (size_t i = start; i < end; ++i) {
-    double c = prims[i].get_bbox().centroid()[axis];
+    double c = bboxes[prims[i]].centroid()[axis];
     int b = std::min(int((c - minA)*invBin), B-1);
     buckets[b].count++;
-    buckets[b].bbox.expand(prims[i].get_bbox());
+    buckets[b].bbox.expand(bboxes[prims[i]]);
   }
 
   // prefix sums for cost
@@ -97,8 +98,8 @@ int BVHCuda::construct_bvh(size_t start, size_t end,
   double splitPos = minA + (bestB+1)/double(B)*(maxA-minA);
   auto midIt = std::partition(prims.begin()+start,
                               prims.begin()+end,
-                              [&](const CudaPrimitive &p){
-                                return p.get_bbox().centroid()[axis] < splitPos;
+                              [&](const uint32_t &p){
+                                return bboxes[p].centroid()[axis] < splitPos;
                               });
   size_t mid = midIt - prims.begin();
   // fallback if degenerate
@@ -106,8 +107,8 @@ int BVHCuda::construct_bvh(size_t start, size_t end,
     mid = start + n/2;
 
   // 5) recurse
-  int left  = construct_bvh(start, mid, max_leaf_size, prims, nodes);
-  int right = construct_bvh(mid,   end, max_leaf_size, prims, nodes);
+  int left  = construct_bvh(start, mid, max_leaf_size, prims, bboxes, nodes);
+  int right = construct_bvh(mid,   end, max_leaf_size, prims, bboxes, nodes);
 
   nodes[idx].leaf = false;
   nodes[idx].l    = left;

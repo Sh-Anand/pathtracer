@@ -302,7 +302,10 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
 
   BBox bbox;
   for (auto& primitive: primitives) {
-    bbox.expand(primitive.get_bbox());
+    BBox b(primitive.p1);
+    b.expand(primitive.p2);
+    b.expand(primitive.p3);
+    bbox.expand(b);
   }
 
   if (!bbox.empty()) {
@@ -423,7 +426,10 @@ void Application::load(SceneInfo* sceneInfo) {
 
   BBox bbox;
   for (auto& primitive: primitives) {
-    bbox.expand(primitive.get_bbox());
+    BBox b(primitive.p1);
+    b.expand(primitive.p2);
+    b.expand(primitive.p3);
+    bbox.expand(b);
   }
 
   if (!bbox.empty()) {
