@@ -40,28 +40,41 @@ DEVICE __inline__ Vector3D sample_L(const CudaPointLight *light, const Vector3D 
   return light->radiance;
 }
 
-DEVICE __inline__ Vector3D sample_L(const CudaTriangleLight *light, const Vector3D p, Vector3D* wi,
-                            double* distToLight, double* pdf, RNGState &rand_state) {
-  // sample a light on the triangle 
-  double a = next_double(rand_state), b = next_double(rand_state);
-  if (a + b > 1) {
-    a = 1 - a;
-    b = 1 - b;
+DEVICE __inline__ Vector3D sample_L(const CudaTriangleLight *light,
+                                    const Vector3D         p,
+                                    Vector3D*              wi,
+                                    double*                distToLight,
+                                    double*                pdf,
+                                    RNGState&              rand_state) {
+  // 1) Uniformly sample a point on the triangle via barycentrics
+  double r1 = next_double(rand_state);
+  double r2 = next_double(rand_state);
+  if (r1 + r2 > 1.0) {
+    r1 = 1.0 - r1;
+    r2 = 1.0 - r2;
   }
-  double c = 1 - a - b;
-  Vector3D sample = a * light->triangle.p1 +
-                   b * light->triangle.p2 +
-                   c * light->triangle.p3;
-  Vector3D n = a*light->triangle.n1 +
-               b*light->triangle.n2 +
-               c*light->triangle.n3;
-  Vector3D d = sample - p;
-  *wi = d.unit();
-  *distToLight = d.norm();
-  double costheta = dot(d.unit(), n.unit());
-  *pdf = 1.0;
-  // printf("pdf: %lf\n", *pdf);
-  return costheta < 0 ? light->radiance : Vector3D();
+  const CudaTriangle& tri = light->triangle;
+  Vector3D samplePos = tri.p1
+                     + (tri.p2 - tri.p1) * r1
+                     + (tri.p3 - tri.p1) * r2;
+
+  // 2) Compute direction & distance from shading point to the sample
+  Vector3D d = samplePos - p;
+  double  dist = d.norm();
+  *distToLight = dist;
+  Vector3D dir = d / dist;
+  *wi = dir;
+
+  // 3) Compute triangle normal for the geometry term
+  Vector3D N = cross((tri.p2 - tri.p1), (tri.p3 - tri.p1)).unit();
+
+  // 4) Convert area‐pdf to solid‐angle pdf:
+  //    pdf_ω = (distance²) / (area * cosθ)
+  double cosTheta = fmax(dot(N, -dir), 0.0);
+  *pdf = (dist * dist) / (light->area * cosTheta);
+
+  // 5) Return the emitted radiance
+  return light->radiance;
 }
 
 DEVICE __inline__ Vector3D sample_L(const CudaAreaLight *light, const Vector3D p, Vector3D* wi, 
