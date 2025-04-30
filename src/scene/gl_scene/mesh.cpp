@@ -13,7 +13,6 @@ using std::ostringstream;
 using std::unordered_map;
 
 using CGL::SceneObjects::CudaPrimitive;
-using CGL::SceneObjects::CudaTriangle;
 
 namespace CGL { namespace GLScene {
 
@@ -84,16 +83,13 @@ void Mesh::get_triangles(vector<CudaPrimitive>& primitives, uint32_t bsdf_idx) c
   size_t num_triangles = indices.size() / 3;
   for (size_t i = 0; i < num_triangles; ++i) {
 
-    CudaPrimitive primitive {};
-    primitive.type = CGL::SceneObjects::CudaPrimitiveType::TRIANGLE;
-    primitive.primitive.triangle = CudaTriangle {
+    CudaPrimitive primitive {
       positions[indices[i * 3 + 0]],
       positions[indices[i * 3 + 1]],
       positions[indices[i * 3 + 2]],
       normals[indices[i * 3 + 0]],
       normals[indices[i * 3 + 1]],
-      normals[indices[i * 3 + 2]]};
-    primitive.bsdf_idx = bsdf_idx;
+      normals[indices[i * 3 + 2]], bsdf_idx};
     primitives.push_back(primitive);
   }
 }

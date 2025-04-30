@@ -124,7 +124,6 @@ target_link_libraries(pathtracer
     PUBLIC
     OpenGL::GL
     OpenGL::GLU
-    pthread
 )
 
 #-------------------------------------------------------------------------------

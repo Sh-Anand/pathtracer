@@ -53,7 +53,7 @@ DEVICE __inline__ Vector3D sample_L(const CudaTriangleLight *light,
     r1 = 1.0 - r1;
     r2 = 1.0 - r2;
   }
-  const CudaTriangle& tri = light->triangle;
+  const CudaPrimitive& tri = light->triangle;
   Vector3D samplePos = tri.p1
                      + (tri.p2 - tri.p1) * r1
                      + (tri.p3 - tri.p1) * r2;

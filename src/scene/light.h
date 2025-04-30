@@ -52,16 +52,16 @@ struct CudaAreaLight {
 struct CudaTriangleLight {
   CudaTriangleLight(const Vector3D rad, 
                 const Vector3D dir, 
-                const CudaTriangle tri) 
+                const CudaPrimitive tri) 
       : radiance(rad), 
         direction(dir), 
         triangle(tri),  
-        area(tri.area()) {}
+        area(tri.area) {}
   DEVICE bool is_delta_light() const { return false; }
 
   Vector3D radiance;
   Vector3D direction;
-  CudaTriangle triangle;
+  CudaPrimitive triangle;
 
   double area;
 };
@@ -104,7 +104,7 @@ struct CudaLight {
         return light.point.is_delta_light();
       case CudaLightType::AREA:
         return light.area.is_delta_light();
-        case CudaLightType::TRIANGLELight:
+      case CudaLightType::TRIANGLELight:
         return light.triangle.is_delta_light();
       default:
         return false;

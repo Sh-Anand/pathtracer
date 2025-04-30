@@ -8,7 +8,7 @@ BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec, size_t max_leaf_siz
   root = construct_bvh(0, primitives_vec.size(), max_leaf_size, primitives_vec, nodes_vec);
   num_primitives = primitives_vec.size();
   num_nodes = nodes_vec.size();
-  
+
   CUDA_ERR(cudaMalloc(&primitives, num_primitives * sizeof(CudaPrimitive)));
   CUDA_ERR(cudaMalloc(&nodes, num_nodes * sizeof(BVHNode)));
 

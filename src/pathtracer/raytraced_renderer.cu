@@ -85,6 +85,7 @@ void RaytracedRenderer::build_accel(std::vector<CudaPrimitive> &primitives) {
 void RaytracedRenderer::copy_host_device_pt(std::vector<CudaLight> &lights, std::vector<CudaBSDF> &bsdfs) {
     std::cout << "Copying PathTracer to GPU..." << std::endl;
     std::cout << "BSDFs size: " << bsdfs.size() << std::endl;
+    std::cout << "Lights size: " << lights.size() << std::endl;
 
     cudaMalloc(&pt->lights, lights.size() * sizeof(CudaLight));
     cudaMemcpy(pt->lights, lights.data(), lights.size() * sizeof(CudaLight), cudaMemcpyHostToDevice);

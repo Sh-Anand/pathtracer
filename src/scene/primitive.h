@@ -6,92 +6,31 @@
 
 namespace CGL { namespace SceneObjects {
 
-struct CudaSphere {
-    CudaSphere(const Vector3D& o, double r) : o(o), r(r), r2(r * r) {}
-    DEVICE Vector3D normal(Vector3D p) const {
-      return (p - o).unit();
-    }
-    DEVICE bool intersect(Ray& r, CudaIntersection* i);
-    BBox get_bbox() const {
-      return BBox(o - Vector3D(r,r,r), o + Vector3D(r,r,r));
-    }
-    
-    Vector3D o; ///< origin of the sphere
-    double r;   ///< radius
-    double r2;  ///< radius squared
-};
+struct CudaPrimitive {
 
-struct CudaTriangle {
   DEVICE bool intersect(Ray& r, CudaIntersection* i);
   BBox get_bbox() const { 
-    BBox bbox(p1);
-    bbox.expand(p2);
-    bbox.expand(p3);
     return bbox;
-  }
-  
-  double area() const {
-    Vector3D e1 = p2 - p1;
-    Vector3D e2 = p3 - p1;
-    return 0.5 * cross(e1, e2).norm();
   }
 
   Vector3D p1, p2, p3;
-  Vector3D n1, n2, n3;  
-};
+  Vector3D n1, n2, n3;
+  double area;
+  uint32_t bsdf_idx;
 
-enum CudaPrimitiveType {
-  TRIANGLE = 0,
-  SPHERE = 1,
-};
+  BBox bbox; 
 
-union PrimitiveData {
-  PrimitiveData() {}
-  CudaTriangle triangle;
-  CudaSphere sphere;
-};
-
-struct CudaPrimitive {
-  PrimitiveData primitive;
-  CudaPrimitiveType type;
-  uint16_t bsdf_idx;
-
-  CudaPrimitive() : type(TRIANGLE), bsdf_idx(0) {}
-  CudaPrimitive(const CudaPrimitive& p) : type(p.type), bsdf_idx(p.bsdf_idx) {
-    switch (type) {
-      case TRIANGLE:
-        primitive.triangle = p.primitive.triangle;
-        break;
-      case SPHERE:
-        primitive.sphere = p.primitive.sphere;
-        break;
-      default:
-        break;
-    }
-  }
-
-  DEVICE bool intersect(Ray& r, CudaIntersection* isect) {
-    isect->bsdf_idx = bsdf_idx;
-    switch (type) {
-      case TRIANGLE:
-        return primitive.triangle.intersect(r, isect);
-      case SPHERE:
-        return primitive.sphere.intersect(r, isect);
-      default:
-        return false;
-    }
-  }
-
-  BBox get_bbox() const {
-    switch (type) {
-      case TRIANGLE:
-        return primitive.triangle.get_bbox();
-      case SPHERE:
-        return primitive.sphere.get_bbox();
-      default:
-        return BBox();
-    }
-  }
+  CudaPrimitive() {}
+  CudaPrimitive(Vector3D p1, Vector3D p2, Vector3D p3, 
+                Vector3D n1, Vector3D n2, Vector3D n3,
+                uint16_t bsdf_idx) 
+    : p1(p1), p2(p2), p3(p3), n1(n1), n2(n2), n3(n3), 
+      bsdf_idx(bsdf_idx) {
+    area = 0.5 * cross(p2 - p1, p3 - p1).norm();
+    bbox = BBox(p1);
+    bbox.expand(p2);
+    bbox.expand(p3);
+  } 
 };
 
 

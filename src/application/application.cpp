@@ -25,8 +25,6 @@ using CGL::SceneObjects::CudaDirectionalLight;
 using CGL::SceneObjects::CudaPointLight;
 using CGL::SceneObjects::CudaLightType;
 using CGL::SceneObjects::CudaPrimitive;
-using CGL::SceneObjects::CudaTriangle;
-using CGL::SceneObjects::CudaSphere;
 
 namespace CGL {
 
@@ -186,22 +184,18 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
 
             n1.normalize(); n2.normalize(); n3.normalize();
 
-            CudaTriangle ct = CudaTriangle();
-            ct.p1 = p1; ct.p2 = p2; ct.p3 = p3;
-            ct.n1 = n1; ct.n2 = n2; ct.n3 = n3;
-            CudaPrimitive cprimitive {};
-            cprimitive.type = CGL::SceneObjects::CudaPrimitiveType::TRIANGLE;
-            cprimitive.primitive.triangle = ct;            
-            cprimitive.bsdf_idx = primitive.material;
+            CudaPrimitive cprimitive {
+                p1, p2, p3,
+                n1, n2, n3,
+                primitive.material
+            };
             primitives.push_back(cprimitive);
 
             if(bsdfs[cprimitive.bsdf_idx].type == CudaBSDFType_Emission){
               CudaLight clight {};
               clight.type = (CudaLightType) CGL::SceneObjects::CudaLightType::TRIANGLELight;
-              // cout << "Parsing light: " << ct.p1 << " " << ct.p2 << " " << ct.p3 << " " << ct.n1 << " " << ct.n2 << " " << ct.n3 << endl;
-              clight.light.triangle = CGL::SceneObjects::CudaTriangleLight{bsdfs[cprimitive.bsdf_idx].bsdf.emission.radiance , Vector3D(0, -1, 0), ct};
+              clight.light.triangle = CGL::SceneObjects::CudaTriangleLight{bsdfs[cprimitive.bsdf_idx].bsdf.emission.radiance , Vector3D(0, -1, 0), cprimitive};
               lights.push_back(clight);
-              // std::cout << "light pushed" << std::endl;
             }
         }
     }
@@ -401,18 +395,8 @@ void Application::load(SceneInfo* sceneInfo) {
       }
       case Collada::Instance::SPHERE:
       {
-        SphereInfo& sphere = static_cast<SphereInfo&>(*instance);
-        double r = sphere.radius * (transform * Vector4D(1, 0, 0, 0)).to3D().norm();
-        Vector3D o = (transform * Vector4D(0, 0, 0, 1)).projectTo3D();
-        BSDF* bsdf = sphere.material ? sphere.material->bsdf : new DiffuseBSDF(Vector3D(0.5f, 0.5f, 0.5f));
-        push_cuda_bsdf(bsdf, bsdfs);
-        
-        CudaPrimitive primitive {};
-        primitive.type = CGL::SceneObjects::CudaPrimitiveType::SPHERE;
-        primitive.primitive.sphere = CudaSphere{o, r};
-        primitive.bsdf_idx = bsdfs.size() - 1;
-        primitives.push_back(primitive);
-        break;
+        std::cerr << "Sphere node type unsupported" << std::endl;
+        exit(1);
       }
       case Collada::Instance::POLYMESH:
       {
@@ -431,7 +415,7 @@ void Application::load(SceneInfo* sceneInfo) {
   }
   
   for(auto& primitive: primitives){
-    auto& triangle = primitive.primitive.triangle;
+    auto& triangle = primitive;
     std::cout << triangle.p1 << "," << triangle.p2 << "," << triangle.p3 << std::endl;
   }
 
