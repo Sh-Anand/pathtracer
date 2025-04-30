@@ -96,7 +96,7 @@ void push_cuda_bsdf(const BSDF *bsdf, vector<CudaBSDF> &bsdfs) {
 }
 
 Vector3D computeDiffuseBSDF(const Vector3D& baseColor, float metallic) {
-  Vector3D diffuseColor = (1.0f - metallic) * baseColor;
+  Vector3D diffuseColor = baseColor; //(1.0f - metallic) * baseColor;
   return diffuseColor / M_PI;
 }
 
@@ -185,6 +185,7 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
           );
           float metallic = material.pbrMetallicRoughness.metallicFactor;
           BSDF* bsdf = new DiffuseBSDF(computeDiffuseBSDF(baseColor, metallic));
+          cout << "baseColor: " << baseColor << " metallic: " << metallic << endl;
           push_cuda_bsdf(bsdf, bsdfs);
         }
 
@@ -224,6 +225,7 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             if(!material.emissiveFactor.empty() && material.emissiveFactor[0] > 0.0f){
               CudaLight clight {};
               clight.type = (CudaLightType) CGL::SceneObjects::CudaLightType::TRIANGLELight;
+              cout << "Parsing light: " << ct.p1 << " " << ct.p2 << " " << ct.p3 << " " << ct.n1 << " " << ct.n2 << " " << ct.n3 << endl;
               clight.light.triangle = CGL::SceneObjects::CudaTriangleLight{Vector3D(100, 100, 100), Vector3D(0, -1, 0), ct};
               lights.push_back(clight);
               std::cout << "light pushed" << std::endl;

@@ -326,7 +326,7 @@ class Quaternion : public Vector4D {
 	Vector3D axis_xy = cross(ztt, zbt);
 	double axis_norm = axis_xy.norm();
 
-	double axis_theta = acos(clamp(zbt.z, -1.0, 1.0));
+	double axis_theta = acos(clamp_T(zbt.z, -1.0, 1.0));
 	if (axis_norm > 0.00001)
 	{
 	  axis_xy = axis_xy * (axis_theta/axis_norm); // limit is *1
@@ -348,7 +348,7 @@ class Quaternion : public Vector4D {
   /// Returns quaternion that is slerped by fraction 't' between q0 and q1.
   static Quaternion slerp(const Quaternion& q0, const Quaternion& q1, double t) {
 
-    double omega = acos(clamp(q0.x*q1.x +
+    double omega = acos(clamp_T(q0.x*q1.x +
                               q0.y*q1.y +
                               q0.z*q1.z +
                               q0.w*q1.w, -1.0, 1.0));
