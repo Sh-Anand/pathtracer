@@ -1,6 +1,7 @@
 #include "application.h"
 
 #include "pathtracer/bsdf.h"
+#include "scene/collada/light_info.h"
 #include "scene/gl_scene/mesh.h"
 
 #include "scene/primitive.h"
@@ -211,21 +212,26 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
 
     auto ext = node.extensions.find("KHR_lights_punctual");
     if (ext != node.extensions.end()) {
-        int lightIndex = ext->second.Get("light").Get<int>();
-        const auto& light = model.extensions.at("KHR_lights_punctual").Get("lights").Get(lightIndex);
+        const auto& ext = node.extensions.at("KHR_lights_punctual");
+        int lightIndex = ext.Get("light").Get<int>();
+        const auto& light = model.lights[lightIndex];
 
-        if (light.Get("type").Get<std::string>() == "point") {
+        if (light.type == "point") {
           // this is a hack, since we don't have a light type, treat point light as area light
-          clight.type = (CudaLightType) Collada::LightType::AREA;
-          Vector3D spectrum = Vector3D(10, 10, 10);
-          Vector3D direction = Vector3D(0, -1, 0);
-          Vector3D dim_x = Vector3D(0.6, 0, 0);
-          Vector3D dim_y = Vector3D(0, 1, 0.8);
+          clight.type = (CudaLightType) Collada::LightType::POINT;
+
+          Vector3D color = {1.0f, 1.0f, 1.0f};
+            if (!light.color.empty()) {
+                color = {
+                    (float)light.color[0],
+                    (float)light.color[1],
+                    (float)light.color[2]
+                };
+            }
+          float intensity = (float)light.intensity; // in lux
           // Position is from the node's transform
           Vector3D position = (worldTransform * Vector4D(0, 0, 0, 1)).to3D();
-          // Vector3D position = Vector3D(0, 1.49, 0);
-          // clight.light.point = CudaPointLight{spectrum, position};
-          clight.light.area = CudaAreaLight(spectrum, position, direction, dim_x, dim_y);
+          clight.light.point = CudaPointLight{color * intensity, position};
           std::cout << "Point light position: (" << position.x << ", " << position.y << ", " << position.z << ")\n";
         }
     }
