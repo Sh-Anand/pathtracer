@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-#include "scene/collada/camera_info.h"
+#include "scene/camera_info.h"
 #include "util/matrix3x3.h"
 
 #include "math.h"
@@ -24,7 +24,7 @@ class Camera {
           of view is expanded along whichever dimension is too narrow.
     NOTE2: info.hFov and info.vFov are expected to be in DEGREES.
   */
-  void configure(const Collada::CameraInfo& info,
+  void configure(const CameraInfo& info,
                  size_t screenW, size_t screenH);
 
   /*
@@ -33,7 +33,7 @@ class Camera {
   void place(const Vector3D targetPos, const double phi, const double theta,
              const double r, const double minR, const double maxR);
 
-  string param_string() {
+  std::string param_string() {
     return "";
   }
 

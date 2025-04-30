@@ -16,8 +16,6 @@ using std::ofstream;
 
 namespace CGL {
 
-using Collada::CameraInfo;
-
 /**
  * Sets the field of view to match screen screenW/H.
  * NOTE: data and screenW/H will almost certainly disagree about the aspect
@@ -147,7 +145,7 @@ void Camera::compute_position() {
 /**
  * This function stores the camera settings into a file
  */
-void Camera::dump_settings(string filename) {
+void Camera::dump_settings(std::string filename) {
   ofstream file(filename);
   file << hFov << " " << vFov << " " << ar << " " << nClip << " " << fClip << endl;
   for (int i = 0; i < 3; ++i)
@@ -167,7 +165,7 @@ void Camera::dump_settings(string filename) {
 /**
  * This function loads the camera settings from a file
  */
-void Camera::load_settings(string filename) {
+void Camera::load_settings(std::string filename) {
   ifstream file(filename);
 
   file >> hFov >> vFov >> ar >> nClip >> fClip;

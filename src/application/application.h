@@ -10,16 +10,7 @@
 #include <vector>
 
 // COLLADA
-#include "scene/collada/collada.h"
-#include "scene/collada/light_info.h"
-#include "scene/collada/sphere_info.h"
-#include "scene/collada/polymesh_info.h"
-#include "scene/collada/material_info.h"
-#include "scene/collada/camera_info.h"
-
-// MeshEdit
-#include "scene/gl_scene/scene.h"
-#include "util/halfEdgeMesh.h"
+#include "scene/camera_info.h"
 
 // RaytracedRenderer
 #include "pathtracer/raytraced_renderer.h"
@@ -106,7 +97,6 @@ class Application {
   }
 
   void resize(size_t w, size_t h);
-  void load(Collada::SceneInfo* sceneInfo);
   void load_from_gltf_model(const tinygltf::Model &model);
   void render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy) { 
     set_up_pathtracer();
@@ -120,7 +110,6 @@ class Application {
 private:
   void set_up_pathtracer();
 
-  GLScene::Scene *scene;
   RaytracedRenderer* renderer;
 
   // View Frustrum Variables.
@@ -137,8 +126,7 @@ private:
   double canonical_view_distance;
 
   // Initialization functions to get the opengl cooking with oil.
-  void init_camera(Collada::CameraInfo& camera, const Matrix4x4& transform);
-  void init_material(Collada::MaterialInfo& material);
+  void init_camera(CameraInfo& camera, const Matrix4x4& transform);
   void ParseMaterial(const tinygltf::Model&);
   void ParseNode(const tinygltf::Model &model, int nodeIdx, const Matrix4x4 &parentTransform);
 

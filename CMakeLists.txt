@@ -34,15 +34,7 @@ set(APPLICATION_SOURCE
     src/pathtracer/pathtracer.cpp
     src/pathtracer/pathtracer.cu
 
-    # Collada Parser
-    src/scene/collada/collada.cpp
-
-    # Dynamic Scene
-    src/scene/gl_scene/mesh.cpp
-    src/scene/gl_scene/scene.cpp
-
     # MeshEdit
-    src/util/halfEdgeMesh.cpp
     src/util/matrix3x3.cpp
     src/util/matrix3x3.cu
     src/util/matrix4x4.cpp
@@ -70,16 +62,7 @@ set(APPLICATION_SOURCE
 
 set(APPLICATION_HEADERS
     # Collada Parser
-    src/scene/collada/camera_info.h
-    src/scene/collada/collada_info.h
-    src/scene/collada/collada.h
-    src/scene/collada/light_info.h
-    src/scene/collada/material_info.h
-    src/scene/collada/polymesh_info.h
-    src/scene/collada/sphere_info.h
-    # Dynamic Scene
-    src/scene/gl_scene/mesh.h
-    src/scene/gl_scene/scene.h
+    src/scene/camera_info.h
     # Scene Object & Structure
     src/scene/bbox.h
     src/scene/bvh.h
@@ -87,7 +70,6 @@ set(APPLICATION_HEADERS
     src/scene/primitive.h
     # MeshEdit
     src/util/gpu_rand.h
-    src/util/halfEdgeMesh.h
     src/util/image.h
     src/util/matrix3x3.h
     src/util/matrix4x4.h

@@ -34,7 +34,7 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
                        float max_tolerance,
                        HDRImageBuffer* envmap,
                        bool direct_hemisphere_sample,
-                       string filename,
+                       std::string filename,
                        double lensRadius,
                        double focalDistance) {
   pt = new PathTracer();
@@ -88,7 +88,7 @@ bool RaytracedRenderer::has_valid_configuration() {
   return camera;
 }
 
-void RaytracedRenderer::render_to_file(string filename, size_t x, size_t y, size_t dx, size_t dy, 
+void RaytracedRenderer::render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy, 
                                        std::vector<CudaLight> &lights, std::vector<CudaBSDF> &bsdfs) {
   pt->set_frame_size(frameBuffer.w, frameBuffer.h);
 
@@ -105,7 +105,7 @@ void RaytracedRenderer::render_to_file(string filename, size_t x, size_t y, size
   fprintf(stdout, "[PathTracer] Job completed.\n");
 }
 
-void RaytracedRenderer::save_image(string filename) {
+void RaytracedRenderer::save_image(std::string filename) {
 
   ImageBuffer* buffer = &frameBuffer;
   if (filename == "") {

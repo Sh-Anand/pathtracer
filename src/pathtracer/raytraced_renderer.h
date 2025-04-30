@@ -44,7 +44,7 @@ public:
              float max_tolerance = 0.05f,
              HDRImageBuffer* envmap = NULL,
              bool direct_hemisphere_sample = false,
-             string filename = "",
+             std::string filename = "",
              double lensRadius = 0.25,
              double focalDistance = 4.7);
 
