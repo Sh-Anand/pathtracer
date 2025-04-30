@@ -160,34 +160,6 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
                 default: throw std::runtime_error("Unsupported index type");
             }
         };
-        int materialIndex = primitive.material;
-        const tinygltf::Material& material = model.materials[materialIndex];
-        
-        if(!material.emissiveFactor.empty() && material.emissiveFactor[0] > 0.0f){ 
-          // std::cout << "light" << std::endl;
-          Vector3D rad;
-          rad.x = (float)material.emissiveFactor[0];
-          rad.y = (float)material.emissiveFactor[1];
-          rad.z = (float)material.emissiveFactor[2];
-          double emissiveStrength = 1.0f;
-          if (material.extensions.count("KHR_materials_emissive_strength")) {
-            const auto& ext = material.extensions.at("KHR_materials_emissive_strength").Get("emissiveStrength");
-            emissiveStrength = (float)ext.Get<double>();
-          }
-          rad *= emissiveStrength;
-          BSDF* bsdf = new EmissionBSDF(rad);
-          push_cuda_bsdf(bsdf, bsdfs);
-        } else{
-          Vector3D baseColor = Vector3D(
-            material.pbrMetallicRoughness.baseColorFactor[0],
-            material.pbrMetallicRoughness.baseColorFactor[1],
-            material.pbrMetallicRoughness.baseColorFactor[2]
-          );
-          float metallic = material.pbrMetallicRoughness.metallicFactor;
-          BSDF* bsdf = new DiffuseBSDF(computeDiffuseBSDF(baseColor, metallic));
-          cout << "baseColor: " << baseColor << " metallic: " << metallic << endl;
-          push_cuda_bsdf(bsdf, bsdfs);
-        }
 
         for (size_t i = 0; i < indexAccessor.count; i += 3) {
             uint32_t i0 = getIndex(i);
@@ -219,16 +191,16 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             CudaPrimitive cprimitive {};
             cprimitive.type = CGL::SceneObjects::CudaPrimitiveType::TRIANGLE;
             cprimitive.primitive.triangle = ct;            
-            cprimitive.bsdf_idx = bsdfs.size() - 1;
+            cprimitive.bsdf_idx = primitive.material;
             primitives.push_back(cprimitive);
 
-            if(!material.emissiveFactor.empty() && material.emissiveFactor[0] > 0.0f){
+            if(bsdfs[cprimitive.bsdf_idx].type == CudaBSDFType_Emission){
               CudaLight clight {};
               clight.type = (CudaLightType) CGL::SceneObjects::CudaLightType::TRIANGLELight;
-              cout << "Parsing light: " << ct.p1 << " " << ct.p2 << " " << ct.p3 << " " << ct.n1 << " " << ct.n2 << " " << ct.n3 << endl;
-              clight.light.triangle = CGL::SceneObjects::CudaTriangleLight{Vector3D(100, 100, 100), Vector3D(0, -1, 0), ct};
+              // cout << "Parsing light: " << ct.p1 << " " << ct.p2 << " " << ct.p3 << " " << ct.n1 << " " << ct.n2 << " " << ct.n3 << endl;
+              clight.light.triangle = CGL::SceneObjects::CudaTriangleLight{bsdfs[cprimitive.bsdf_idx].bsdf.emission.radiance , Vector3D(0, -1, 0), ct};
               lights.push_back(clight);
-              std::cout << "light pushed" << std::endl;
+              // std::cout << "light pushed" << std::endl;
             }
         }
     }
@@ -288,7 +260,40 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
   }
 }
 
+void Application::ParseMaterial(const tinygltf::Model &model) {
+  for(const auto &material: model.materials) {
+    if(!material.emissiveFactor.empty() && material.emissiveFactor[0] > 0.0f){ 
+      // std::cout << "light" << std::endl;
+      Vector3D rad;
+      rad.x = (float)material.emissiveFactor[0];
+      rad.y = (float)material.emissiveFactor[1];
+      rad.z = (float)material.emissiveFactor[2];
+      double emissiveStrength = 1.0f;
+      if (material.extensions.count("KHR_materials_emissive_strength")) {
+        const auto& ext = material.extensions.at("KHR_materials_emissive_strength").Get("emissiveStrength");
+        emissiveStrength = (float)ext.Get<double>();
+      }
+      rad *= emissiveStrength;
+      BSDF* bsdf = new EmissionBSDF(rad);
+      push_cuda_bsdf(bsdf, bsdfs);
+    } else{
+      Vector3D baseColor = Vector3D(
+        material.pbrMetallicRoughness.baseColorFactor[0],
+        material.pbrMetallicRoughness.baseColorFactor[1],
+        material.pbrMetallicRoughness.baseColorFactor[2]
+      );
+      float metallic = material.pbrMetallicRoughness.metallicFactor;
+      BSDF* bsdf = new DiffuseBSDF(computeDiffuseBSDF(baseColor, metallic));
+      // std::cout << "baseColor: " << baseColor << " metallic: " << metallic << std::endl;
+      push_cuda_bsdf(bsdf, bsdfs);
+    }
+  }
+}
+
 void Application::load_from_gltf_model(const tinygltf::Model &model) {
+
+  // load material
+  ParseMaterial(model);
 
   const auto &scene = model.scenes[model.defaultScene > -1 ? model.defaultScene : 0];
   for (int rootNode : scene.nodes) {

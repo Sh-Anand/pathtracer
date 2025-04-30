@@ -139,6 +139,7 @@ private:
   // Initialization functions to get the opengl cooking with oil.
   void init_camera(Collada::CameraInfo& camera, const Matrix4x4& transform);
   void init_material(Collada::MaterialInfo& material);
+  void ParseMaterial(const tinygltf::Model&);
   void ParseNode(const tinygltf::Model &model, int nodeIdx, const Matrix4x4 &parentTransform);
 
   std::vector<Vector3D> vertices;
