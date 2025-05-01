@@ -11,12 +11,6 @@
 #include "util/vector3D.h"
 #include "util/vector4D.h"
 
-using CGL::SceneObjects::CudaAreaLight;
-using CGL::SceneObjects::CudaDirectionalLight;
-using CGL::SceneObjects::CudaPointLight;
-using CGL::SceneObjects::CudaLightType;
-using CGL::SceneObjects::CudaPrimitive;
-
 namespace CGL {
 
 Application::Application(AppConfig config, bool gl) {
@@ -180,45 +174,11 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             primitives.push_back(cprimitive);
 
             if(bsdfs[cprimitive.bsdf_idx].type == CudaBSDFType_Emission){
-              CudaLight clight {};
-              clight.type = (CudaLightType) CGL::SceneObjects::CudaLightType::TRIANGLELight;
-              clight.light.triangle = CGL::SceneObjects::CudaTriangleLight{bsdfs[cprimitive.bsdf_idx].bsdf.emission.radiance , Vector3D(0, -1, 0), cprimitive};
+              CudaLight clight {bsdfs[cprimitive.bsdf_idx].bsdf.emission.radiance, cprimitive};
               lights.push_back(clight);
             }
         }
     }
-  }else if(node.light >= 0){
-    // adding lights
-    std::cout << "light" << std::endl;
-    CudaLight clight {};
-
-    auto ext = node.extensions.find("KHR_lights_punctual");
-    if (ext != node.extensions.end()) {
-        const auto& ext = node.extensions.at("KHR_lights_punctual");
-        int lightIndex = ext.Get("light").Get<int>();
-        const auto& light = model.lights[lightIndex];
-
-        if (light.type == "point") {
-          // this is a hack, since we don't have a light type, treat point light as area light
-          clight.type = (CudaLightType) CGL::SceneObjects::CudaLightType::POINT;
-
-          Vector3D color = {1.0f, 1.0f, 1.0f};
-            if (!light.color.empty()) {
-                color = {
-                    (float)light.color[0],
-                    (float)light.color[1],
-                    (float)light.color[2]
-                };
-            }
-          float intensity = (float)light.intensity; // in lux
-          // Position is from the node's transform
-          Vector3D position = (worldTransform * Vector4D(0, 0, 0, 1)).to3D();
-          clight.light.point = CudaPointLight{color * intensity, position};
-          std::cout << "Point light position: (" << position.x << ", " << position.y << ", " << position.z << ")\n";
-        }
-    }
-    
-    lights.push_back(clight);
   }else if(node.camera >= 0){
     // adding camera code
     auto gltfCam = model.cameras[node.camera];

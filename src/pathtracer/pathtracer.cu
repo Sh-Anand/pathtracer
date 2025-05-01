@@ -22,25 +22,7 @@ DEVICE __inline__ Vector3D sample_f(const CudaBSDF *bsdf, const Vector3D wo, Vec
   return bsdf->f(wo, *wi);
 }
 
-DEVICE __inline__ Vector3D sample_L(const CudaDirectionalLight *light, const Vector3D p, Vector3D* wi,
-                                    double* distToLight, double* pdf) {
-  *wi = light->dirToLight;
-  *distToLight = INFINITY;
-  *pdf = 1.0;
-  return light->radiance;
-}
-
-DEVICE __inline__ Vector3D sample_L(const CudaPointLight *light, const Vector3D p, Vector3D* wi,
-                             double* distToLight,
-                             double* pdf) {
-  Vector3D d = light->position - p;
-  *wi = d.unit();
-  *distToLight = d.norm();
-  *pdf = 1.0;
-  return light->radiance;
-}
-
-DEVICE __inline__ Vector3D sample_L(const CudaTriangleLight *light,
+DEVICE __inline__ Vector3D sample_L(const CudaLight *light,
                                     const Vector3D         p,
                                     Vector3D*              wi,
                                     double*                distToLight,
@@ -77,37 +59,6 @@ DEVICE __inline__ Vector3D sample_L(const CudaTriangleLight *light,
   return light->radiance;
 }
 
-DEVICE __inline__ Vector3D sample_L(const CudaAreaLight *light, const Vector3D p, Vector3D* wi, 
-                             double* distToLight, double* pdf, RNGState &rand_state) {
-  Vector2D sample = Vector2D(next_double(rand_state), next_double(rand_state)) - Vector2D(0.5f, 0.5f);
-  Vector3D d = light->position + sample.x * light->dim_x + sample.y * light->dim_y - p;
-  double cosTheta = dot(d, light->direction);
-  double sqDist = d.norm2();
-  double dist = sqrt(sqDist);
-  *wi = d / dist;
-  *distToLight = dist;
-  *pdf = sqDist / (light->area * fabs(cosTheta));
-  return cosTheta < 0 ? light->radiance : Vector3D();
-}
-
-DEVICE __inline__ Vector3D p_sample_L(const CudaLight *light, const Vector3D p,
-                             Vector3D* wi, double* distToLight,
-                             double* pdf, RNGState &rand_state) {
-  switch (light->type) {
-    case DIRECTIONAL:
-      return sample_L(&light->light.directional, p ,wi, distToLight, pdf);
-    case POINT:
-      return sample_L(&light->light.point, p, wi, distToLight, pdf);
-    case AREA:
-      return sample_L(&light->light.area, p, wi, distToLight, pdf, rand_state);
-    case TRIANGLELight:
-      return sample_L(&light->light.triangle, p, wi, distToLight, pdf, rand_state);
-    default:
-      return Vector3D(0, 0, 0);
-  }
-  return Vector3D();
-}
-
 DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
                                                 const CudaIntersection &isect) {
   // Estimate the lighting from this intersection coming directly from a light.
@@ -130,16 +81,13 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
   double distToLight, pdf;
 
   //NOTE: wi here is in worldpsace, unlike in the previous function
-  uint16_t sample_count = 0;
 
   uint16_t x = blockIdx.x * blockDim.x + threadIdx.x;
   uint16_t y = blockIdx.y * blockDim.y + threadIdx.y;
   for (uint16_t i = 0; i < num_lights; i++) {
     CudaLight *light = &lights[i];
-    int num_samples = light->is_delta_light() ? 1 : ns_area_light;
-    sample_count += num_samples;
-    for (int j = 0; j < num_samples; j++) {
-      Vector3D radiance = p_sample_L(light, hit_p, &wi, &distToLight, &pdf, rand_states[x + y*sampleBuffer.w]);
+    for (int j = 0; j < ns_area_light; j++) {
+      Vector3D radiance = sample_L(light, hit_p, &wi, &distToLight, &pdf, rand_states[x + y*sampleBuffer.w]);
       Vector3D wi_o = w2o * wi;
       if (wi_o.z < 0 || radiance == 0) continue;
       Ray shadow_ray = Ray(hit_p, wi);
@@ -152,7 +100,7 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
     }
   }
 
-  L_out /= sample_count;
+  L_out /= (num_lights * ns_area_light);
   return L_out;
 }
 
