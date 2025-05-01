@@ -30,7 +30,7 @@ class Matrix3x3 {
     for( int i = 0; i < 3; i++ ) {
       for( int j = 0; j < 3; j++ ) {
         // Transpostion happens within the () query.
-        (*this)(i,j) = m[i][j];
+        (*this)(i,j) = m(i, j);
       }
     }
   }
@@ -62,10 +62,10 @@ class Matrix3x3 {
     m.zero();
     for( int i = 0; i < 3; i++ ) {
       for( int j = 0; j < 3; j++ ) {
-        m[i][j] = (*this)[i][j];
+        m(i, j) = (*this)(i, j);
       }
     }
-    m[3][3] = 1.0;
+    m(3, 3) = 1.0;
     return m;
   }
 

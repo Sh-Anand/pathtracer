@@ -155,13 +155,6 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             Vector3D n2 = Vector3D(normData[i1 * 3 + 0], normData[i1 * 3 + 1], normData[i1 * 3 + 2]);
             Vector3D n3 = Vector3D(normData[i2 * 3 + 0], normData[i2 * 3 + 1], normData[i2 * 3 + 2]);
 
-            vertices.push_back(p1);
-            vertices.push_back(p2);
-            vertices.push_back(p3);
-            normals.push_back(n1);
-            normals.push_back(n2);
-            normals.push_back(n3);
-
             // Transform to world space
             p1 = (worldTransform * Vector4D(p1, 1.0f)).to3D();
             p2 = (worldTransform * Vector4D(p2, 1.0f)).to3D();
@@ -172,6 +165,13 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             n3 = (normalMatrix * n3);
 
             n1.normalize(); n2.normalize(); n3.normalize();
+
+            vertices.push_back(p1);
+            vertices.push_back(p2);
+            vertices.push_back(p3);
+            normals.push_back(n1);
+            normals.push_back(n2);
+            normals.push_back(n3);
 
             CudaPrimitive cprimitive {
                 static_cast<uint32_t>(vertices.size() - 3),
