@@ -73,11 +73,11 @@ namespace CGL {
 
         // Lights
         CudaLight *lights; 
-        size_t num_lights;
+        uint16_t num_lights;
 
         // BSDFs
         CudaBSDF *bsdfs;
-        size_t num_bsdfs;
+        uint16_t num_bsdfs;
     };
 
 }  // namespace CGL

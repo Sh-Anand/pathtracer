@@ -100,7 +100,7 @@ struct HDRImageBuffer {
    * \param w new width of the image
    * \param h new height of the image
    */
-  void resize(size_t w, size_t h);
+  void resize(size_t w, size_t h) { this->w = w; this->h = h; }
 
   /**
    * Parameterized constructor.

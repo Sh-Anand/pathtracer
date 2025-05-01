@@ -10,8 +10,8 @@ namespace CGL {
 
 __global__ void kernel_raytrace_temporal(PathTracer* pt) {
     assert (pt != nullptr);
-    size_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
-    size_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
+    uint16_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
+    uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
     
     pt->raytrace_pixel(x,y);
     pt->temporal_resampling(x,y);
@@ -19,16 +19,16 @@ __global__ void kernel_raytrace_temporal(PathTracer* pt) {
 
 __global__ void kernel_spatial_sample(PathTracer* pt) {
     assert (pt != nullptr);
-    size_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
-    size_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
+    uint16_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
+    uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
     
     pt->spatial_resampling(x,y);
     pt->render_final_sample(x,y);
 }
 
 void RaytracedRenderer::gpu_raytrace() {
-    size_t width = frameBuffer.w;
-    size_t height = frameBuffer.h;
+    uint16_t width = frameBuffer.w;
+    uint16_t height = frameBuffer.h;
 
     std::cout << "Raytracing on GPU..." << std::endl;
 

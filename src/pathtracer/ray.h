@@ -16,9 +16,9 @@ namespace CGL {
 
 
 struct Ray {
-  size_t depth;  ///< depth of the Ray
+  uint16_t depth;  ///< depth of the Ray
 
-  size_t x,y; ///< pixel coordinates
+  uint16_t x,y; ///< pixel coordinates
 
   Vector3D o;  ///< origin
   Vector3D d;  ///< direction

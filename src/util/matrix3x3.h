@@ -26,7 +26,7 @@ class Matrix3x3 {
     }
   }
 
-  HOST_DEVICE Matrix3x3(Matrix4x4& m){
+  Matrix3x3(Matrix4x4& m){
     for( int i = 0; i < 3; i++ ) {
       for( int j = 0; j < 3; j++ ) {
         // Transpostion happens within the () query.
@@ -57,7 +57,7 @@ class Matrix3x3 {
     (*this)(2,0) = m20; (*this)(2,1) = m21; (*this)(2,2) = m22;
   }
 
-  HOST_DEVICE Matrix4x4 to4x4(){
+  Matrix4x4 to4x4(){
     Matrix4x4 m;
     m.zero();
     for( int i = 0; i < 3; i++ ) {

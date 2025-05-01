@@ -39,7 +39,6 @@ set(APPLICATION_SOURCE
     src/util/matrix3x3.cu
     src/util/matrix4x4.cpp
     src/util/reservoir.cu
-    src/util/tinyxml2.cpp
     src/util/vector2D.cpp
     src/util/vector3D.cpp
     src/util/vector4D.cpp
@@ -50,10 +49,8 @@ set(APPLICATION_SOURCE
     src/pathtracer/raytraced_renderer.cu
     src/pathtracer/ray.cu
 
-
     # misc
     src/util/lodepng.cpp
-    src/util/image.cu
 
     # Application
     src/application/application.cpp
@@ -104,8 +101,6 @@ find_package(OpenGL REQUIRED)
 
 target_link_libraries(pathtracer
     PUBLIC
-    OpenGL::GL
-    OpenGL::GLU
 )
 
 #-------------------------------------------------------------------------------

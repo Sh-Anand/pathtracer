@@ -39,7 +39,6 @@ DEVICE __inline__ Vector3D sample_L(const CudaLight *light,
     r1 = 1.0 - r1;
     r2 = 1.0 - r2;
   }
-  const CudaPrimitive& tri = light->triangle;
   Vector3D samplePos = p1
                      + (p2 - p1) * r1
                      + (p3 - p1) * r2;
@@ -198,9 +197,9 @@ DEVICE Vector3D PathTracer::est_radiance_global_illumination(Ray &r) {
 DEVICE void PathTracer::raytrace_pixel(uint16_t x, uint16_t y) {
   CudaIntersection isect;
   
-  size_t num_samples = ns_aa;
+  uint16_t num_samples = ns_aa;
   Ray r;
-  size_t i = 1;
+  uint16_t i = 1;
   initialSampleBuffer[x + y * sampleBuffer.w] = Sample();
   init_gpu_rng(rand_states[x + y * sampleBuffer.w], 1234 + x + y * sampleBuffer.w);
   do {
