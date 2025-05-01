@@ -88,7 +88,9 @@ public:
   /**
    * Build acceleration structures.
    */
-  void build_accel(std::vector<CudaPrimitive> &primitives);
+  void build_accel(std::vector<CudaPrimitive> &primitives, 
+                   std::vector<Vector3D> &vertices,
+                   std::vector<Vector3D> &normals);
 
   void gpu_raytrace();
 

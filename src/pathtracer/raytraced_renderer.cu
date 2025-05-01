@@ -71,13 +71,13 @@ void RaytracedRenderer::gpu_raytrace() {
     free(pt_tmp);
 }
 
-void RaytracedRenderer::build_accel(std::vector<CudaPrimitive> &primitives) {
+void RaytracedRenderer::build_accel(std::vector<CudaPrimitive> &primitives, std::vector<Vector3D> &vertices, std::vector<Vector3D> &normals) {
   // build BVH //
   fprintf(stdout, "[PathTracer] Building BVH from %lu primitives... ", primitives.size()); 
   fflush(stdout);
   std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now();
 
-  bvh_cuda = new BVHCuda(primitives);
+  bvh_cuda = new BVHCuda(primitives, vertices, normals);
   std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
   fprintf(stdout, "Done! (%.4f sec)\n", (std::chrono::duration<double>(t1 - t0)).count());
 }

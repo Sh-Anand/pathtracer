@@ -24,13 +24,17 @@ DEVICE bool test_intersect(Ray &r, const Vector3D &p1,
   return true;
 }
 
-DEVICE bool CudaPrimitive::intersect(Ray &r, CudaIntersection *isect) {
+DEVICE bool CudaPrimitive::intersect(Ray &r, CudaIntersection *isect, Vector3D* vertices,
+                                    Vector3D* normals) {
+  Vector3D tp1 = vertices[i_p1], tp2 = vertices[i_p2], tp3 = vertices[i_p3];
+  Vector3D tn1 = normals[i_p1], tn2 = normals[i_p2], tn3 = normals[i_p3];
+  
   double t,u,v;
-  if (!test_intersect(r, p1, p2, p3, t, u, v)) {
+  if (!test_intersect(r, tp1, tp2, tp3, t, u, v)) {
     return false;
   }
 
-  isect->n = (1 - u - v) * n1 + u * n2 + v * n3;
+  isect->n = (1 - u - v) * tn1 + u * tn2 + v * tn3;
   isect->t = t;
   isect->bsdf_idx = bsdf_idx;
 

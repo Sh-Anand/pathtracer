@@ -155,6 +155,13 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             Vector3D n2 = Vector3D(normData[i1 * 3 + 0], normData[i1 * 3 + 1], normData[i1 * 3 + 2]);
             Vector3D n3 = Vector3D(normData[i2 * 3 + 0], normData[i2 * 3 + 1], normData[i2 * 3 + 2]);
 
+            vertices.push_back(p1);
+            vertices.push_back(p2);
+            vertices.push_back(p3);
+            normals.push_back(n1);
+            normals.push_back(n2);
+            normals.push_back(n3);
+
             // Transform to world space
             p1 = (worldTransform * Vector4D(p1, 1.0f)).to3D();
             p2 = (worldTransform * Vector4D(p2, 1.0f)).to3D();
@@ -167,14 +174,18 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             n1.normalize(); n2.normalize(); n3.normalize();
 
             CudaPrimitive cprimitive {
-                p1, p2, p3,
-                n1, n2, n3,
+                static_cast<uint32_t>(vertices.size() - 3),
+                static_cast<uint32_t>(vertices.size() - 2),
+                static_cast<uint32_t>(vertices.size() - 1),
+                static_cast<uint32_t>(normals.size() - 3),
+                static_cast<uint32_t>(normals.size() - 2),
+                static_cast<uint32_t>(normals.size() - 1),
                 primitive.material
             };
             primitives.push_back(cprimitive);
 
             if(bsdfs[cprimitive.bsdf_idx].type == CudaBSDFType_Emission){
-              CudaLight clight {bsdfs[cprimitive.bsdf_idx].bsdf.emission.radiance, cprimitive};
+              CudaLight clight(bsdfs[cprimitive.bsdf_idx].bsdf.emission.radiance, cprimitive, vertices);
               lights.push_back(clight);
             }
         }
@@ -250,9 +261,9 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
 
   BBox bbox;
   for (auto& primitive: primitives) {
-    BBox b(primitive.p1);
-    b.expand(primitive.p2);
-    b.expand(primitive.p3);
+    BBox b(vertices[primitive.i_p1]);
+    b.expand(vertices[primitive.i_p2]);
+    b.expand(vertices[primitive.i_p3]);
     bbox.expand(b);
   }
 
@@ -291,7 +302,7 @@ void Application::init_camera(CameraInfo& cameraInfo,
 void Application::set_up_pathtracer() {
   renderer->set_camera(&camera);
   renderer->set_frame_size(screenW, screenH);
-  renderer->build_accel(primitives);
+  renderer->build_accel(primitives, vertices, normals);
 }
 
 } // namespace CGL

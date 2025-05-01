@@ -27,7 +27,11 @@ DEVICE __inline__ Vector3D sample_L(const CudaLight *light,
                                     Vector3D*              wi,
                                     double*                distToLight,
                                     double*                pdf,
-                                    RNGState&              rand_state) {
+                                    RNGState&              rand_state,
+                                    const Vector3D*        vertices) {
+  Vector3D p1 = vertices[light->triangle.i_p1];
+  Vector3D p2 = vertices[light->triangle.i_p2];
+  Vector3D p3 = vertices[light->triangle.i_p3];
   // 1) Uniformly sample a point on the triangle via barycentrics
   double r1 = next_double(rand_state);
   double r2 = next_double(rand_state);
@@ -36,9 +40,9 @@ DEVICE __inline__ Vector3D sample_L(const CudaLight *light,
     r2 = 1.0 - r2;
   }
   const CudaPrimitive& tri = light->triangle;
-  Vector3D samplePos = tri.p1
-                     + (tri.p2 - tri.p1) * r1
-                     + (tri.p3 - tri.p1) * r2;
+  Vector3D samplePos = p1
+                     + (p2 - p1) * r1
+                     + (p3 - p1) * r2;
 
   // 2) Compute direction & distance from shading point to the sample
   Vector3D d = samplePos - p;
@@ -48,7 +52,7 @@ DEVICE __inline__ Vector3D sample_L(const CudaLight *light,
   *wi = dir;
 
   // 3) Compute triangle normal for the geometry term
-  Vector3D N = cross((tri.p2 - tri.p1), (tri.p3 - tri.p1)).unit();
+  Vector3D N = cross((p2 - p1), (p3 - p1)).unit();
 
   // 4) Convert area‐pdf to solid‐angle pdf:
   //    pdf_ω = (distance²) / (area * cosθ)
@@ -87,7 +91,7 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
   for (uint16_t i = 0; i < num_lights; i++) {
     CudaLight *light = &lights[i];
     for (int j = 0; j < ns_area_light; j++) {
-      Vector3D radiance = sample_L(light, hit_p, &wi, &distToLight, &pdf, rand_states[x + y*sampleBuffer.w]);
+      Vector3D radiance = sample_L(light, hit_p, &wi, &distToLight, &pdf, rand_states[x + y*sampleBuffer.w], this->bvh->vertices);
       Vector3D wi_o = w2o * wi;
       if (wi_o.z < 0 || radiance == 0) continue;
       Ray shadow_ray = Ray(hit_p, wi);
