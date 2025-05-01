@@ -21,13 +21,13 @@ public:
    * Constructor.
    * Initializes tp vector (0,0,0, 0).
    */
-  Vector4D() : x( 0.0 ), y( 0.0 ), z( 0.0 ), w( 0.0 ) { }
+  HOST_DEVICE Vector4D() : x( 0.0 ), y( 0.0 ), z( 0.0 ), w( 0.0 ) { }
 
   /**
    * Constructor.
    * Initializes to vector (x,y,z,w).
    */
-  Vector4D( double x, double y, double z, double w) : x( x ), y( y ), z( z ), w( w ) { }
+  HOST_DEVICE Vector4D( double x, double y, double z, double w) : x( x ), y( y ), z( z ), w( w ) { }
 
   /**
    * Constructor.

@@ -9,12 +9,14 @@ namespace CGL { namespace SceneObjects {
 
 struct CudaPrimitive {
 
-  DEVICE bool intersect(Ray& r, CudaIntersection* i, Vector3D* vertices, Vector3D* normals);
+  DEVICE bool intersect(Ray& r, CudaIntersection* i, Vector3D* vertices, Vector3D* normals, Vector2D* texcoords) const;
 
   uint32_t i_p1, i_p2, i_p3;
   uint32_t i_n1, i_n2, i_n3;
+  uint32_t i_uv1, i_uv2, i_uv3;
   
-  uint32_t bsdf_idx;
+  int bsdf_idx;
+  int tex_idx;
 };
 
 

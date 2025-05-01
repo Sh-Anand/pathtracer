@@ -81,6 +81,7 @@ set(APPLICATION_HEADERS
     src/pathtracer/pathtracer.h
     src/pathtracer/ray.h
     src/pathtracer/raytraced_renderer.h
+    src/pathtracer/texture.h
     # misc
     src/util/lodepng.h
     # Application

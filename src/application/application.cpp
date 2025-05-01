@@ -1,7 +1,7 @@
 #include "application.h"
 
 #include "pathtracer/bsdf.h"
-
+#include "pathtracer/texture.h"
 #include "scene/primitive.h"
 #include "util/matrix3x3.h"
 #include "util/matrix4x4.h"
@@ -32,6 +32,15 @@ Application::Application(AppConfig config, bool gl) {
     config.pathtracer_focalDistance
   );
   filename = config.pathtracer_filename;
+
+  texcoords.clear();
+  vertices.clear();
+  normals.clear();
+  bsdfs.clear();
+  lights.clear();
+  textures.clear();
+  
+  texcoords.push_back(Vector2D(0, 0)); // dummy texcoord for all non-textured materials
 }
 
 Application::~Application() {
@@ -142,6 +151,16 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             }
         };
 
+        
+        auto uvIt = primitive.attributes.find("TEXCOORD_0");
+        const float *uvData = nullptr;
+        if (uvIt != primitive.attributes.end()) {
+          const auto &uvAccessor = model.accessors[primitive.attributes.at("TEXCOORD_0")];
+          const auto &uvView = model.bufferViews[ uvAccessor.bufferView ];
+          const auto &uvBuf = model.buffers [uvView.buffer];
+          uvData = reinterpret_cast<const float*>(&uvBuf.data[uvView.byteOffset + uvAccessor.byteOffset]);
+        }
+
         for (size_t i = 0; i < indexAccessor.count; i += 3) {
             uint32_t i0 = getIndex(i);
             uint32_t i1 = getIndex(i + 1);
@@ -172,6 +191,20 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             normals.push_back(n1);
             normals.push_back(n2);
             normals.push_back(n3);
+            int tex_id = -1;
+            if (uvIt != primitive.attributes.end()) {
+              Vector2D uv1( uvData[i0*2+0], 1.0f - uvData[i0*2 + 1] );
+              Vector2D uv2( uvData[i1*2+0], 1.0f - uvData[i0*2 + 1] );
+              Vector2D uv3( uvData[i2*2+0], 1.0f - uvData[i0*2 + 1] );
+              texcoords.push_back(uv1);
+              texcoords.push_back(uv2);
+              texcoords.push_back(uv3);
+              // get texture id
+              const auto &mat = model.materials[primitive.material];
+              if (mat.pbrMetallicRoughness.baseColorTexture.index >= 0) {
+                  tex_id = mat.pbrMetallicRoughness.baseColorTexture.index;
+              }
+            }
 
             CudaPrimitive cprimitive {
                 static_cast<uint32_t>(vertices.size() - 3),
@@ -180,7 +213,11 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
                 static_cast<uint32_t>(normals.size() - 3),
                 static_cast<uint32_t>(normals.size() - 2),
                 static_cast<uint32_t>(normals.size() - 1),
-                primitive.material
+                static_cast<uint32_t>(std::max((int)texcoords.size() - 3, 0)),
+                static_cast<uint32_t>(std::max((int)texcoords.size() - 2, 0)),
+                static_cast<uint32_t>(std::max((int)texcoords.size() - 1, 0)),
+                primitive.material,
+                tex_id
             };
             primitives.push_back(cprimitive);
 
@@ -201,7 +238,6 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
 
     // Get transform from camera node
     Matrix4x4 camTransform = worldTransform;
-    // std::cout << node.translation[0] << "," << node.translation[1] << "," << node.translation[2] << std::endl;
 
     Vector3D view = camTransform[2].to3D(); // -Z
     view.normalize();
@@ -243,9 +279,23 @@ void Application::ParseMaterial(const tinygltf::Model &model) {
       );
       float metallic = material.pbrMetallicRoughness.metallicFactor;
       BSDF* bsdf = new DiffuseBSDF(computeDiffuseBSDF(baseColor, metallic));
-      // std::cout << "baseColor: " << baseColor << " metallic: " << metallic << std::endl;
       push_cuda_bsdf(bsdf, bsdfs);
     }
+  }
+}
+
+void Application::ParseTexture(const tinygltf::Model &model) {
+  for (const auto &texture : model.textures) {
+    const auto &image = model.images[texture.source];
+    const auto &sampler = model.samplers[texture.sampler]; // we will not use this, only need for mipmapping and clamping
+
+    CudaTexture ctex;
+    ctex.width = image.width;
+    ctex.height = image.height;
+    ctex.has_alpha = (image.component == 4);
+    ctex.data = (uint8_t *) malloc(image.width * image.height * image.component);
+    memcpy(ctex.data, image.image.data(), image.width * image.height * image.component);
+    textures.push_back(ctex);
   }
 }
 
@@ -253,6 +303,9 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
 
   // load material
   ParseMaterial(model);
+
+  // load textures
+  ParseTexture(model);
 
   const auto &scene = model.scenes[model.defaultScene > -1 ? model.defaultScene : 0];
   for (int rootNode : scene.nodes) {
@@ -267,17 +320,18 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
     bbox.expand(b);
   }
 
+
   if (!bbox.empty()) {
 
     Vector3D target = bbox.centroid();
     canonical_view_distance = bbox.extent.norm() / 2 * 1.5;
 
-    double view_distance = canonical_view_distance * 2;
+    double view_distance = canonical_view_distance * 2.2;
     double min_view_distance = canonical_view_distance / 10.0;
     double max_view_distance = canonical_view_distance * 20.0;
 
     canonicalCamera.place(target,
-                          acos(cam.view_dir.y),
+                          acos(cam.view_dir.y) - PI/4,
                           atan2(cam.view_dir.x, cam.view_dir.z),
                           view_distance,
                           min_view_distance,
@@ -302,7 +356,7 @@ void Application::init_camera(CameraInfo& cameraInfo,
 void Application::set_up_pathtracer() {
   renderer->set_camera(&camera);
   renderer->set_frame_size(screenW, screenH);
-  renderer->build_accel(primitives, vertices, normals);
+  renderer->build_accel(primitives, vertices, normals, texcoords);
 }
 
 } // namespace CGL

@@ -18,6 +18,7 @@
 
 // Shared modules
 #include "pathtracer/camera.h"
+#include "pathtracer/texture.h"
 
 // GLTF parser
 #include "util/tiny_gltf.h"
@@ -100,7 +101,7 @@ class Application {
   void load_from_gltf_model(const tinygltf::Model &model);
   void render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy) { 
     set_up_pathtracer();
-    renderer->render_to_file(filename, x, y, dx, dy, lights, bsdfs); 
+    renderer->render_to_file(filename, x, y, dx, dy, lights, bsdfs, textures); 
   }
 
   void load_camera(std::string filename) {
@@ -129,12 +130,15 @@ private:
   void init_camera(CameraInfo& camera, const Matrix4x4& transform);
   void ParseMaterial(const tinygltf::Model&);
   void ParseNode(const tinygltf::Model &model, int nodeIdx, const Matrix4x4 &parentTransform);
+  void ParseTexture(const tinygltf::Model &model);
 
   std::vector<Vector3D> vertices;
   std::vector<Vector3D> normals;
+  std::vector<Vector2D> texcoords;
   std::vector<CudaPrimitive> primitives;
   std::vector<CudaBSDF> bsdfs;
   std::vector<CudaLight> lights;
+  std::vector<CudaTexture> textures;
 
   std::string filename;
 

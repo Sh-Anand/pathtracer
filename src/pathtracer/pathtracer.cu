@@ -46,7 +46,7 @@ DEVICE __inline__ Vector3D sample_L(const CudaLight *light,
   // 2) Compute direction & distance from shading point to the sample
   Vector3D d = samplePos - p;
   double  dist = d.norm();
-  *distToLight = dist;
+  *distToLight = dist - EPS_D;
   Vector3D dir = d / dist;
   *wi = dir;
 
@@ -60,6 +60,42 @@ DEVICE __inline__ Vector3D sample_L(const CudaLight *light,
 
   // 5) Return the emitted radiance
   return light->radiance;
+}
+
+__device__ __inline__ uchar4 sample_texture(const CudaTexture &tex, const Vector2D uv) {
+  // wrap or clamp your UVs as needed
+  float u_f = uv.x - floorf(uv.x);
+  float v_f = uv.y - floorf(uv.y);
+  // // flip v if your image origin is top-left:
+  v_f = 1.0f - v_f;
+
+  int u = int(u_f * (tex.width  - 1) + 0.5f);
+  int v = int(v_f * (tex.height - 1) + 0.5f);
+
+  // clamp to valid
+  u = max(0, min(u, tex.width  - 1));
+  v = max(0, min(v, tex.height - 1));
+
+  // compute byte index
+  int comps = tex.has_alpha ? 4 : 3;
+  size_t idx = (size_t(v) * tex.width + size_t(u)) * comps;
+  const uint8_t *base = tex.data;
+
+  uchar4 c;
+  if (tex.has_alpha) {
+    // RGBA8
+    c.x = base[idx + 0];
+    c.y = base[idx + 1];
+    c.z = base[idx + 2];
+    c.w = base[idx + 3];
+  } else {
+    // RGB8 → treat alpha = 255
+    c.x = base[idx + 0];
+    c.y = base[idx + 1];
+    c.z = base[idx + 2];
+    c.w = 255;
+  }
+  return c;
 }
 
 DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
@@ -87,6 +123,16 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
 
   uint16_t x = blockIdx.x * blockDim.x + threadIdx.x;
   uint16_t y = blockIdx.y * blockDim.y + threadIdx.y;
+
+  Vector3D tex_color(1,1,1);
+  if (isect.tex_idx >= 0) {
+    uchar4 tc = sample_texture(textures[isect.tex_idx], isect.uv);
+    double af = tc.w / 255.0f;
+    tex_color.x = (tc.x / 255.0f) * af;
+    tex_color.y = (tc.y / 255.0f) * af;
+    tex_color.z = (tc.z / 255.0f) * af;
+  }
+
   for (uint16_t i = 0; i < num_lights; i++) {
     CudaLight *light = &lights[i];
     for (int j = 0; j < ns_area_light; j++) {
@@ -104,7 +150,7 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
   }
 
   L_out /= (num_lights * ns_area_light);
-  return L_out;
+  return L_out * tex_color;
 }
 
 

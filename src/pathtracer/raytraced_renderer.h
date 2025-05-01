@@ -11,6 +11,7 @@
 #include "pathtracer/camera.h"
 #include "util/image.h"
 #include "pathtracer/intersection.h"
+#include "pathtracer/texture.h"
 
 using CGL::SceneObjects::BVHNode;
 using CGL::CudaBSDF;
@@ -73,7 +74,7 @@ public:
   void set_frame_size(size_t width, size_t height);
 
   void render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy,
-                      std::vector<CudaLight> &lights, std::vector<CudaBSDF> &bsdfs);
+                      std::vector<CudaLight> &lights, std::vector<CudaBSDF> &bsdfs, std::vector<CudaTexture> &textures);
 
   /**
    * Save rendered result to png file.
@@ -90,12 +91,13 @@ public:
    */
   void build_accel(std::vector<CudaPrimitive> &primitives, 
                    std::vector<Vector3D> &vertices,
-                   std::vector<Vector3D> &normals);
+                   std::vector<Vector3D> &normals,
+                   std::vector<Vector2D> &texcoords);
 
   void gpu_raytrace();
 
   void copy_host_device_pt(std::vector<CudaLight> &lights,
-                           std::vector<CudaBSDF> &bsdfs);
+                           std::vector<CudaBSDF> &bsdfs, std::vector<CudaTexture> &textures);
 
 
   PathTracer *pt;

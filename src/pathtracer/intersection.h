@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "util/vector3D.h"
+#include "util/vector2D.h"
 
 #include "pathtracer/bsdf.h"
 
@@ -13,7 +14,9 @@ struct CudaIntersection {
   DEVICE CudaIntersection() : t (INFINITY) { }
   double t;
   Vector3D n;
-  uint32_t bsdf_idx;
+  Vector2D uv;
+  int bsdf_idx;
+  int tex_idx;
 };
 
 } // namespace CGL

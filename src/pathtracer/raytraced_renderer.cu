@@ -71,31 +71,47 @@ void RaytracedRenderer::gpu_raytrace() {
     free(pt_tmp);
 }
 
-void RaytracedRenderer::build_accel(std::vector<CudaPrimitive> &primitives, std::vector<Vector3D> &vertices, std::vector<Vector3D> &normals) {
+void RaytracedRenderer::build_accel(std::vector<CudaPrimitive> &primitives, std::vector<Vector3D> &vertices, std::vector<Vector3D> &normals, std::vector<Vector2D> &texcoords) {
   // build BVH //
   fprintf(stdout, "[PathTracer] Building BVH from %lu primitives... ", primitives.size()); 
   fflush(stdout);
   std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now();
 
-  bvh_cuda = new BVHCuda(primitives, vertices, normals);
+  bvh_cuda = new BVHCuda(primitives, vertices, normals, texcoords);
   std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
   fprintf(stdout, "Done! (%.4f sec)\n", (std::chrono::duration<double>(t1 - t0)).count());
 }
 
-void RaytracedRenderer::copy_host_device_pt(std::vector<CudaLight> &lights, std::vector<CudaBSDF> &bsdfs) {
+void RaytracedRenderer::copy_host_device_pt(std::vector<CudaLight> &lights, std::vector<CudaBSDF> &bsdfs, std::vector<CudaTexture> &textures) {
     std::cout << "Copying PathTracer to GPU..." << std::endl;
     std::cout << "BSDFs size: " << bsdfs.size() << std::endl;
     std::cout << "Lights size: " << lights.size() << std::endl;
+    std::cout << "Textures size: " << textures.size() << std::endl;
 
+    //lights
     cudaMalloc(&pt->lights, lights.size() * sizeof(CudaLight));
     cudaMemcpy(pt->lights, lights.data(), lights.size() * sizeof(CudaLight), cudaMemcpyHostToDevice);
+    pt->num_lights = lights.size();
 
+    //bsdfs
     cudaMalloc(&pt->bsdfs, bsdfs.size() * sizeof(CudaBSDF));
     cudaMemcpy(pt->bsdfs, bsdfs.data(), bsdfs.size() * sizeof(CudaBSDF), cudaMemcpyHostToDevice);
 
-    pt->num_lights = lights.size();
-    pt->num_bsdfs = bsdfs.size();
+    //textures
+    CudaTexture *textures_cuda = (CudaTexture*) malloc(textures.size() * sizeof(CudaTexture));
+    for (size_t i = 0; i < textures.size(); i++) {
+        textures_cuda[i].has_alpha = textures[i].has_alpha;
+        textures_cuda[i].width = textures[i].width;
+        textures_cuda[i].height = textures[i].height;
+        int channels = textures[i].has_alpha ? 4 : 3;
+        cudaMalloc(&textures_cuda[i].data, textures[i].width * textures[i].height * channels);
+        cudaMemcpy(textures_cuda[i].data, textures[i].data, textures[i].width * textures[i].height * channels, cudaMemcpyHostToDevice);
+    }
+    cudaMalloc(&pt->textures, textures.size() * sizeof(CudaTexture));
+    cudaMemcpy(pt->textures, textures_cuda, textures.size() * sizeof(CudaTexture), cudaMemcpyHostToDevice);
+    free(textures_cuda);
 
+    //bvh
     cudaMalloc(&pt->bvh, sizeof(BVHCuda));
     cudaMemcpy(pt->bvh, bvh_cuda, sizeof(BVHCuda), cudaMemcpyHostToDevice);
 

@@ -3,7 +3,12 @@
 
 namespace CGL { namespace SceneObjects {
 
-BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec, std::vector<Vector3D> &vertices, std::vector<Vector3D> &normals, size_t max_leaf_size) {
+BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec, std::vector<Vector3D> &vertices, std::vector<Vector3D> &normals, std::vector<Vector2D> &texcoords, size_t max_leaf_size) {
+  std::cout << "Building BVHCuda" << std::endl;
+  std::cout << "Vertices size: " << vertices.size() << std::endl;
+  std::cout << "Normals size: " << normals.size() << std::endl;
+  std::cout << "Texcoords size: " << texcoords.size() << std::endl;
+  std::cout << "Primitives size: " << primitives_vec.size() << std::endl;
 
   std::vector<BBox> bboxes;
   bboxes.reserve(primitives_vec.size());
@@ -32,19 +37,22 @@ BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec, std::vector<Vector3
   size_t num_nodes = nodes_vec.size();
   size_t num_vertices = vertices.size();
   size_t num_normals = normals.size();
+  size_t num_texcoords = texcoords.size();
 
   CUDA_ERR(cudaMalloc(&primitives, num_primitives * sizeof(CudaPrimitive)));
   CUDA_ERR(cudaMalloc(&nodes, num_nodes * sizeof(BVHNode)));
   CUDA_ERR(cudaMalloc(&this->vertices, num_vertices * sizeof(Vector3D)));
   CUDA_ERR(cudaMalloc(&this->normals, num_normals * sizeof(Vector3D)));
+  CUDA_ERR(cudaMalloc(&this->texcoords, num_texcoords * sizeof(Vector2D)));
 
 
   CUDA_ERR(cudaMemcpy(primitives, primitives_vec.data(), num_primitives * sizeof(CudaPrimitive), cudaMemcpyHostToDevice));
   CUDA_ERR(cudaMemcpy(nodes, nodes_vec.data(), num_nodes * sizeof(BVHNode), cudaMemcpyHostToDevice));
   CUDA_ERR(cudaMemcpy(this->vertices, vertices.data(), num_vertices * sizeof(Vector3D), cudaMemcpyHostToDevice));
   CUDA_ERR(cudaMemcpy(this->normals, normals.data(), num_normals * sizeof(Vector3D), cudaMemcpyHostToDevice));
+  CUDA_ERR(cudaMemcpy(this->texcoords, texcoords.data(), num_texcoords * sizeof(Vector2D), cudaMemcpyHostToDevice));
 
-  std::cout<< "BVHCuda: " << num_primitives << " primitives, " << num_nodes << " nodes, " << std::endl;
+  std::cout<< "BVHCuda Built: " << num_nodes << " nodes" << std::endl;
 }
 
 DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i, uint32_t root_idx) const {
@@ -65,7 +73,7 @@ DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i, uint32_t root_idx)
     if (node.leaf) {
       CudaIntersection tmp;
       for (uint32_t p = node.start; p < node.end; p++) {
-          if (primitives[p].intersect(ray, &tmp, vertices, normals) && tmp.t < i->t) {
+          if (primitives[p].intersect(ray, &tmp, vertices, normals, texcoords) && tmp.t < i->t) {
             hit = true;
             *i = tmp;
           }

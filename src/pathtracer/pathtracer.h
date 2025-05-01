@@ -12,10 +12,8 @@ using CGL::SceneObjects::BVHCuda;
 using CGL::SceneObjects::CudaLight;
 
 #include "pathtracer/camera.h"
-using CGL::CudaCamera;
 
-#include "util/vector2D.h"
-
+#include "pathtracer/texture.h"
 namespace CGL {
 
     class PathTracer {
@@ -77,7 +75,8 @@ namespace CGL {
 
         // BSDFs
         CudaBSDF *bsdfs;
-        uint16_t num_bsdfs;
+        // Textures
+        CudaTexture *textures;
     };
 
 }  // namespace CGL
