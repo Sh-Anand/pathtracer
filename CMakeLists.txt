@@ -48,6 +48,7 @@ set(APPLICATION_SOURCE
     src/pathtracer/raytraced_renderer.cpp
     src/pathtracer/raytraced_renderer.cu
     src/pathtracer/ray.cu
+    src/pathtracer/texture.cu
 
     # misc
     src/util/lodepng.cpp

@@ -56,9 +56,6 @@ namespace CGL {
         uint16_t max_ray_depth; ///< maximum allowed ray depth (applies to all rays)
         uint16_t ns_aa;         ///< number of camera rays in one pixel (along one axis)
         uint16_t ns_area_light; ///< number samples per area light source
-        uint16_t ns_diff;       ///< number of samples - diffuse surfaces
-        uint16_t ns_glsy;       ///< number of samples - glossy surfaces
-        uint16_t ns_refr;       ///< number of samples - refractive surfaces
 
         // Components //
 

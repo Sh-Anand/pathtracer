@@ -62,42 +62,6 @@ DEVICE __inline__ Vector3D sample_L(const CudaLight *light,
   return light->radiance;
 }
 
-__device__ __inline__ uchar4 sample_texture(const CudaTexture &tex, const Vector2D uv) {
-  // wrap or clamp your UVs as needed
-  float u_f = uv.x - floorf(uv.x);
-  float v_f = uv.y - floorf(uv.y);
-  // // flip v if your image origin is top-left:
-  v_f = 1.0f - v_f;
-
-  int u = int(u_f * (tex.width  - 1) + 0.5f);
-  int v = int(v_f * (tex.height - 1) + 0.5f);
-
-  // clamp to valid
-  u = max(0, min(u, tex.width  - 1));
-  v = max(0, min(v, tex.height - 1));
-
-  // compute byte index
-  int comps = tex.has_alpha ? 4 : 3;
-  size_t idx = (size_t(v) * tex.width + size_t(u)) * comps;
-  const uint8_t *base = tex.data;
-
-  uchar4 c;
-  if (tex.has_alpha) {
-    // RGBA8
-    c.x = base[idx + 0];
-    c.y = base[idx + 1];
-    c.z = base[idx + 2];
-    c.w = base[idx + 3];
-  } else {
-    // RGB8 → treat alpha = 255
-    c.x = base[idx + 0];
-    c.y = base[idx + 1];
-    c.z = base[idx + 2];
-    c.w = 255;
-  }
-  return c;
-}
-
 DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
                                                 const CudaIntersection &isect) {
   // Estimate the lighting from this intersection coming directly from a light.
@@ -126,11 +90,10 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
 
   Vector3D tex_color(1,1,1);
   if (isect.tex_idx >= 0) {
-    uchar4 tc = sample_texture(textures[isect.tex_idx], isect.uv);
-    double af = tc.w / 255.0f;
-    tex_color.x = (tc.x / 255.0f) * af;
-    tex_color.y = (tc.y / 255.0f) * af;
-    tex_color.z = (tc.z / 255.0f) * af;
+    Vector4D tc = textures[isect.tex_idx].sample(isect.uv);
+    tex_color.x = tc.x * tc.w;
+    tex_color.y = tc.y * tc.w;
+    tex_color.z = tc.z * tc.w;
   }
 
   for (uint16_t i = 0; i < num_lights; i++) {
@@ -154,79 +117,86 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
 }
 
 
-#define RRT 0.7
+#define RRT 0.7f
 
 DEVICE Vector3D PathTracer::at_least_one_bounce_radiance(Ray& r, const CudaIntersection& isect_init) {
-  Vector3D L_out_total(0.0);
-  Vector3D throughput(1.0);
-  Ray current_ray = r;
-  CudaIntersection isect = isect_init;
+    Vector3D L_out_total(0.0);
+    Vector3D throughput(1.0);
+    Ray current_ray = r;
+    CudaIntersection isect = isect_init;
+    bool first_bounce = true;
 
-  bool first_bounce = true;
+    // constant index since x,y don’t change across bounces
+    int idx = current_ray.x + current_ray.y * sampleBuffer.w;
 
-  while (true) {
-    Matrix3x3 o2w;
-    make_coord_space(o2w, isect.n);
-    Matrix3x3 w2o = o2w.T();
+    while (true) {
+        // build shading frame
+        Matrix3x3 o2w;
+        make_coord_space(o2w, isect.n);
+        Matrix3x3 w2o = o2w.T();
 
-    Vector3D hit_p = current_ray.o + current_ray.d * isect.t;
-    Vector3D w_out = w2o * (-current_ray.d);
-    Vector3D L_out = estimate_direct_lighting_importance(current_ray, isect);
+        // hit point & outgoing dir in local space
+        Vector3D hit_p  = current_ray.o + current_ray.d * isect.t;
+        Vector3D w_out  = w2o * (-current_ray.d);
 
-    if (first_bounce) {
-      initialSampleBuffer[current_ray.x + current_ray.y * sampleBuffer.w].emittance = L_out;
+        // direct lighting
+        Vector3D L_out = estimate_direct_lighting_importance(current_ray, isect);
+        if (first_bounce) {
+            initialSampleBuffer[idx].emittance = L_out;
+        }
+        L_out_total += throughput * L_out;
+
+        // russian-roulette survival
+        float p_survive = (current_ray.depth == 1) ? 1.0f : RRT;
+        if (current_ray.depth > 1 &&
+            next_double(rand_states[idx]) >= RRT)
+            break;
+
+        // sample BSDF
+        Vector3D wi;
+        double pdf;
+        Vector3D fcos = sample_f(&bsdfs[isect.bsdf_idx], w_out, &wi, &pdf, rand_states[idx]) * abs_cos_theta(wi);
+        if (pdf <= 0.0)
+            break;
+
+        // update throughput
+        throughput = throughput * (first_bounce ? 1.0 : fcos);
+        throughput /= (pdf * p_survive);
+
+        // spawn next ray
+        Ray bounce_ray(hit_p, o2w * wi);
+        bounce_ray.min_t = EPS_D;
+        bounce_ray.depth = current_ray.depth + 1;
+        bounce_ray.x = current_ray.x;
+        bounce_ray.y = current_ray.y;
+
+        CudaIntersection bounce_isect;
+        if (!bvh->intersect(bounce_ray, &bounce_isect))
+            break;
+
+        bounce_isect.n = bounce_isect.normal_idx >= 0 ?
+            textures[bounce_isect.normal_idx].perturb(bounce_isect.uv, bounce_isect.tangent, bounce_isect.n) :
+            bounce_isect.n;
+
+        if (first_bounce) {
+            Vector3D bounce_p = bounce_ray.o + bounce_ray.d * bounce_isect.t;
+            Sample* s = &initialSampleBuffer[idx];
+            s->x_v   = hit_p;
+            s->n_v   = isect.n;
+            s->x_s   = bounce_p;
+            s->n_s   = bounce_isect.n;
+            s->pdf   = pdf;
+            s->fcos  = fcos;
+        }
+
+        // prepare for next iteration
+        current_ray = bounce_ray;
+        isect       = bounce_isect;
+        first_bounce = false;
     }
 
-    L_out_total += throughput * L_out;
-
-    bool not_terminate = current_ray.depth == 1 ||
-                         (current_ray.depth < max_ray_depth &&
-                          next_double(rand_states[current_ray.x + current_ray.y * sampleBuffer.w]) < RRT);
-
-    if (!not_terminate) break;
-
-    Vector3D wi;
-    double pdf;
-    Vector3D f = sample_f(&bsdfs[isect.bsdf_idx], w_out, &wi, &pdf,
-                            rand_states[current_ray.x + current_ray.y * sampleBuffer.w]);
-
-    if (pdf == 0 || f == Vector3D(0.0)) break;
-
-    throughput = throughput * f * abs_cos_theta(wi) / (pdf * RRT);
-
-    Ray bounce_ray(hit_p, o2w * wi);
-    bounce_ray.min_t = EPS_D;
-    bounce_ray.depth = current_ray.depth + 1;
-    bounce_ray.x = current_ray.x;
-    bounce_ray.y = current_ray.y;
-
-    CudaIntersection bounce_isect;
-    if (!bvh->intersect(bounce_ray, &bounce_isect)) {
-      break;
-    }
-
-    if (first_bounce) {
-      Vector3D bounce_p = bounce_ray.o + bounce_ray.d * bounce_isect.t;
-      Sample *s = &initialSampleBuffer[current_ray.x + current_ray.y * sampleBuffer.w];
-      s->x_v = hit_p;
-      s->n_v = isect.n;
-      s->x_s = bounce_p;
-      s->n_s = bounce_isect.n;
-      s->pdf = pdf;
-      s->fcos = f * abs_cos_theta(wi);
-      s->L = throughput;  // matches bounce_radiance / pdf / RRT
-    }
-
-    current_ray = bounce_ray;
-    isect = bounce_isect;
-    first_bounce = false;
-  }
-
-  return L_out_total;
+    return L_out_total - initialSampleBuffer[idx].emittance;
 }
-
-
-
 
 DEVICE Vector3D PathTracer::est_radiance_global_illumination(Ray &r) {
   CudaIntersection isect;
@@ -257,8 +227,12 @@ DEVICE void PathTracer::raytrace_pixel(uint16_t x, uint16_t y) {
   if (i == num_samples + 1) {
     initialSampleBuffer[x + y * sampleBuffer.w].L = Vector3D(0, 0, 0);
   } else {
+    isect.n = isect.normal_idx >= 0 ?
+      textures[isect.normal_idx].perturb(isect.uv, isect.tangent, isect.n) :
+      isect.n;
     Vector3D L = at_least_one_bounce_radiance(r, isect);
     initialSampleBuffer[r.x + r.y * sampleBuffer.w].emittance += bsdfs[isect.bsdf_idx].get_emission();
+    initialSampleBuffer[r.x + r.y * sampleBuffer.w].L = L;
   }
 }
 

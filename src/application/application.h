@@ -134,6 +134,7 @@ private:
 
   std::vector<Vector3D> vertices;
   std::vector<Vector3D> normals;
+  std::vector<Vector4D> tangents;
   std::vector<Vector2D> texcoords;
   std::vector<CudaPrimitive> primitives;
   std::vector<CudaBSDF> bsdfs;

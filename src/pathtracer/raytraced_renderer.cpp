@@ -42,9 +42,6 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
   pt->ns_aa = ns_aa;                                        // Number of samples per pixel
   pt->max_ray_depth = max_ray_depth;                        // Maximum recursion ray depth
   pt->ns_area_light = ns_area_light;                        // Number of samples for area light
-  pt->ns_diff = ns_diff;                                    // Number of samples for diffuse surface
-  pt->ns_glsy = ns_diff;                                    // Number of samples for glossy surface
-  pt->ns_refr = ns_refr;                                    // Number of samples for refraction
 
   this->lensRadius = lensRadius;
   this->focalDistance = focalDistance;

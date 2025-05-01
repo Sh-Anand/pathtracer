@@ -33,71 +33,71 @@ public:
    * Constructor.
    * Initializes to vector (x,y,z,0).
    */
-  Vector4D( double x, double y, double z) : x( x ), y( y ), z( z ), w( 0.0 ) { }
+  HOST_DEVICE Vector4D( double x, double y, double z) : x( x ), y( y ), z( z ), w( 0.0 ) { }
 
 
   /**
    * Constructor.
    * Initializes to vector (c,c,c,c)
    */
-  Vector4D(double c) : x(c), y(c), z(c), w(c) {}
+  HOST_DEVICE Vector4D(double c) : x(c), y(c), z(c), w(c) {}
 
   /**
    * Constructor.
    * Initializes from existing vector4D.
    */
-  Vector4D( const Vector4D& v ) : x( v.x ), y( v.y ), z( v.z ), w( v.w ) { }
+  HOST_DEVICE Vector4D( const Vector4D& v ) : x( v.x ), y( v.y ), z( v.z ), w( v.w ) { }
 
   /**
    * Constructor.
    * Initializes from existing vector3D.
    */
-  Vector4D( const Vector3D& v ) : x( v.x ), y( v.y ), z( v.z ), w( 0.0 ) { }
+  HOST_DEVICE Vector4D( const Vector3D& v ) : x( v.x ), y( v.y ), z( v.z ), w( 0.0 ) { }
 
   /**
    * Constructor.
    * Initializes from existing vector3D and w value.
    */
-  Vector4D( const Vector3D& v, double w ) : x( v.x ), y( v.y ), z( v.z ), w( w ) { }
+  HOST_DEVICE Vector4D( const Vector3D& v, double w ) : x( v.x ), y( v.y ), z( v.z ), w( w ) { }
 
   // returns reference to the specified component (0-based indexing: x, y, z)
-  inline double& operator[] ( const int& index ) {
+  HOST_DEVICE inline double& operator[] ( const int& index ) {
     return ( &x )[ index ];
   }
 
   // returns const reference to the specified component (0-based indexing: x, y, z)
-  inline const double& operator[] ( const int& index ) const {
+  HOST_DEVICE inline const double& operator[] ( const int& index ) const {
     return ( &x )[ index ];
   }
 
   // negation
-  inline Vector4D operator-( void ) const {
+  HOST_DEVICE inline Vector4D operator-( void ) const {
     return Vector4D(-x, -y, -z, -w);
   }
 
   // addition
-  inline Vector4D operator+( const Vector4D& v ) const {
+  HOST_DEVICE inline Vector4D operator+( const Vector4D& v ) const {
     return Vector4D(x + v.x, y + v.y, z + v.z, w + v.w);
   }
 
   // subtraction
-  inline Vector4D operator-( const Vector4D& v ) const {
+  HOST_DEVICE inline Vector4D operator-( const Vector4D& v ) const {
     return Vector4D(x - v.x, y - v.y, z - v.z, w - v.w);
   }
 
   // right scalar multiplication
-  inline Vector4D operator*( const double& c ) const {
+  HOST_DEVICE inline Vector4D operator*( const double& c ) const {
     return Vector4D(x * c, y * c, z * c, w * c);
   }
 
   // scalar division
-  inline Vector4D operator/( const double& c ) const {
+  HOST_DEVICE inline Vector4D operator/( const double& c ) const {
     const double rc = 1.0/c;
     return Vector4D(rc * x, rc * y, rc * z, rc * w);
   }
 
   // addition / assignment
-  inline void operator+=( const Vector4D& v ) {
+  HOST_DEVICE inline void operator+=( const Vector4D& v ) {
     x += v.x;
     y += v.y;
     z += v.z;
@@ -105,7 +105,7 @@ public:
   }
 
   // subtraction / assignment
-  inline void operator-=( const Vector4D& v ) {
+  HOST_DEVICE inline void operator-=( const Vector4D& v ) {
     x -= v.x;
     y -= v.y;
     z -= v.z;
@@ -113,7 +113,7 @@ public:
   }
 
   // scalar multiplication / assignment
-  inline void operator*=( const double& c ) {
+  HOST_DEVICE inline void operator*=( const double& c ) {
     x *= c;
     y *= c;
     z *= c;
@@ -121,7 +121,7 @@ public:
   }
 
   // scalar division / assignment
-  inline void operator/=( const double& c ) {
+  HOST_DEVICE inline void operator/=( const double& c ) {
     (*this) *= (1. / c);
   }
 
@@ -175,12 +175,12 @@ public:
 }; // class Vector4D
 
 // left scalar multiplication
-inline Vector4D operator* ( const double& c, const Vector4D& v ) {
+HOST_DEVICE inline Vector4D operator* ( const double& c, const Vector4D& v ) {
   return Vector4D( c * v.x, c * v.y, c * v.z, c*v.w );
 }
 
 // dot product (a.k.a. inner or scalar product)
-inline double dot( const Vector4D& u, const Vector4D& v ) {
+HOST_DEVICE inline double dot( const Vector4D& u, const Vector4D& v ) {
   return u.x*v.x + u.y*v.y + u.z*v.z + u.w*v.w;;
 }
 

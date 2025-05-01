@@ -92,7 +92,8 @@ public:
   void build_accel(std::vector<CudaPrimitive> &primitives, 
                    std::vector<Vector3D> &vertices,
                    std::vector<Vector3D> &normals,
-                   std::vector<Vector2D> &texcoords);
+                   std::vector<Vector2D> &texcoords,
+                   std::vector<Vector4D> &tangents);
 
   void gpu_raytrace();
 

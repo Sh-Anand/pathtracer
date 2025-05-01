@@ -25,6 +25,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line) {
 #define PI (3.14159265358979323)
 #define EPS_D (0.00000000001)
 #define EPS_F (0.00001f)
+#define RGB_R (1/255.0f)
 
 #include <cmath>
 #include <limits>

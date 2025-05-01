@@ -3,8 +3,9 @@
 
 #include <vector>
 
-#include "util/vector3D.h"
 #include "util/vector2D.h"
+#include "util/vector3D.h"
+#include "util/vector4D.h"
 
 #include "pathtracer/bsdf.h"
 
@@ -15,8 +16,10 @@ struct CudaIntersection {
   double t;
   Vector3D n;
   Vector2D uv;
+  Vector4D tangent;
   int bsdf_idx;
   int tex_idx;
+  int normal_idx;
 };
 
 } // namespace CGL

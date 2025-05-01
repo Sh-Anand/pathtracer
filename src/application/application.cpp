@@ -36,11 +36,13 @@ Application::Application(AppConfig config, bool gl) {
   texcoords.clear();
   vertices.clear();
   normals.clear();
+  tangents.clear();
   bsdfs.clear();
   lights.clear();
   textures.clear();
   
   texcoords.push_back(Vector2D(0, 0)); // dummy texcoord for all non-textured materials
+  tangents.push_back(Vector4D(0)); // dummy tangent for all non-bump mapped materials
 }
 
 Application::~Application() {
@@ -151,7 +153,7 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             }
         };
 
-        
+        // Get texture coordinates if available
         auto uvIt = primitive.attributes.find("TEXCOORD_0");
         const float *uvData = nullptr;
         if (uvIt != primitive.attributes.end()) {
@@ -159,6 +161,16 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
           const auto &uvView = model.bufferViews[ uvAccessor.bufferView ];
           const auto &uvBuf = model.buffers [uvView.buffer];
           uvData = reinterpret_cast<const float*>(&uvBuf.data[uvView.byteOffset + uvAccessor.byteOffset]);
+        }
+
+        // Get tangents if available
+        auto tangentIt = primitive.attributes.find("TANGENT");
+        const float *tangentData = nullptr;
+        if (tangentIt != primitive.attributes.end()) {
+          const auto &tangentAccessor = model.accessors[primitive.attributes.at("TANGENT")];
+          const auto &tangentView = model.bufferViews[ tangentAccessor.bufferView ];
+          const auto &tangentBuf = model.buffers [tangentView.buffer];
+          tangentData = reinterpret_cast<const float*>(&tangentBuf.data[tangentView.byteOffset + tangentAccessor.byteOffset]);
         }
 
         for (size_t i = 0; i < indexAccessor.count; i += 3) {
@@ -191,7 +203,9 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             normals.push_back(n1);
             normals.push_back(n2);
             normals.push_back(n3);
+
             int tex_id = -1;
+            int normal_id = -1;
             if (uvIt != primitive.attributes.end()) {
               Vector2D uv1( uvData[i0*2+0], 1.0f - uvData[i0*2 + 1] );
               Vector2D uv2( uvData[i1*2+0], 1.0f - uvData[i0*2 + 1] );
@@ -203,6 +217,23 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
               const auto &mat = model.materials[primitive.material];
               if (mat.pbrMetallicRoughness.baseColorTexture.index >= 0) {
                   tex_id = mat.pbrMetallicRoughness.baseColorTexture.index;
+              }
+            }
+            if (tangentIt != primitive.attributes.end()) {
+              Vector3D t1(tangentData[i0*4+0], tangentData[i0*4+1], tangentData[i0*4+2]);
+              Vector3D t2(tangentData[i1*4+0], tangentData[i1*4+1], tangentData[i1*4+2]);
+              Vector3D t3(tangentData[i2*4+0], tangentData[i2*4+1], tangentData[i2*4+2]);
+              t1 = (normalMatrix * t1); 
+              t2 = (normalMatrix * t2); 
+              t3 = (normalMatrix * t3);
+              t1.normalize(); t2.normalize(); t3.normalize(); 
+              tangents.push_back(Vector4D(t1, tangentData[i0*4+3]));
+              tangents.push_back(Vector4D(t2, tangentData[i1*4+3]));
+              tangents.push_back(Vector4D(t3, tangentData[i2*4+3]));
+              // get normal id
+              const auto &mat = model.materials[primitive.material];
+              if (mat.normalTexture.index >= 0) {
+                  normal_id = mat.normalTexture.index;
               }
             }
 
@@ -217,7 +248,8 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
                 static_cast<uint32_t>(std::max((int)texcoords.size() - 2, 0)),
                 static_cast<uint32_t>(std::max((int)texcoords.size() - 1, 0)),
                 primitive.material,
-                tex_id
+                tex_id,
+                normal_id
             };
             primitives.push_back(cprimitive);
 
@@ -331,15 +363,15 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
     double max_view_distance = canonical_view_distance * 20.0;
 
     canonicalCamera.place(target,
-                          acos(cam.view_dir.y) - PI/4,
+                          acos(cam.view_dir.y),
                           atan2(cam.view_dir.x, cam.view_dir.z),
                           view_distance,
                           min_view_distance,
                           max_view_distance);
 
     camera.place(target,
-                acos(cam.view_dir.y),
-                atan2(cam.view_dir.x, cam.view_dir.z),
+                acos(cam.view_dir.y) - PI/8,
+                atan2(cam.view_dir.x, cam.view_dir.z) - PI/8,
                 view_distance,
                 min_view_distance,
                 max_view_distance);
@@ -356,7 +388,7 @@ void Application::init_camera(CameraInfo& cameraInfo,
 void Application::set_up_pathtracer() {
   renderer->set_camera(&camera);
   renderer->set_frame_size(screenW, screenH);
-  renderer->build_accel(primitives, vertices, normals, texcoords);
+  renderer->build_accel(primitives, vertices, normals, texcoords, tangents);
 }
 
 } // namespace CGL
