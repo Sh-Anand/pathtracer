@@ -5,8 +5,6 @@ namespace CGL {
         // wrap or clamp your UVs as needed
         float u_f = uv.x - floorf(uv.x);
         float v_f = uv.y - floorf(uv.y);
-        // // flip v if your image origin is top-left:
-        v_f = 1.0f - v_f;
 
         int u = int(u_f * (width  - 1) + 0.5f);
         int v = int(v_f * (height - 1) + 0.5f);
@@ -48,8 +46,6 @@ namespace CGL {
                     (T * n_tangent.x +
                      B * n_tangent.y +
                      n * n_tangent.z).unit();
-
-        printf ("normal: %f %f %f, perturbed: %f %f %f\n", n.x, n.y, n.z, perturbed.x, perturbed.y, perturbed.z);
 
         return perturbed;
     }

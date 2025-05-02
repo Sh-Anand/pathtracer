@@ -87,11 +87,6 @@ void push_cuda_bsdf(const BSDF *bsdf, vector<CudaBSDF> &bsdfs) {
   bsdfs.push_back(cuda_bsdf);
 }
 
-Vector3D computeDiffuseBSDF(const Vector3D& baseColor, float metallic) {
-  Vector3D diffuseColor = baseColor; //(1.0f - metallic) * baseColor;
-  return diffuseColor / M_PI;
-}
-
 Matrix4x4 GetNodeTransform(const tinygltf::Node &node) {
   Matrix4x4 T(1.0f);
 
@@ -125,6 +120,7 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
   
   if (node.mesh >= 0) {
     const auto &mesh = model.meshes[node.mesh];
+    cout << "Mesh: " << mesh.name << endl;
     for (const auto &primitive : mesh.primitives) {
         if (primitive.mode != TINYGLTF_MODE_TRIANGLES) continue;
         const auto &posAccessor = model.accessors[primitive.attributes.at("POSITION")];
@@ -207,9 +203,9 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             int tex_id = -1;
             int normal_id = -1;
             if (uvIt != primitive.attributes.end()) {
-              Vector2D uv1( uvData[i0*2+0], 1.0f - uvData[i0*2 + 1] );
-              Vector2D uv2( uvData[i1*2+0], 1.0f - uvData[i0*2 + 1] );
-              Vector2D uv3( uvData[i2*2+0], 1.0f - uvData[i0*2 + 1] );
+              Vector2D uv1( uvData[i0*2+0], uvData[i0*2 + 1] );
+              Vector2D uv2( uvData[i1*2+0], uvData[i1*2 + 1] );
+              Vector2D uv3( uvData[i2*2+0], uvData[i2*2 + 1] );
               texcoords.push_back(uv1);
               texcoords.push_back(uv2);
               texcoords.push_back(uv3);
@@ -310,7 +306,7 @@ void Application::ParseMaterial(const tinygltf::Model &model) {
         material.pbrMetallicRoughness.baseColorFactor[2]
       );
       float metallic = material.pbrMetallicRoughness.metallicFactor;
-      BSDF* bsdf = new DiffuseBSDF(computeDiffuseBSDF(baseColor, metallic));
+      BSDF* bsdf = new DiffuseBSDF(baseColor/PI);
       push_cuda_bsdf(bsdf, bsdfs);
     }
   }

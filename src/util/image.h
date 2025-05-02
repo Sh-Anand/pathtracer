@@ -56,9 +56,9 @@ struct ImageBuffer {
     assert(x < w);
     assert(y < h);
     uint32_t p = 0;
-    p |= ((uint32_t) (clamp_T(0., 1., c.x) * 255)) << 16;
+    p |= ((uint32_t) (clamp_T(0., 1., c.z) * 255)) << 16;
     p |= ((uint32_t) (clamp_T(0., 1., c.y) * 255)) << 8;
-    p |= ((uint32_t) (clamp_T(0., 1., c.z) * 255));
+    p |= ((uint32_t) (clamp_T(0., 1., c.x) * 255));
     p |= 0xFF000000;
     data[x + y * w] = p;
   }
