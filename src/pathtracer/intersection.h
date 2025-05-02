@@ -18,8 +18,6 @@ struct CudaIntersection {
   Vector2D uv;
   Vector4D tangent;
   int bsdf_idx;
-  int tex_idx;
-  int normal_idx;
 };
 
 } // namespace CGL

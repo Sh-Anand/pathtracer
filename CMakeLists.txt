@@ -44,7 +44,6 @@ set(APPLICATION_SOURCE
     src/util/vector4D.cpp
     src/util/quaternion.cpp
 
-    src/pathtracer/advanced_bsdf.cpp
     src/pathtracer/raytraced_renderer.cpp
     src/pathtracer/raytraced_renderer.cu
     src/pathtracer/ray.cu

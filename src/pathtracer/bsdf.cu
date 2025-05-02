@@ -24,12 +24,34 @@ DEVICE void make_coord_space(Matrix3x3 &o2w, const Vector3D n) {
   o2w[2] = z;
 }
 
-DEVICE Vector3D CudaDiffuseBSDF::f(const Vector3D wo, const Vector3D wi) const {
-  return reflectance / PI;
+// following code copied from https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#appendix-b-brdf-implementation
+
+// helper: GGX normal distribution
+DEVICE double D_compute(double a, double NoH_raw) {
+  double NoH = fmax(NoH_raw, 0.0); // Heaviside step function
+  double a2 = a*a;
+  double denom = NoH*NoH*(a2 - 1.0) + 1.0;
+  return a2 / (PI * denom * denom);
 }
 
-DEVICE Vector3D CudaEmissionBSDF::f(const Vector3D wo, const Vector3D wi) const {
-  return Vector3D();
+DEVICE double G_compute(
+    double a,    // α = roughness²
+    double NoV,  // max(0, N·V)
+    double NoL,  // max(0, N·L)
+    double VoH,  // dot(V, H)
+    double LoH   // dot(L, H)
+) {
+  // 1) visibility of microfacet only if H·V>0 and H·L>0
+  if (VoH <= 0.0 || LoH <= 0.0) return 0.0;
+
+  // 2) denominator terms per glTF spec:
+  //    G₁(X) = (2·X) / (X + sqrt(α² + (1−α²)·X²))
+  double a2       = a * a;
+  double denomV  = NoV + sqrt(a2 + (1.0 - a2) * NoV * NoV);
+  double denomL  = NoL + sqrt(a2 + (1.0 - a2) * NoL * NoL);
+  double GV      = (2.0 * NoV) / denomV;
+  double GL      = (2.0 * NoL) / denomL;
+  return GV * GL;
 }
 
 }

@@ -71,29 +71,17 @@ void Application::resize(size_t w, size_t h) {
   renderer->set_frame_size(w, h);
 }
 
-void push_cuda_bsdf(const BSDF *bsdf, vector<CudaBSDF> &bsdfs) {
-  // dynamic cst BSDF and figure out type:
-  CudaBSDF cuda_bsdf {};
-  if (const DiffuseBSDF *diffuse_bsdf = dynamic_cast<const DiffuseBSDF *>(bsdf)) {
-    cuda_bsdf.type = CudaBSDFType_Diffuse;
-    cuda_bsdf.bsdf.diffuse = CudaDiffuseBSDF{diffuse_bsdf->reflectance};
-  } else if (const EmissionBSDF *emission_bsdf = dynamic_cast<const EmissionBSDF *>(bsdf)) {
-    cuda_bsdf.type = CudaBSDFType_Emission;
-    cuda_bsdf.bsdf.emission = CudaEmissionBSDF{emission_bsdf->radiance};
-  } else {
-    std::cerr << "Unknown BSDF type" << std::endl;
-    exit(1);
-  }
-  bsdfs.push_back(cuda_bsdf);
-}
-
 Matrix4x4 GetNodeTransform(const tinygltf::Node &node) {
   Matrix4x4 T(1.0f);
 
-  // if (!node.matrix.empty()) {
-  //     return glm::make_mat4(node.matrix.data());
-  // }
-
+  if (!node.matrix.empty()) {
+    // tinygltf stores matrix in column‐major order
+    Matrix4x4 M;
+    for (int i = 0; i < 16; i+=4) {
+      M[i%4] = Vector4D(node.matrix[i], node.matrix[i+1], node.matrix[i+2], node.matrix[i+3]);
+    }
+    return M;
+  }
   Vector3D translation(0.0f), _scale(1.0f);
   Quaternion rotation = Quaternion(0, 0, 0, 1);
 
@@ -117,10 +105,14 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
   const auto &node = model.nodes[nodeIdx];
   Matrix4x4 worldTransform = parentTransform * GetNodeTransform(node);
   Matrix3x3 normalMatrix = Matrix3x3(worldTransform).inv().T();
+
+if (worldTransform.det() < 0.0f) {
+  // flip the handedness
+  normalMatrix = normalMatrix * (-1.0f);
+}
   
   if (node.mesh >= 0) {
     const auto &mesh = model.meshes[node.mesh];
-    cout << "Mesh: " << mesh.name << endl;
     for (const auto &primitive : mesh.primitives) {
         if (primitive.mode != TINYGLTF_MODE_TRIANGLES) continue;
         const auto &posAccessor = model.accessors[primitive.attributes.at("POSITION")];
@@ -200,8 +192,6 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
             normals.push_back(n2);
             normals.push_back(n3);
 
-            int tex_id = -1;
-            int normal_id = -1;
             if (uvIt != primitive.attributes.end()) {
               Vector2D uv1( uvData[i0*2+0], uvData[i0*2 + 1] );
               Vector2D uv2( uvData[i1*2+0], uvData[i1*2 + 1] );
@@ -209,27 +199,14 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
               texcoords.push_back(uv1);
               texcoords.push_back(uv2);
               texcoords.push_back(uv3);
-              // get texture id
-              const auto &mat = model.materials[primitive.material];
-              if (mat.pbrMetallicRoughness.baseColorTexture.index >= 0) {
-                  tex_id = mat.pbrMetallicRoughness.baseColorTexture.index;
-              }
-            }
-            if (tangentIt != primitive.attributes.end()) {
-              Vector3D t1(tangentData[i0*4+0], tangentData[i0*4+1], tangentData[i0*4+2]);
-              Vector3D t2(tangentData[i1*4+0], tangentData[i1*4+1], tangentData[i1*4+2]);
-              Vector3D t3(tangentData[i2*4+0], tangentData[i2*4+1], tangentData[i2*4+2]);
-              t1 = (normalMatrix * t1); 
-              t2 = (normalMatrix * t2); 
-              t3 = (normalMatrix * t3);
-              t1.normalize(); t2.normalize(); t3.normalize(); 
-              tangents.push_back(Vector4D(t1, tangentData[i0*4+3]));
-              tangents.push_back(Vector4D(t2, tangentData[i1*4+3]));
-              tangents.push_back(Vector4D(t3, tangentData[i2*4+3]));
-              // get normal id
-              const auto &mat = model.materials[primitive.material];
-              if (mat.normalTexture.index >= 0) {
-                  normal_id = mat.normalTexture.index;
+              if (tangentIt != primitive.attributes.end()) {
+                Vector3D t1(tangentData[i0*4+0], tangentData[i0*4+1], tangentData[i0*4+2]);
+                Vector3D t2(tangentData[i1*4+0], tangentData[i1*4+1], tangentData[i1*4+2]);
+                Vector3D t3(tangentData[i2*4+0], tangentData[i2*4+1], tangentData[i2*4+2]);
+                t1.normalize(); t2.normalize(); t3.normalize(); 
+                tangents.push_back(Vector4D(t1, tangentData[i0*4+3]));
+                tangents.push_back(Vector4D(t2, tangentData[i1*4+3]));
+                tangents.push_back(Vector4D(t3, tangentData[i2*4+3]));
               }
             }
 
@@ -244,13 +221,13 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
                 static_cast<uint32_t>(std::max((int)texcoords.size() - 2, 0)),
                 static_cast<uint32_t>(std::max((int)texcoords.size() - 1, 0)),
                 primitive.material,
-                tex_id,
-                normal_id
             };
             primitives.push_back(cprimitive);
 
-            if(bsdfs[cprimitive.bsdf_idx].type == CudaBSDFType_Emission){
-              CudaLight clight(bsdfs[cprimitive.bsdf_idx].bsdf.emission.radiance, cprimitive, vertices);
+            if(bsdfs[cprimitive.bsdf_idx].emissiveFactor.x > 0.0f ||
+               bsdfs[cprimitive.bsdf_idx].emissiveFactor.y > 0.0f ||
+               bsdfs[cprimitive.bsdf_idx].emissiveFactor.z > 0.0f) {
+              CudaLight clight(bsdfs[cprimitive.bsdf_idx].emissiveFactor * bsdfs[cprimitive.bsdf_idx].emissiveStrength, cprimitive, vertices);
               lights.push_back(clight);
             }
         }
@@ -285,30 +262,27 @@ void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Mat
 
 void Application::ParseMaterial(const tinygltf::Model &model) {
   for(const auto &material: model.materials) {
-    if(!material.emissiveFactor.empty() && material.emissiveFactor[0] > 0.0f){ 
-      // std::cout << "light" << std::endl;
-      Vector3D rad;
-      rad.x = (float)material.emissiveFactor[0];
-      rad.y = (float)material.emissiveFactor[1];
-      rad.z = (float)material.emissiveFactor[2];
-      double emissiveStrength = 1.0f;
-      if (material.extensions.count("KHR_materials_emissive_strength")) {
-        const auto& ext = material.extensions.at("KHR_materials_emissive_strength").Get("emissiveStrength");
-        emissiveStrength = (float)ext.Get<double>();
-      }
-      rad *= emissiveStrength;
-      BSDF* bsdf = new EmissionBSDF(rad);
-      push_cuda_bsdf(bsdf, bsdfs);
-    } else{
-      Vector3D baseColor = Vector3D(
-        material.pbrMetallicRoughness.baseColorFactor[0],
-        material.pbrMetallicRoughness.baseColorFactor[1],
-        material.pbrMetallicRoughness.baseColorFactor[2]
-      );
-      float metallic = material.pbrMetallicRoughness.metallicFactor;
-      BSDF* bsdf = new DiffuseBSDF(baseColor/PI);
-      push_cuda_bsdf(bsdf, bsdfs);
-    }
+    CudaBSDF bsdf;
+    bsdf.baseColor = Vector4D(material.pbrMetallicRoughness.baseColorFactor[0],
+                              material.pbrMetallicRoughness.baseColorFactor[1],
+                              material.pbrMetallicRoughness.baseColorFactor[2],
+                              material.pbrMetallicRoughness.baseColorFactor[3])/PI;
+    bsdf.metallic = material.pbrMetallicRoughness.metallicFactor;
+    bsdf.roughness = material.pbrMetallicRoughness.roughnessFactor;
+    bsdf.emissiveFactor = Vector3D(material.emissiveFactor[0], material.emissiveFactor[1], material.emissiveFactor[2]);
+    bsdf.emissiveStrength = material.extensions.count("KHR_materials_emissive_strength") ?
+        material.extensions.at("KHR_materials_emissive_strength").Get("emissiveStrength").Get<double>()/2 : 0.0f;
+    bsdf.transmissionFactor = material.extensions.count("KHR_materials_transmission") ?
+        material.extensions.at("KHR_materials_transmission").Get("tranmissionFactor").Get<double>() : 0.0f;
+    bsdf.thicknessFactor = material.extensions.count("KHR_materials_volume") ?
+        material.extensions.at("KHR_materials_volume").Get("thicknessFactor").Get<double>() : 0.0f;
+
+    bsdf.tex_idx = material.pbrMetallicRoughness.baseColorTexture.index;
+    bsdf.normal_idx = material.normalTexture.index;
+    bsdf.hasOcclusionTexture = material.occlusionTexture.index >= 0;
+    bsdf.orm_idx = max(material.occlusionTexture.index, material.pbrMetallicRoughness.metallicRoughnessTexture.index);
+    bsdf.emission_idx = material.emissiveTexture.index;
+    bsdfs.push_back(bsdf);
   }
 }
 
@@ -354,7 +328,7 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
     Vector3D target = bbox.centroid();
     canonical_view_distance = bbox.extent.norm() / 2 * 1.5;
 
-    double view_distance = canonical_view_distance * 2.2;
+    double view_distance = canonical_view_distance * 1.8;
     double min_view_distance = canonical_view_distance / 10.0;
     double max_view_distance = canonical_view_distance * 20.0;
 
@@ -366,7 +340,7 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
                           max_view_distance);
 
     camera.place(target,
-                acos(cam.view_dir.y) - PI/8,
+                acos(cam.view_dir.y) - PI/16,
                 atan2(cam.view_dir.x, cam.view_dir.z) - PI/8,
                 view_distance,
                 min_view_distance,

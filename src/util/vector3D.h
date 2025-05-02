@@ -132,6 +132,12 @@ HOST_DEVICE inline Vector3D cross(const Vector3D& u, const Vector3D& v) {
                   u.x * v.y - u.y * v.x);
 }
 
+HOST_DEVICE __inline__ Vector3D reflect(const Vector3D &u, const Vector3D &v) {
+  // r = I – 2·(N·I)·N
+  double NdotI = dot(u, v);
+  return u - v * (2.0 * NdotI);
+}
+
 HOST_DEVICE std::ostream& operator<<(std::ostream& os, const Vector3D& v);
 
 } // namespace CGL

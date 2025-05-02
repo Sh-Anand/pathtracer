@@ -17,11 +17,6 @@ DEVICE __inline__ void cosine_weighted_hemisphere_sample_3d(RNGState &rand_state
   *wi = Vector3D(r*cos(theta), r*sin(theta), sqrt(1-Xi1));
 }
 
-DEVICE __inline__ Vector3D sample_f(const CudaBSDF *bsdf, const Vector3D wo, Vector3D *wi, double *pdf, RNGState &rand_state) {
-  cosine_weighted_hemisphere_sample_3d(rand_state, wi, pdf);
-  return bsdf->f(wo, *wi);
-}
-
 DEVICE __inline__ Vector3D sample_L(const CudaLight *light,
                                     const Vector3D         p,
                                     Vector3D*              wi,
@@ -62,6 +57,204 @@ DEVICE __inline__ Vector3D sample_L(const CudaLight *light,
   return light->radiance;
 }
 
+DEVICE __inline__ Vector3D PathTracer::get_emission(const CudaIntersection &isect) {
+  CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
+  Vector2D uv = isect.uv;
+  Vector3D emission = bsdf.emissiveFactor * bsdf.emissiveStrength;
+  if (bsdf.emission_idx >= 0) {
+    Vector4D tc = textures[bsdf.emission_idx].sample(uv);
+    emission.x *= tc.x * tc.w;
+    emission.y *= tc.y * tc.w;
+    emission.z *= tc.z * tc.w;
+  }
+  return emission;
+}
+
+DEVICE __inline__ void PathTracer::perturb_normal(CudaIntersection &isect) {
+  int normal_idx = bsdfs[isect.bsdf_idx].normal_idx;
+  if (normal_idx < 0) return;
+
+  Vector3D N = isect.n;
+  Vector3D T = Vector3D(isect.tangent.x,
+                        isect.tangent.y,
+                        isect.tangent.z);
+  T = (T - N * dot(N, T)).unit();
+  Vector3D B = cross(N, T) * isect.tangent.w;
+
+  Vector4D c = textures[normal_idx].sample(isect.uv);
+  Vector3D n_tangent = Vector3D(c.x, c.y, c.z) * 2.0f - Vector3D(1.0f);
+
+  Vector3D perturbed = (T * n_tangent.x +
+                        B * n_tangent.y +
+                        N * n_tangent.z).unit();
+
+  Vector3D diff = perturbed - N;
+  double diff_len = diff.norm();
+  // use original if diff small to prevent flickering. TODO: better fix
+  if (diff_len < 0.4) {
+    isect.n = N;
+  } else {
+    isect.n = perturbed;
+  }
+}
+
+// following code adapted from https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#appendix-b-brdf-implementation
+// wo = V, wi = L
+DEVICE __inline__ Vector3D PathTracer::f(const CudaIntersection &isect, const Vector3D &wo, const Vector3D &wi, double *occlusion) {
+  CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
+  Vector3D N = isect.n; // perturbed normal
+  Vector2D uv = isect.uv;
+
+  // 1) geometry terms
+  Vector3D H = (wo + wi).unit(); // bisector
+  double NoV   = dot(N, wo);
+  double NoL   = dot(N, wi);
+  if (NoV <= 0) return Vector3D(0.0);
+  double NoH   = dot(N, H);
+  double VoH   = dot(wo, H);
+  double LoH   = dot(wi, H);
+
+  // 2) get base texture
+  Vector3D base = Vector3D(bsdf.baseColor.x,
+                           bsdf.baseColor.y,
+                           bsdf.baseColor.z);
+  if (bsdf.tex_idx >= 0) {
+    Vector4D t = textures[bsdf.tex_idx].sample(uv);
+    base = base * Vector3D(t.x, t.y, t.z);
+  }
+
+  // 3) get metallic roughness
+  double metal    = bsdf.metallic;
+  double roughness= bsdf.roughness;
+  if (bsdf.orm_idx >= 0) {
+    Vector4D orm = textures[bsdf.orm_idx].sample(uv);
+    metal     = orm.z;
+    roughness = orm.y;
+    *occlusion = orm.x;
+  }
+
+  // clamp values : safety
+  metal     = clamp_device(metal,     0.0, 1.0);
+  roughness = clamp_device(roughness, 0.04, 1.0); // avoid ->0
+  double onemmetal = 1.0 - metal;
+
+  double alpha = roughness * roughness;
+
+  // 4) diffuse and specular components
+  Vector3D c_diff = base * onemmetal;
+  Vector3D f0 = onemmetal * Vector3D(0.04) + metal * base;
+  Vector3D F = f0 + (Vector3D(1.0) - f0) * pow(1.0 - VoH, 5.0);
+  Vector3D f_diffuse = (Vector3D(1.0) - F) * PI_R * c_diff;
+
+  double D = D_compute(alpha, NoH);
+  double V = G_compute(alpha, NoV, NoL, VoH, LoH) / (4.0 * NoV * NoL);
+  Vector3D f_specular = F * D * V;
+
+  return f_diffuse + f_specular;
+}
+
+// Importance‑sample both diffuse (Lambert) and GGX specular lobes of the metallic‑roughness BRDF.
+// Returns f(wo, *wi), writes out *wi, *pdf, and *occlusion.
+DEVICE __inline__ Vector3D PathTracer::sample_f(const CudaIntersection &isect,
+                                                const Vector3D       &wo,
+                                                Vector3D             *wi,
+                                                double               *pdf,
+                                                double               *occlusion,
+                                                RNGState             &rand_state) {
+  // 1) Material & normal
+  const CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
+  Vector3D N    = isect.n;
+  Vector2D uv   = isect.uv;
+  *occlusion    = 1.0;
+
+  // 2) Base color
+  Vector3D base = Vector3D(bsdf.baseColor.x,
+                           bsdf.baseColor.y,
+                           bsdf.baseColor.z);
+  if (bsdf.tex_idx >= 0) {
+    Vector4D t = textures[bsdf.tex_idx].sample(uv);
+    base = base * Vector3D(t.x, t.y, t.z);
+  }
+
+  // 3) Metallic, roughness, occlusion from ORM
+  double metal     = clamp_device(bsdf.metallic,  0.0, 1.0);
+  double roughness = clamp_device(bsdf.roughness, 0.02,1.0);
+  if (bsdf.orm_idx >= 0) {
+    Vector4D orm = textures[bsdf.orm_idx].sample(uv);
+    *occlusion   = orm.x;
+    roughness    = orm.y;
+    metal        = orm.z;
+  }
+  double onem = 1.0 - metal;
+
+  // // 4) Visibility check
+  double NoV = max(dot(N, wo), 0.0);
+  if (NoV <= 0.0) {
+    *pdf = 0.0;
+    return Vector3D(0.0);
+  }
+
+  // 5) Precompute F₀ and mixture weights
+  double alpha = roughness * roughness;
+  Vector3D F0  = Vector3D(0.04) * onem + base * metal;
+
+  double P_d = onem;  // diffuse weight
+  double P_s = metal; // specular weight
+  double w   = P_d + P_s;
+  P_d /= w;
+  P_s /= w;
+
+  // 6) Randomly choose lobe
+  double u = next_double(rand_state);
+  if (u < P_d) {
+    // ── DIFFUSE ──
+    // sample cosine‑weighted hemisphere
+    cosine_weighted_hemisphere_sample_3d(rand_state, wi, pdf);
+    *pdf *= P_d;
+
+    // evaluate BRDF
+    Vector3D H     = (wo + *wi).unit();
+    double VoH     = max(dot(wo, H), 0.0);
+    Vector3D F_geo = F0 + (Vector3D(1.0) - F0) * pow(1.0 - VoH, 5.0);
+    Vector3D c_diff = base * onem;
+    return (Vector3D(1.0) - F_geo) * (1.0 / M_PI) * c_diff;
+  } else {
+    // ── SPECULAR (GGX) ──
+    // (a) sample microfacet normal H via GGX NDF
+    double r1 = next_double(rand_state);
+    double r2 = next_double(rand_state);
+    double phi      = 2.0 * M_PI * r1;
+    double cosTheta = sqrt((1.0 - r2) / (1.0 + (alpha*alpha - 1.0) * r2));
+    double sinTheta = sqrt(max(0.0, 1.0 - cosTheta*cosTheta));
+
+    Matrix3x3 o2w;
+    make_coord_space(o2w, N);
+    Vector3D localH = Vector3D(sinTheta * cos(phi),
+                               sinTheta * sin(phi),
+                               cosTheta);
+    Vector3D H = (o2w * localH).unit();
+
+    // (b) reflect view vector about H
+    *wi = reflect(-wo, H);
+
+    // (c) compute PDF
+    double NoH   = max(dot(N, H), 0.0);
+    double VoH   = max(dot(wo, H), 0.0);
+    double D     = D_compute(alpha, NoH);
+    double pdf_H = D * NoH;
+    double pdf_w = pdf_H / (4.0 * VoH);
+    *pdf = pdf_w * P_s;
+
+    // (d) evaluate microfacet BRDF
+    double NoL = max(dot(N, *wi), 0.0);
+    double G   = G_compute(alpha, NoV, NoL, VoH, max(dot(*wi, H), 0.0));
+    Vector3D F_geo = F0 + (Vector3D(1.0) - F0) * pow(1.0 - VoH, 5.0);
+    return F_geo * (D * G / (4.0 * NoV * NoL));
+  }
+}
+
+
+
 DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
                                                 const CudaIntersection &isect) {
   // Estimate the lighting from this intersection coming directly from a light.
@@ -83,19 +276,12 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
   Vector3D wi;
   double distToLight, pdf;
 
-  //NOTE: wi here is in worldpsace, unlike in the previous function
+  //NOTE: wi here is in worldpsace,
 
   uint16_t x = blockIdx.x * blockDim.x + threadIdx.x;
   uint16_t y = blockIdx.y * blockDim.y + threadIdx.y;
 
-  Vector3D tex_color(1,1,1);
-  if (isect.tex_idx >= 0) {
-    Vector4D tc = textures[isect.tex_idx].sample(isect.uv);
-    tex_color.x = tc.x * tc.w;
-    tex_color.y = tc.y * tc.w;
-    tex_color.z = tc.z * tc.w;
-  }
-
+  double occlusion; //ignored for dir lighting
   for (uint16_t i = 0; i < num_lights; i++) {
     CudaLight *light = &lights[i];
     for (int j = 0; j < ns_area_light; j++) {
@@ -107,13 +293,13 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
       shadow_ray.max_t = distToLight;
       CudaIntersection light_isect;
       if (!bvh->intersect(shadow_ray, &light_isect)) {
-        L_out += bsdfs[isect.bsdf_idx].f(w_out, wi_o) * radiance * abs_cos_theta(wi_o) / pdf;
+        L_out += f(isect, w_out, wi_o, &occlusion) * radiance * abs_cos_theta(wi_o) / pdf;
       }
     }
   }
 
   L_out /= (num_lights * ns_area_light);
-  return L_out * tex_color;
+  return L_out;
 }
 
 
@@ -155,7 +341,8 @@ DEVICE Vector3D PathTracer::at_least_one_bounce_radiance(Ray& r, const CudaInter
         // sample BSDF
         Vector3D wi;
         double pdf;
-        Vector3D fcos = sample_f(&bsdfs[isect.bsdf_idx], w_out, &wi, &pdf, rand_states[idx]) * abs_cos_theta(wi);
+        double occlusion = 1.0;
+        Vector3D fcos = occlusion * sample_f(isect, w_out, &wi, &pdf, &occlusion, rand_states[idx]) * abs_cos_theta(wi);
         if (pdf <= 0.0)
             break;
 
@@ -174,9 +361,7 @@ DEVICE Vector3D PathTracer::at_least_one_bounce_radiance(Ray& r, const CudaInter
         if (!bvh->intersect(bounce_ray, &bounce_isect))
             break;
 
-        bounce_isect.n = bounce_isect.normal_idx >= 0 ?
-            textures[bounce_isect.normal_idx].perturb(bounce_isect.uv, bounce_isect.tangent, bounce_isect.n) :
-            bounce_isect.n;
+        // perturb_normal(bounce_isect);
 
         if (first_bounce) {
             Vector3D bounce_p = bounce_ray.o + bounce_ray.d * bounce_isect.t;
@@ -205,7 +390,7 @@ DEVICE Vector3D PathTracer::est_radiance_global_illumination(Ray &r) {
   if (!bvh->intersect(r, &isect))
     return L_out;
 
-  L_out = bsdfs[isect.bsdf_idx].get_emission() + at_least_one_bounce_radiance(r, isect);
+  L_out = get_emission(isect) + at_least_one_bounce_radiance(r, isect);
 
   return L_out;
 }
@@ -227,11 +412,9 @@ DEVICE void PathTracer::raytrace_pixel(uint16_t x, uint16_t y) {
   if (i == num_samples + 1) {
     initialSampleBuffer[x + y * sampleBuffer.w].L = Vector3D(0, 0, 0);
   } else {
-    isect.n = isect.normal_idx >= 0 ?
-      textures[isect.normal_idx].perturb(isect.uv, isect.tangent, isect.n) :
-      isect.n;
+    perturb_normal(isect);
     Vector3D L = at_least_one_bounce_radiance(r, isect);
-    initialSampleBuffer[r.x + r.y * sampleBuffer.w].emittance += bsdfs[isect.bsdf_idx].get_emission();
+    initialSampleBuffer[r.x + r.y * sampleBuffer.w].emittance += get_emission(isect);
     initialSampleBuffer[r.x + r.y * sampleBuffer.w].L = L;
   }
 }

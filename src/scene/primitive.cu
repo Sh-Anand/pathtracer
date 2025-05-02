@@ -40,8 +40,6 @@ DEVICE bool CudaPrimitive::intersect(Ray &r, CudaIntersection *isect, Vector3D* 
   isect->tangent = (1 - a - b) * tt1 + a * tt2 + b * tt3;
   isect->t = t;
   isect->bsdf_idx = bsdf_idx;
-  isect->tex_idx = tex_idx;
-  isect->normal_idx = normal_idx;
 
   return true;
 }

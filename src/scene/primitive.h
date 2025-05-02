@@ -16,8 +16,6 @@ struct CudaPrimitive {
   uint32_t i_uv1, i_uv2, i_uv3;
   
   int bsdf_idx;
-  int tex_idx;
-  int normal_idx;
 };
 
 

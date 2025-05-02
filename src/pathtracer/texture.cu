@@ -34,19 +34,4 @@ namespace CGL {
         }
         return Vector4D(c.x, c.y, c.z, c.w) * RGB_R;
     }
-
-    DEVICE Vector3D CudaTexture::perturb(const Vector2D &uv, const Vector4D &tangent, const Vector3D &n) {
-        Vector4D c = sample(uv);
-        Vector3D n_tangent = Vector3D (c.x, c.y, c.z) * 2.0f - Vector3D(1.0f);
-
-        Vector3D T = Vector3D(tangent.x, tangent.y, tangent.z).unit();
-        Vector3D B = tangent.w * cross(n, T).unit();
-
-        Vector3D perturbed =
-                    (T * n_tangent.x +
-                     B * n_tangent.y +
-                     n * n_tangent.z).unit();
-
-        return perturbed;
-    }
 }

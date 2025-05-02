@@ -30,11 +30,21 @@ namespace CGL {
 
         void write_to_framebuffer(HDRImageBuffer &buffer, ImageBuffer& framebuffer, uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
 
-        /**
-         * Trace an ray in the scene.
-         */
-        DEVICE Vector3D estimate_direct_lighting_importance(Ray& r, const CudaIntersection& isect);
+        DEVICE __inline__ Vector3D get_emission(const CudaIntersection &isect);
+        DEVICE __inline__ void perturb_normal(CudaIntersection &isect);
 
+        DEVICE Vector3D f(const CudaIntersection &isect, 
+                                     const Vector3D &wo,
+                                     const Vector3D &wi,
+                                     double *occlusion);
+        DEVICE Vector3D sample_f(const CudaIntersection &isect,
+                                                const Vector3D &wo,
+                                                Vector3D *wi,
+                                                double *pdf,
+                                                double *occlusion,
+                                                RNGState &rand_state);
+
+        DEVICE Vector3D estimate_direct_lighting_importance(Ray& r, const CudaIntersection& isect);
         DEVICE Vector3D est_radiance_global_illumination(Ray& r);
         DEVICE Vector3D at_least_one_bounce_radiance(Ray& r, const CudaIntersection& isect);
 
