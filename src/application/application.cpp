@@ -277,7 +277,7 @@ if (worldTransform.det() < 0.0f) {
           std::cout << "Point light position: (" << position.x << ", " << position.y << ", " << position.z << ")\n";
           std::cout << "Point light color: (" << color.x << ", " << color.y << ", " << color.z << ")\n";
           std::cout << "Point light intensity: " << intensity << "\n";
-          lights.push_back(CudaLight(color * intensity/3000, position));
+          lights.push_back(CudaLight(color * intensity/5000, position));
         }
     }
   }
@@ -360,15 +360,15 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
     double max_view_distance = canonical_view_distance * 20.0;
 
     canonicalCamera.place(target,
-                          acos(cam.view_dir.y),
-                          atan2(cam.view_dir.x, cam.view_dir.z),
+                          acos(cam.view_dir.y) - M_PI / 8,
+                          atan2(cam.view_dir.x, cam.view_dir.z) - M_PI / 8,
                           view_distance,
                           min_view_distance,
                           max_view_distance);
 
     camera.place(target,
-                acos(cam.view_dir.y),
-                atan2(cam.view_dir.x, cam.view_dir.z),
+                        acos(cam.view_dir.y) - M_PI / 8,
+                        atan2(cam.view_dir.x, cam.view_dir.z) - M_PI / 8,
                 view_distance,
                 min_view_distance,
                 max_view_distance);

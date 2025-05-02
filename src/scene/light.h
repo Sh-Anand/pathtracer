@@ -11,7 +11,7 @@ struct CudaLight {
             const Vector3D pos) 
       : radiance(rad), 
         position(pos) {
-          area = 0;
+          area = 1;
           is_point_light = true;
         }
   CudaLight(const Vector3D rad, 

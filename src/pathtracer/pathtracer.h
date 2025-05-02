@@ -43,6 +43,9 @@ namespace CGL {
                                                 double *pdf,
                                                 double *occlusion,
                                                 RNGState &rand_state);
+        DEVICE __inline__ double bsdf_pdf(const CudaIntersection &isect,
+                                  const Vector3D &wo,
+                                  const Vector3D &wi);
 
         DEVICE Vector3D estimate_direct_lighting_importance(Ray& r, const CudaIntersection& isect);
         DEVICE Vector3D est_radiance_global_illumination(Ray& r);

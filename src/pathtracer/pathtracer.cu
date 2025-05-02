@@ -263,16 +263,44 @@ DEVICE __inline__ Vector3D PathTracer::sample_f(const CudaIntersection &isect,
   }
 }
 
+// power­-heuristic MIS weight, β=2
+inline __device__ double mis_weight(double pA, double pB) {
+  double wA = pA*pA;
+  double wB = pB*pB;
+  return wA / (wA + wB);
+}
+
+// mixture PDF of your metallic‑roughness lobes
+DEVICE __inline__ double PathTracer::bsdf_pdf(const CudaIntersection &isect,
+                                  const Vector3D &wo,
+                                  const Vector3D &wi) {
+  Vector3D N = isect.n;
+  double NoL = fabs(dot(N, wi));
+  if (NoL == 0) return 0.0;
+
+  // fetch metallic & roughness
+  CudaBSDF &b = bsdfs[isect.bsdf_idx];
+  double metal    = clamp_device(b.metallic,  0.0, 1.0);
+  double roughness= clamp_device(b.roughness, 0.02,1.0);
+  double onem     = 1.0 - metal;
+  double alpha    = roughness * roughness;
+
+  // 1) diffuse pdf = (cosθ/π)
+  double pdf_diff = onem * (NoL / M_PI);
+
+  // 2) specular pdf = D(α,NoH)·NoH / (4·VoH)
+  Vector3D H   = (wo + wi).unit();
+  double NoH   = fmax(dot(N, H), 0.0);
+  double VoH   = fmax(dot(wo, H), 0.0);
+  double D     = D_compute(alpha, NoH);
+  double pdf_spec = metal * (D * NoH / (4.0 * VoH));
+
+  return pdf_diff + pdf_spec;
+}
 
 
 DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
                                                 const CudaIntersection &isect) {
-  // Estimate the lighting from this intersection coming directly from a light.
-  // To implement importance sampling, sample only from lights, not uniformly in
-  // a hemisphere.
-
-  // make a coordinate system for a hit point
-  // with N aligned with the Z direction.
   Matrix3x3 o2w;
 
   make_coord_space(o2w, isect.n);
@@ -284,7 +312,6 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
   const Vector3D w_out = w2o * (-r.d);
   Vector3D L_out = Vector3D(0, 0, 0);
   Vector3D wi;
-  double distToLight, pdf;
 
   //NOTE: wi here is in worldpsace,
 
@@ -292,26 +319,52 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
   uint16_t y = blockIdx.y * blockDim.y + threadIdx.y;
 
   double occlusion; //ignored for dir lighting
-  size_t tot_samples = 0;
-  for (uint16_t i = 0; i < num_lights; i++) {
-    CudaLight *light = &lights[i];
-    int samples = light->is_point_light ? 1 : ns_area_light;
-    tot_samples += samples;
-    for (int j = 0; j < ns_area_light; j++) {
-      Vector3D radiance = sample_L(light, hit_p, &wi, &distToLight, &pdf, rand_states[x + y*sampleBuffer.w], this->bvh->vertices);
-      Vector3D wi_o = w2o * wi;
-      if (wi_o.z < 0 || radiance == 0) continue;
-      Ray shadow_ray = Ray(hit_p, wi);
-      shadow_ray.min_t = EPS_D;
-      shadow_ray.max_t = distToLight;
+  for (int i = 0; i < num_lights; ++i) {
+    CudaLight &L = lights[i];
+    Vector3D wi;
+    double   distToL, pdfL;
+    Vector3D Li = sample_L(&L, hit_p, &wi, &distToL, &pdfL,
+                           rand_states[x + y * sampleBuffer.w], bvh->vertices);
+
+    double cosNL = fmax(dot(isect.n, wi), 0.0);
+    if (pdfL > 0 && cosNL > 0) {
+      // shadow test
+      Ray shadow(hit_p, wi);
+      shadow.min_t = EPS_D;
+      shadow.max_t = distToL;
       CudaIntersection light_isect;
-      if (!bvh->intersect(shadow_ray, &light_isect)) {
-        L_out += f(isect, w_out, wi_o, &occlusion) * radiance * abs_cos_theta(wi_o) / pdf;
+      if (!bvh->intersect(shadow, &light_isect)) {
+        // BRDF eval and PDF of sampling that same wi via BSDF
+        Vector3D f_val = f(isect, w_out, wi, &occlusion);
+        double  pdfB   = bsdf_pdf(isect, w_out, wi);
+        double  w      = mis_weight(pdfL, pdfB);
+        L_out += f_val * Li * cosNL * w / pdfL;
       }
     }
   }
 
-  L_out /= tot_samples;
+  Vector3D wi_bsdf;
+  double   pdfB;
+  Vector3D f_bsdf = sample_f(isect, w_out, &wi_bsdf, &pdfB,
+                             &occlusion, rand_states[x + y * sampleBuffer.w]);
+  double cosNL = fmax(dot(isect.n, wi_bsdf), 0.0);
+
+  if (pdfB > 0 && cosNL > 0) {
+    // trace a ray in that direction and see if it hits *any* light
+    Ray shadow(hit_p, wi_bsdf);
+    CudaIntersection Lhit;
+    shadow.min_t = EPS_D;
+    shadow.max_t = INFINITY;
+    if (bvh->intersect(shadow, &Lhit)) {
+      CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
+      // get the light and compute its PDF for this direction
+      double pdfL = 1/lights[0].area;
+      Vector3D Li = bsdf.emissiveFactor * bsdf.emissiveStrength;
+      double w    = mis_weight(pdfB, pdfL);
+      L_out += f_bsdf * Li * cosNL * w / pdfB;
+    }
+  }
+
   return L_out;
 }
 
