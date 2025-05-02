@@ -24,6 +24,16 @@ DEVICE __inline__ Vector3D sample_L(const CudaLight *light,
                                     double*                pdf,
                                     RNGState&              rand_state,
                                     const Vector3D*        vertices) {
+
+  if (light->is_point_light) {
+    Vector3D d = light->position - p;
+    double dist = d.norm();
+    *distToLight = dist - EPS_D;
+    Vector3D dir = d / dist;
+    *wi = dir;
+    *pdf = 1.0;
+    return light->radiance;
+  }
   Vector3D p1 = vertices[light->triangle.i_p1];
   Vector3D p2 = vertices[light->triangle.i_p2];
   Vector3D p3 = vertices[light->triangle.i_p3];
@@ -107,9 +117,9 @@ DEVICE __inline__ Vector3D PathTracer::f(const CudaIntersection &isect, const Ve
 
   // 1) geometry terms
   Vector3D H = (wo + wi).unit(); // bisector
-  double NoV   = dot(N, wo);
-  double NoL   = dot(N, wi);
-  if (NoV <= 0) return Vector3D(0.0);
+  double NoV   = fabs(dot(N, wo));
+  double NoL   = fabs(dot(N, wi));
+  if (NoL == 0 || NoV == 0) return Vector3D(0.0);
   double NoH   = dot(N, H);
   double VoH   = dot(wo, H);
   double LoH   = dot(wi, H);
@@ -188,8 +198,8 @@ DEVICE __inline__ Vector3D PathTracer::sample_f(const CudaIntersection &isect,
   double onem = 1.0 - metal;
 
   // // 4) Visibility check
-  double NoV = max(dot(N, wo), 0.0);
-  if (NoV <= 0.0) {
+  double NoV = fabs(dot(N, wo));
+  if (NoV == 0.0) {
     *pdf = 0.0;
     return Vector3D(0.0);
   }
@@ -282,8 +292,11 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
   uint16_t y = blockIdx.y * blockDim.y + threadIdx.y;
 
   double occlusion; //ignored for dir lighting
+  size_t tot_samples = 0;
   for (uint16_t i = 0; i < num_lights; i++) {
     CudaLight *light = &lights[i];
+    int samples = light->is_point_light ? 1 : ns_area_light;
+    tot_samples += samples;
     for (int j = 0; j < ns_area_light; j++) {
       Vector3D radiance = sample_L(light, hit_p, &wi, &distToLight, &pdf, rand_states[x + y*sampleBuffer.w], this->bvh->vertices);
       Vector3D wi_o = w2o * wi;
@@ -298,7 +311,7 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
     }
   }
 
-  L_out /= (num_lights * ns_area_light);
+  L_out /= tot_samples;
   return L_out;
 }
 

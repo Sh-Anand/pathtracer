@@ -224,9 +224,7 @@ if (worldTransform.det() < 0.0f) {
             };
             primitives.push_back(cprimitive);
 
-            if(bsdfs[cprimitive.bsdf_idx].emissiveFactor.x > 0.0f ||
-               bsdfs[cprimitive.bsdf_idx].emissiveFactor.y > 0.0f ||
-               bsdfs[cprimitive.bsdf_idx].emissiveFactor.z > 0.0f) {
+            if(bsdfs[cprimitive.bsdf_idx].emissiveStrength > 0.0f) {
               CudaLight clight(bsdfs[cprimitive.bsdf_idx].emissiveFactor * bsdfs[cprimitive.bsdf_idx].emissiveStrength, cprimitive, vertices);
               lights.push_back(clight);
             }
@@ -254,7 +252,36 @@ if (worldTransform.det() < 0.0f) {
 
     init_camera(cam, camTransform);
 
+  }else if(node.light >= 0){
+    // adding lights
+    std::cout << "light" << std::endl;
+
+    auto ext = node.extensions.find("KHR_lights_punctual");
+    if (ext != node.extensions.end()) {
+        const auto& ext = node.extensions.at("KHR_lights_punctual");
+        int lightIndex = ext.Get("light").Get<int>();
+        const auto& light = model.lights[lightIndex];
+
+        if (light.type == "point") {
+          Vector3D color = {1.0f, 1.0f, 1.0f};
+            if (!light.color.empty()) {
+                color = {
+                    (float)light.color[0],
+                    (float)light.color[1],
+                    (float)light.color[2]
+                };
+            }
+          float intensity = (float)light.intensity; // in lux
+          // Position is from the node's transform
+          Vector3D position = (worldTransform * Vector4D(0, 0, 0, 1)).to3D();
+          std::cout << "Point light position: (" << position.x << ", " << position.y << ", " << position.z << ")\n";
+          std::cout << "Point light color: (" << color.x << ", " << color.y << ", " << color.z << ")\n";
+          std::cout << "Point light intensity: " << intensity << "\n";
+          lights.push_back(CudaLight(color * intensity/3000, position));
+        }
+    }
   }
+
   for (int childIdx : node.children) {
     ParseNode(model, childIdx, worldTransform);
   }
@@ -328,7 +355,7 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
     Vector3D target = bbox.centroid();
     canonical_view_distance = bbox.extent.norm() / 2 * 1.5;
 
-    double view_distance = canonical_view_distance * 1.8;
+    double view_distance = canonical_view_distance * 2;
     double min_view_distance = canonical_view_distance / 10.0;
     double max_view_distance = canonical_view_distance * 20.0;
 
@@ -340,8 +367,8 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
                           max_view_distance);
 
     camera.place(target,
-                acos(cam.view_dir.y) - PI/16,
-                atan2(cam.view_dir.x, cam.view_dir.z) - PI/8,
+                acos(cam.view_dir.y),
+                atan2(cam.view_dir.x, cam.view_dir.z),
                 view_distance,
                 min_view_distance,
                 max_view_distance);
