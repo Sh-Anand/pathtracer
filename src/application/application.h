@@ -58,6 +58,8 @@ struct AppConfig {
     pathtracer_focalDistance = 4.7;
 
     total_image_generated = 1;
+
+    debug = false;
   }
 
   size_t pathtracer_ns_aa;
@@ -83,6 +85,8 @@ struct AppConfig {
   double pathtracer_focalDistance;
 
   size_t total_image_generated;
+
+  bool debug;
 };
 
 class Application {
@@ -114,7 +118,7 @@ class Application {
   }
 
   void render_to_video(std::string filename, size_t x, size_t y, size_t dx, size_t dy, size_t num_images){
-    const double TOTAL_ROTATION = M_PI;
+    const double TOTAL_ROTATION = M_PI * 2;
     double angle_per_image = TOTAL_ROTATION / (double)num_images;
     size_t dot_pos = filename.find_last_of('.');
     auto name = filename.substr(0, dot_pos);
@@ -125,7 +129,6 @@ class Application {
     renderer->copy_host_device_pt(lights, bsdfs, textures);
 
     for(size_t i = 0; i < num_images; ++i){
-      std::cout << "Rendering image: " << i << std::endl;
       std::ostringstream oss;
       oss << std::setw(4) << std::setfill('0') << i;
       auto filename_per_image = name + oss.str() + dot_extension;

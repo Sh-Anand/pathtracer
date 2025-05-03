@@ -21,7 +21,8 @@ Application::Application(AppConfig config) {
     config.pathtracer_ns_area_light,
     config.pathtracer_filename,
     config.pathtracer_lensRadius,
-    config.pathtracer_focalDistance
+    config.pathtracer_focalDistance,
+    config.debug
   );
   filename = config.pathtracer_filename;
 
@@ -246,8 +247,6 @@ if (worldTransform.det() < 0.0f) {
 
   }else if(node.light >= 0){
     // adding lights
-    std::cout << "light" << std::endl;
-
     auto ext = node.extensions.find("KHR_lights_punctual");
     if (ext != node.extensions.end()) {
         const auto& ext = node.extensions.at("KHR_lights_punctual");
@@ -269,12 +268,6 @@ if (worldTransform.det() < 0.0f) {
           // Position is from the node's transform
           Vector3D position = (worldTransform * Vector4D(0, 0, 0, 1)).to3D();
           Vector3D direction = (worldTransform * Vector4D(0,0,-1,1)).to3D().unit();
-          std::cout << "Cone light position: (" << position.x << ", " << position.y << ", " << position.z << ")\n";
-          std::cout << "Cone light direction: (" << direction.x << ", " << direction.y << ", " << direction.z << ")\n";
-          std::cout << "Cone light color: (" << color.x << ", " << color.y << ", " << color.z << ")\n";
-          std::cout << "Cone light intensity: " << intensity << "\n";
-          std::cout << "Cone light inner angle: " << innerConeAngle << "\n";
-          std::cout << "Cone light outer angle: " << outerConeAngle << "\n";
           lights.push_back(CudaLight(color * intensity/1000, position, direction, innerConeAngle, outerConeAngle));
         }
     }
@@ -353,7 +346,7 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
     Vector3D target = bbox.centroid();
     canonical_view_distance = bbox.extent.norm() / 2 * 1.5;
 
-    double view_distance = canonical_view_distance * 1.5;
+    double view_distance = canonical_view_distance;
     double min_view_distance = canonical_view_distance / 10.0;
     double max_view_distance = canonical_view_distance * 20.0;
 

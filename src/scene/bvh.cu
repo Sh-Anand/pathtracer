@@ -3,13 +3,15 @@
 
 namespace CGL { namespace SceneObjects {
 
-BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec, std::vector<Vector3D> &vertices, std::vector<Vector3D> &normals, std::vector<Vector2D> &texcoords, std::vector<Vector4D> &tangets, size_t max_leaf_size) {
+BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec, std::vector<Vector3D> &vertices, std::vector<Vector3D> &normals, std::vector<Vector2D> &texcoords, std::vector<Vector4D> &tangets, bool debug, size_t max_leaf_size) {
+  DEBUG(debug,
   std::cout << "Building BVHCuda" << std::endl;
   std::cout << "Vertices size: " << vertices.size() << std::endl;
   std::cout << "Normals size: " << normals.size() << std::endl;
   std::cout << "Texcoords size: " << texcoords.size() << std::endl;
   std::cout << "Tangets size: " << tangets.size() << std::endl;
   std::cout << "Primitives size: " << primitives_vec.size() << std::endl;
+  )
 
   std::vector<BBox> bboxes;
   bboxes.reserve(primitives_vec.size());
@@ -56,7 +58,9 @@ BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec, std::vector<Vector3
   CUDA_ERR(cudaMemcpy(this->texcoords, texcoords.data(), num_texcoords * sizeof(Vector2D), cudaMemcpyHostToDevice));
   CUDA_ERR(cudaMemcpy(this->tangets, tangets.data(), num_tangets * sizeof(Vector4D), cudaMemcpyHostToDevice));
 
+  DEBUG(debug,
   std::cout<< "BVHCuda Built: " << num_nodes << " nodes" << std::endl;
+  )
 }
 
 DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i, uint32_t root_idx) const {

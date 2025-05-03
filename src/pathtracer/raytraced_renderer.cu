@@ -33,18 +33,20 @@ void RaytracedRenderer::gpu_raytrace() {
     uint16_t width = frameBuffer.w;
     uint16_t height = frameBuffer.h;
 
-    std::cout << "Raytracing on GPU..." << std::endl;
-
-
     dim3 blockDim(16, 16);
     dim3 gridDim(
         (width + blockDim.x - 1) / blockDim.x,
         (height + blockDim.y - 1) / blockDim.y
     );
     
+    DEBUG(debug, 
+    std::cout << "Raytracing on GPU..." << std::endl;
     std::cout << "Frame size: " << width << " x " << height << std::endl;
     std::cout << "BlockDim: " << blockDim.x << " x " << blockDim.y << std::endl;
     std::cout << "GridDim: " << gridDim.x << " x " << gridDim.y << std::endl;
+    )
+
+
 
     // cudaDeviceSetLimit(cudaLimitStackSize, 8192);
 
@@ -59,9 +61,11 @@ void RaytracedRenderer::gpu_raytrace() {
     CUDA_ERR(cudaDeviceSynchronize());
 
     std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
-
+    
+    DEBUG(debug,
     std::cout << "Raytracing on GPU done!" << std::endl;
     std::cout << "Time: " << (std::chrono::duration<float>(t1 - t0)).count() << " sec" << std::endl;
+    )
     
     CUDA_ERR(cudaMemcpy(pt, pt_cuda, sizeof(PathTracer), cudaMemcpyDeviceToHost));
     
@@ -89,20 +93,26 @@ void RaytracedRenderer::build_accel(std::vector<CudaPrimitive> &primitives,
                                     std::vector<Vector2D> &texcoords,
                                     std::vector<Vector4D> &tangents) {
   // build BVH //
+  DEBUG(debug, 
   fprintf(stdout, "[PathTracer] Building BVH from %lu primitives... ", primitives.size()); 
   fflush(stdout);
+  )
   std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now();
 
-  bvh_cuda = new BVHCuda(primitives, vertices, normals, texcoords, tangents);
+  bvh_cuda = new BVHCuda(primitives, vertices, normals, texcoords, tangents, debug);
   std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
+  DEBUG(debug, 
   fprintf(stdout, "Done! (%.4f sec)\n", (std::chrono::duration<float>(t1 - t0)).count());
+  )
 }
 
 void RaytracedRenderer::copy_host_device_pt(std::vector<CudaLight> &lights, std::vector<CudaBSDF> &bsdfs, std::vector<CudaTexture> &textures) {
+    DEBUG(debug,
     std::cout << "Copying PathTracer to GPU..." << std::endl;
     std::cout << "BSDFs size: " << bsdfs.size() << std::endl;
     std::cout << "Lights size: " << lights.size() << std::endl;
     std::cout << "Textures size: " << textures.size() << std::endl;
+    )
 
     //lights
     cudaMalloc(&pt->lights, lights.size() * sizeof(CudaLight));

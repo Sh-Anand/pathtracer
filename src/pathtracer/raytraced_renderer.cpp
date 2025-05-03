@@ -30,7 +30,8 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
                        size_t max_ray_depth, size_t ns_area_light,
                        std::string filename,
                        float lensRadius,
-                       float focalDistance) {
+                       float focalDistance,
+                       bool debug) {
   pt = new PathTracer();
 
   pt->ns_aa = ns_aa;                                        // Number of samples per pixel
@@ -41,6 +42,8 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
   this->focalDistance = focalDistance;
 
   this->filename = filename;
+
+  this->debug = debug;
 
   camera = NULL;
 }
@@ -86,12 +89,17 @@ void RaytracedRenderer::set_cuda_camera(){
 
 void RaytracedRenderer::render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy) {
   // launch threads
+  DEBUG(debug,
   fprintf(stdout, "[PathTracer] Rendering... "); fflush(stdout);
-
+  )
+  
   gpu_raytrace();
 
   save_image(filename);
-  fprintf(stdout, "[PathTracer] Job completed.\n");
+
+  DEBUG(debug, 
+  fprintf(stdout, "[PathTracer] Rendering completed.\n");
+  )
 }
 
 void RaytracedRenderer::save_image(std::string filename) {
@@ -109,8 +117,6 @@ void RaytracedRenderer::save_image(std::string filename) {
     filename = ss.str();  
   }
 
-  std::cout << "[PathTracer] Saving to file: " << filename << std::endl;
-
   uint32_t* frame = &buffer->data[0];
   size_t w = buffer->w;
   size_t h = buffer->h;
@@ -123,9 +129,9 @@ void RaytracedRenderer::save_image(std::string filename) {
     frame_out[i] |= 0xFF000000;
   }
 
-  fprintf(stderr, "[PathTracer] Saving to file: %s... ", filename.c_str());
+  DEBUG(debug, fprintf(stderr, "[PathTracer] Saving to file: %s... ", filename.c_str());)
   lodepng::encode(filename, (unsigned char*) frame_out, w, h);
-  fprintf(stderr, "Done!\n");
+  DEBUG(debug, fprintf(stderr, "Done!\n");)
   
   delete[] frame_out;
 }

@@ -22,6 +22,8 @@ inline void gpuAssert(cudaError_t code, const char *file, int line) {
 #define CUDA_ERR(ans) ans
 #endif
 
+#define DEBUG(flag, statement) if (flag) { statement }
+
 #define PI (3.1415926f)
 #define PI_R (1/3.1415926f)
 #define EPS_F (0.000001f)

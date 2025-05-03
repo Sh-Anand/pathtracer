@@ -79,7 +79,6 @@ int main(int argc, char **argv) {
       config.total_image_generated = atoi(optarg);
       break;
     case 't':
-      config.pathtracer_num_threads = atoi(optarg);
       break;
     case 'm':
       config.pathtracer_max_ray_depth = atoi(optarg);
@@ -100,7 +99,7 @@ int main(int argc, char **argv) {
       config.pathtracer_lensRadius = atof(optarg);
       break;
     case 'd':
-      config.pathtracer_focalDistance = atof(optarg);
+      config.debug = true;
       break;
     case 'a':
       config.pathtracer_samples_per_patch = atoi(argv[optind - 1]);
@@ -124,7 +123,6 @@ int main(int argc, char **argv) {
 
     sceneFilePath = argv[optind];
   }
-  msg("Input scene file: " << sceneFilePath);
   string sceneFile = sceneFilePath.substr(sceneFilePath.find_last_of('/') + 1);
   sceneFile = sceneFile.substr(0, sceneFile.find(".dae"));
   config.pathtracer_filename = sceneFile;
@@ -156,8 +154,6 @@ int main(int argc, char **argv) {
   // create application
   Application *app = new Application(config);
 
-  msg("Rendering using " << config.pathtracer_num_threads << " threads");
-
   // write straight to file without opening a window if -f option provided
   app->init();
   // app->load(sceneInfo);
@@ -166,7 +162,6 @@ int main(int argc, char **argv) {
   app->load_from_gltf_model(model);
 
   if (w && h) {
-    cout << "Resizing";
     app->resize(w, h);
   }
 

@@ -30,7 +30,7 @@ struct BVHNode {
 // CUDA BVH
 class BVHCuda {
   public:
-    BVHCuda(std::vector<CudaPrimitive> &primitives_vec, std::vector<Vector3D> &vertices, std::vector<Vector3D> &normals, std::vector<Vector2D> &texcoords, std::vector<Vector4D> &tangents, size_t max_leaf_size = 4);
+    BVHCuda(std::vector<CudaPrimitive> &primitives_vec, std::vector<Vector3D> &vertices, std::vector<Vector3D> &normals, std::vector<Vector2D> &texcoords, std::vector<Vector4D> &tangents, bool debug, size_t max_leaf_size = 4);
   
     ~BVHCuda();
     

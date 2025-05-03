@@ -78,6 +78,8 @@ void Camera::copy_placement(const Camera& other) {
  * This sets the screen size & compute the new FOV.
  */
 void Camera::set_screen_size(const size_t screenW, const size_t screenH) {
+  this->r = 1200 / screenH * this->r;
+  compute_position();
   this->screenW = screenW;
   this->screenH = screenH;
   ar = 1.0 * screenW / screenH;
