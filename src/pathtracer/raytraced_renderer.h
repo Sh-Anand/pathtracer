@@ -40,8 +40,8 @@ public:
   RaytracedRenderer(size_t ns_aa = 1, 
              size_t max_ray_depth = 4, size_t ns_area_light = 1,
              std::string filename = "",
-             double lensRadius = 0.25,
-             double focalDistance = 4.7);
+             float lensRadius = 0.25,
+             float focalDistance = 4.7);
 
   /**
    * Destructor.
@@ -105,8 +105,8 @@ public:
 
   Camera* camera;       ///< current camera
 
-  double lensRadius;
-  double focalDistance;
+  float lensRadius;
+  float focalDistance;
 
   // Components //
 

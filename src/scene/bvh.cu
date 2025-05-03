@@ -71,7 +71,7 @@ DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i, uint32_t root_idx)
     uint32_t idx = stack[--stack_ptr];
     const BVHNode &node = nodes[idx];
 
-    double t0, t1;
+    float t0, t1;
     if (!node.bb.intersect(ray, t0, t1)) continue;
 
     if (node.leaf) {
@@ -101,14 +101,14 @@ DEVICE bool BVHCuda::has_intersect(Ray &ray, uint32_t root_idx) const {
   // start with the root
   stack[stack_ptr++] = root_idx;
   
-  double t;
+  float t;
   // traverse until stack empty
   while (stack_ptr > 0) {
       uint32_t idx = stack[--stack_ptr];
       const BVHNode &node = nodes[idx];
 
       // 1) bounding‑box test
-      double t0, t1;
+      float t0, t1;
       if (!node.bb.intersect(ray, t0, t1))
           continue;
 

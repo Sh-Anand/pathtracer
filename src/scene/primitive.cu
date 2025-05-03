@@ -3,8 +3,8 @@
 namespace CGL { namespace SceneObjects {
 
 DEVICE bool test_intersect(Ray &r, const Vector3D &p1,
-                  const Vector3D &p2, const Vector3D &p3, double &t, double &u,
-                  double &v) {
+                  const Vector3D &p2, const Vector3D &p3, float &t, float &u,
+                  float &v) {
   Vector3D e1 = p2 - p1, e2 = p3 - p1;
   Vector3D normal = cross(e1, e2);
   // early termination
@@ -13,7 +13,7 @@ DEVICE bool test_intersect(Ray &r, const Vector3D &p1,
   }
 
   Vector3D s = r.o - p1, s1 = cross(r.d, e2), s2 = cross(s, e1);
-  double rse1 = 1 / (dot(s1, e1));
+  float rse1 = 1 / (dot(s1, e1));
 
   t = dot(s2, e2) * rse1, u = dot(s1, s) * rse1, v = dot(s2, r.d) * rse1;
   if (t < r.min_t || t > r.max_t || u < 0 || v < 0 || u + v > 1) {
@@ -30,7 +30,7 @@ DEVICE bool CudaPrimitive::intersect(Ray &r, CudaIntersection *isect, Vector3D* 
   Vector3D tn1 = normals[i_p1], tn2 = normals[i_p2], tn3 = normals[i_p3];
   Vector2D tuv1 = texcoords[i_uv1], tuv2 = texcoords[i_uv2], tuv3 = texcoords[i_uv3];
   Vector4D tt1 = tangents[i_uv1], tt2 = tangents[i_uv2], tt3 = tangents[i_uv3];
-  double t,a,b;
+  float t,a,b;
   if (!test_intersect(r, tp1, tp2, tp3, t, a, b)) {
     return false;
   }
@@ -44,9 +44,9 @@ DEVICE bool CudaPrimitive::intersect(Ray &r, CudaIntersection *isect, Vector3D* 
   return true;
 }
 
-DEVICE bool CudaPrimitive::has_intersect(Ray &r, const Vector3D * vertices, double &t) const {
+DEVICE bool CudaPrimitive::has_intersect(Ray &r, const Vector3D * vertices, float &t) const {
   Vector3D tp1 = vertices[i_p1], tp2 = vertices[i_p2], tp3 = vertices[i_p3];
-  double a, b;
+  float a, b;
   if (!test_intersect(r, tp1, tp2, tp3, t, a, b)) {
     return false;
   }

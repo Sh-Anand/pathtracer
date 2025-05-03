@@ -11,8 +11,8 @@ struct CudaLight {
   CudaLight(const Vector3D rad, 
             const Vector3D pos,
             const Vector3D direction,
-            double inner_cone_angle,
-            double outer_cone_angle) 
+            float inner_cone_angle,
+            float outer_cone_angle) 
       : radiance(rad), 
         position(pos),
         direction(direction),
@@ -32,24 +32,24 @@ struct CudaLight {
 
   Vector3D radiance;
   CudaPrimitive triangle;
-  double area;
+  float area;
 
   // if point light
   Vector3D position;
   Vector3D direction;
   bool is_cone_light = false;
-  double inner_cone_angle = 0.0;
-  double outer_cone_angle = 0.0;
+  float inner_cone_angle = 0.0;
+  float outer_cone_angle = 0.0;
 
   DEVICE Vector3D sample_L(const  Vector3D         p,
                                   Vector3D*              wi,
-                                  double*                distToLight,
-                                  double*                pdf,
+                                  float*                distToLight,
+                                  float*                pdf,
                                   RNGState&              rand_state,
                                   const Vector3D*        vertices);
 
   DEVICE bool has_intersect(Ray& r, const Vector3D &p, const Vector3D &N,
-                            const Vector3D* vertices, double *pdf) const;
+                            const Vector3D* vertices, float *pdf) const;
 
 };
 

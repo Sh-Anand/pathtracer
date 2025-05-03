@@ -22,10 +22,9 @@ inline void gpuAssert(cudaError_t code, const char *file, int line) {
 #define CUDA_ERR(ans) ans
 #endif
 
-#define PI (3.14159265358979323)
-#define PI_R (1/3.14159265358979323)
-#define EPS_D (0.00000000001)
-#define EPS_F (0.00001f)
+#define PI (3.1415926f)
+#define PI_R (1/3.1415926f)
+#define EPS_F (0.000001f)
 #define RGB_R (1/255.0f)
 
 #include <cmath>

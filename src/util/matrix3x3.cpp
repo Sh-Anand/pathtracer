@@ -7,12 +7,12 @@ using namespace std;
 
 namespace CGL {
 
-  void Matrix3x3::zero( double val ) {
+  void Matrix3x3::zero( float val ) {
     // sets all elements to val
     entries[0] = entries[1] = entries[2] = Vector3D( val, val, val );
   }
 
-  double Matrix3x3::norm( void ) const {
+  float Matrix3x3::norm( void ) const {
     return sqrt( entries[0].norm2() +
                  entries[1].norm2() +
                  entries[2].norm2() );
@@ -64,9 +64,9 @@ namespace CGL {
     return B;
   }
 
-  void Matrix3x3::operator/=( double x ) {
+  void Matrix3x3::operator/=( float x ) {
     Matrix3x3& A( *this );
-    double rx = 1./x;
+    float rx = 1./x;
 
     A[0] *= rx;
     A[1] *= rx;

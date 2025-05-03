@@ -38,7 +38,7 @@ class Matrix3x3 {
   // Constructor for row major form data.
   // Transposes to the internal column major form.
   // REQUIRES: data should be of size 9 for a 3 by 3 matrix..
-  HOST_DEVICE Matrix3x3(double * data)
+  HOST_DEVICE Matrix3x3(float * data)
   {
     for( int i = 0; i < 3; i++ ) {
       for( int j = 0; j < 3; j++ ) {
@@ -48,9 +48,9 @@ class Matrix3x3 {
     }
   }
 
-  HOST_DEVICE Matrix3x3(double m00, double m01, double m02, 
-                        double m10, double m11, double m12, 
-                        double m20, double m21, double m22)
+  HOST_DEVICE Matrix3x3(float m00, float m01, float m02, 
+                        float m10, float m11, float m12, 
+                        float m20, float m21, float m22)
   {
     (*this)(0,0) = m00; (*this)(0,1) = m01; (*this)(0,2) = m02;
     (*this)(1,0) = m10; (*this)(1,1) = m11; (*this)(1,2) = m12;
@@ -72,17 +72,17 @@ class Matrix3x3 {
   /**
    * Sets all elements to val.
    */
-  HOST_DEVICE void zero(double val = 0.0 );
+  HOST_DEVICE void zero(float val = 0.0 );
 
   /**
    * Returns the determinant of A.
    */
-  HOST_DEVICE double det( void ) const;
+  HOST_DEVICE float det( void ) const;
 
   /**
    * Returns the Frobenius norm of A.
    */
-  HOST_DEVICE double norm( void ) const;
+  HOST_DEVICE float norm( void ) const;
 
   /**
    * Returns the 3x3 identity matrix.
@@ -111,8 +111,8 @@ class Matrix3x3 {
   HOST_DEVICE Matrix3x3 inv( void ) const;
 
   // accesses element (i,j) of A using 0-based indexing
-  HOST_DEVICE double& operator()( int i, int j );
-  HOST_DEVICE const double& operator()( int i, int j ) const;
+  HOST_DEVICE float& operator()( int i, int j );
+  HOST_DEVICE const float& operator()( int i, int j ) const;
 
   // accesses the ith column of A
   HOST_DEVICE Vector3D& operator[]( int i );
@@ -128,7 +128,7 @@ class Matrix3x3 {
   HOST_DEVICE Matrix3x3 operator-( const Matrix3x3& B ) const;
 
   // returns c*A
-  HOST_DEVICE Matrix3x3 operator*( double c ) const;
+  HOST_DEVICE Matrix3x3 operator*( float c ) const;
 
   // returns A*B
   HOST_DEVICE Matrix3x3 operator*( const Matrix3x3& B ) const;
@@ -137,7 +137,7 @@ class Matrix3x3 {
   HOST_DEVICE Vector3D operator*( const Vector3D& x ) const;
 
   // divides each element by x
-  HOST_DEVICE void operator/=( double x );
+  HOST_DEVICE void operator/=( float x );
 
   protected:
 
@@ -150,7 +150,7 @@ class Matrix3x3 {
 HOST_DEVICE Matrix3x3 outer( const Vector3D& u, const Vector3D& v );
 
 // returns c*A
-HOST_DEVICE Matrix3x3 operator*( double c, const Matrix3x3& A );
+HOST_DEVICE Matrix3x3 operator*( float c, const Matrix3x3& A );
 
 // prints entries
 std::ostream& operator<<( std::ostream& os, const Matrix3x3& A );

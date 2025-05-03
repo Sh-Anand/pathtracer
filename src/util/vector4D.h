@@ -15,7 +15,7 @@ class Vector4D {
 public:
 
   // components
-  double x, y, z, w;
+  float x, y, z, w;
 
   /**
    * Constructor.
@@ -27,20 +27,20 @@ public:
    * Constructor.
    * Initializes to vector (x,y,z,w).
    */
-  HOST_DEVICE Vector4D( double x, double y, double z, double w) : x( x ), y( y ), z( z ), w( w ) { }
+  HOST_DEVICE Vector4D( float x, float y, float z, float w) : x( x ), y( y ), z( z ), w( w ) { }
 
   /**
    * Constructor.
    * Initializes to vector (x,y,z,0).
    */
-  HOST_DEVICE Vector4D( double x, double y, double z) : x( x ), y( y ), z( z ), w( 0.0 ) { }
+  HOST_DEVICE Vector4D( float x, float y, float z) : x( x ), y( y ), z( z ), w( 0.0 ) { }
 
 
   /**
    * Constructor.
    * Initializes to vector (c,c,c,c)
    */
-  HOST_DEVICE Vector4D(double c) : x(c), y(c), z(c), w(c) {}
+  HOST_DEVICE Vector4D(float c) : x(c), y(c), z(c), w(c) {}
 
   /**
    * Constructor.
@@ -58,15 +58,15 @@ public:
    * Constructor.
    * Initializes from existing vector3D and w value.
    */
-  HOST_DEVICE Vector4D( const Vector3D& v, double w ) : x( v.x ), y( v.y ), z( v.z ), w( w ) { }
+  HOST_DEVICE Vector4D( const Vector3D& v, float w ) : x( v.x ), y( v.y ), z( v.z ), w( w ) { }
 
   // returns reference to the specified component (0-based indexing: x, y, z)
-  HOST_DEVICE inline double& operator[] ( const int& index ) {
+  HOST_DEVICE inline float& operator[] ( const int& index ) {
     return ( &x )[ index ];
   }
 
   // returns const reference to the specified component (0-based indexing: x, y, z)
-  HOST_DEVICE inline const double& operator[] ( const int& index ) const {
+  HOST_DEVICE inline const float& operator[] ( const int& index ) const {
     return ( &x )[ index ];
   }
 
@@ -86,13 +86,13 @@ public:
   }
 
   // right scalar multiplication
-  HOST_DEVICE inline Vector4D operator*( const double& c ) const {
+  HOST_DEVICE inline Vector4D operator*( const float& c ) const {
     return Vector4D(x * c, y * c, z * c, w * c);
   }
 
   // scalar division
-  HOST_DEVICE inline Vector4D operator/( const double& c ) const {
-    const double rc = 1.0/c;
+  HOST_DEVICE inline Vector4D operator/( const float& c ) const {
+    const float rc = 1.0/c;
     return Vector4D(rc * x, rc * y, rc * z, rc * w);
   }
 
@@ -113,7 +113,7 @@ public:
   }
 
   // scalar multiplication / assignment
-  HOST_DEVICE inline void operator*=( const double& c ) {
+  HOST_DEVICE inline void operator*=( const float& c ) {
     x *= c;
     y *= c;
     z *= c;
@@ -121,7 +121,7 @@ public:
   }
 
   // scalar division / assignment
-  HOST_DEVICE inline void operator/=( const double& c ) {
+  HOST_DEVICE inline void operator/=( const float& c ) {
     (*this) *= (1. / c);
   }
 
@@ -135,14 +135,14 @@ public:
   /**
    * Returns Euclidean distance metric extended to 4 dimensions.
    */
-  inline double norm( void ) const {
+  inline float norm( void ) const {
     return sqrt(norm2());
   }
 
   /**
    * Returns Euclidean length squared.
    */
-  inline double norm2( void ) const {
+  inline float norm2( void ) const {
     return x*x + y*y + z*z + w*w;
   }
 
@@ -150,7 +150,7 @@ public:
    * Returns unit vector. (returns the normalized copy of this vector.)
    */
   inline Vector4D unit( void ) const {
-    double rNorm = 1. / sqrt( x*x + y*y + z*z + w*w);
+    float rNorm = 1. / sqrt( x*x + y*y + z*z + w*w);
     return Vector4D( rNorm*x, rNorm*y, rNorm*z );
   }
 
@@ -175,12 +175,12 @@ public:
 }; // class Vector4D
 
 // left scalar multiplication
-HOST_DEVICE inline Vector4D operator* ( const double& c, const Vector4D& v ) {
+HOST_DEVICE inline Vector4D operator* ( const float& c, const Vector4D& v ) {
   return Vector4D( c * v.x, c * v.y, c * v.z, c*v.w );
 }
 
 // dot product (a.k.a. inner or scalar product)
-HOST_DEVICE inline double dot( const Vector4D& u, const Vector4D& v ) {
+HOST_DEVICE inline float dot( const Vector4D& u, const Vector4D& v ) {
   return u.x*v.x + u.y*v.y + u.z*v.z + u.w*v.w;;
 }
 

@@ -48,19 +48,19 @@ int BVHCuda::construct_bvh(size_t start, size_t end,
   // 3) Bucket SAH
   const int B = 16;
   struct Bucket { int count = 0; BBox bbox; } buckets[B];
-  double minA = cent_bbox.min[axis], maxA = cent_bbox.max[axis];
-  double invBin = (maxA>minA) ? B/(maxA-minA) : 0;
+  float minA = cent_bbox.min[axis], maxA = cent_bbox.max[axis];
+  float invBin = (maxA>minA) ? B/(maxA-minA) : 0;
 
   // fill buckets
   for (size_t i = start; i < end; ++i) {
-    double c = bboxes[prims[i]].centroid()[axis];
+    float c = bboxes[prims[i]].centroid()[axis];
     int b = std::min(int((c - minA)*invBin), B-1);
     buckets[b].count++;
     buckets[b].bbox.expand(bboxes[prims[i]]);
   }
 
   // prefix sums for cost
-  double leftCount[B-1]={}, rightCount[B-1]={};
+  float leftCount[B-1]={}, rightCount[B-1]={};
   BBox   leftBBox[B-1], rightBBox[B-1];
   // left side
   int cnt=0;
@@ -80,11 +80,11 @@ int BVHCuda::construct_bvh(size_t start, size_t end,
   }
 
   // evaluate SAH cost for each split
-  double invSA = 1.0/node_bbox.surface_area();
-  double bestCost = 1e300;
+  float invSA = 1.0/node_bbox.surface_area();
+  float bestCost = 1e300;
   int    bestB   = -1;
   for (int i=0; i<B-1; ++i) {
-    double cost =  /* travCost=1 */   1
+    float cost =  /* travCost=1 */   1
                 + /* isectCost=1 */ ( leftCount[i]*leftBBox[i].surface_area()
                                      + rightCount[i]*rightBBox[i].surface_area())
                   * invSA;
@@ -95,7 +95,7 @@ int BVHCuda::construct_bvh(size_t start, size_t end,
   }
 
   // 4) Partition primitives at that bucket boundary
-  double splitPos = minA + (bestB+1)/double(B)*(maxA-minA);
+  float splitPos = minA + (bestB+1)/float(B)*(maxA-minA);
   auto midIt = std::partition(prims.begin()+start,
                               prims.begin()+end,
                               [&](const uint32_t &p){

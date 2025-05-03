@@ -30,8 +30,8 @@ class Camera {
   /*
     Phi and theta are in RADIANS.
   */
-  void place(const Vector3D targetPos, const double phi, const double theta,
-             const double r, const double minR, const double maxR);
+  void place(const Vector3D targetPos, const float phi, const float theta,
+             const float r, const float minR, const float maxR);
 
   std::string param_string() {
     return "";
@@ -53,46 +53,46 @@ class Camera {
     the camera moves by (dx, dy). Note that dx and dy are in screen coordinates,
     while d is in world-space coordinates (like pos/dir/up).
   */
-  void move_by(const double dx, const double dy, const double d);
+  void move_by(const float dx, const float dy, const float d);
 
   /*
     Move the specified amount along the view axis.
   */
-  void move_forward(const double dist);
+  void move_forward(const float dist);
 
   /*
     Rotate by the specified amount around the target.
   */
-  void rotate_by(const double dPhi, const double dTheta);
+  void rotate_by(const float dPhi, const float dTheta);
 
   Vector3D position() const { return pos; }
   Vector3D view_point() const { return targetPos; }
   Vector3D up_dir() const { return c2w[1]; }
-  double v_fov() const { return vFov; }
-  double aspect_ratio() const { return ar; }
-  double near_clip() const { return nClip; }
-  double far_clip() const { return fClip; }
+  float v_fov() const { return vFov; }
+  float aspect_ratio() const { return ar; }
+  float near_clip() const { return nClip; }
+  float far_clip() const { return fClip; }
 
   virtual void dump_settings(std::string filename);
   virtual void load_settings(std::string filename);
 
-  Ray generate_ray_for_thin_lens(double x, double y, double rndR, double rndTheta) const;
+  Ray generate_ray_for_thin_lens(float x, float y, float rndR, float rndTheta) const;
 
   // Lens aperture and focal distance for depth of field effects.
-  double lensRadius;
-  double focalDistance;
+  float lensRadius;
+  float focalDistance;
 
   // Computes pos, screenXDir, screenYDir from target, r, phi, theta.
   void compute_position();
 
   // Field of view aspect ratio, clipping planes.
-  double hFov, vFov, ar, nClip, fClip;
+  float hFov, vFov, ar, nClip, fClip;
 
   // Current position and target point (the point the camera is looking at).
   Vector3D pos, targetPos;
 
   // Orientation relative to target, and min & max distance from the target.
-  double phi, theta, r, minR, maxR;
+  float phi, theta, r, minR, maxR;
 
   // camera-to-world rotation matrix (note: also need to translate a
   // camera-space point by 'pos' to perform a full camera-to-world
@@ -102,7 +102,7 @@ class Camera {
   // Info about screen to render to; it corresponds to the camera's full field
   // of view at some distance.
   size_t screenW, screenH;
-  double screenDist;
+  float screenDist;
 };
 
 struct CudaCamera {
@@ -125,8 +125,8 @@ struct CudaCamera {
    * \param x x-coordinate of the ray sample in the view plane
    * \param y y-coordinate of the ray sample in the view plane
    */
-  DEVICE Ray generate_ray(double x, double y);
-  double hFov, vFov, nClip, fClip;
+  DEVICE Ray generate_ray(float x, float y);
+  float hFov, vFov, nClip, fClip;
   Vector3D pos;
   Matrix3x3 c2w;
 };

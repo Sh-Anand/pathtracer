@@ -275,7 +275,7 @@ if (worldTransform.det() < 0.0f) {
           std::cout << "Cone light intensity: " << intensity << "\n";
           std::cout << "Cone light inner angle: " << innerConeAngle << "\n";
           std::cout << "Cone light outer angle: " << outerConeAngle << "\n";
-          lights.push_back(CudaLight(color * intensity, position, direction, innerConeAngle, outerConeAngle));
+          lights.push_back(CudaLight(color * intensity/1000, position, direction, innerConeAngle, outerConeAngle));
         }
     }
   }

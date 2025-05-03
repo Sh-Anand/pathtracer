@@ -36,15 +36,15 @@ namespace CGL {
         DEVICE Vector3D f(const CudaIntersection &isect, 
                                      const Vector3D &wo,
                                      const Vector3D &wi,
-                                     double *occlusion);
+                                     float *occlusion);
         DEVICE Vector3D sample_f(const CudaIntersection &isect,
                                                 const Vector3D &wo,
                                                 Vector3D *wi,
-                                                double *pdf,
-                                                double *occlusion,
+                                                float *pdf,
+                                                float *occlusion,
                                                 bool   *is_delta,
                                                 RNGState &rand_state);
-        DEVICE __inline__ double bsdf_pdf(const CudaIntersection &isect,
+        DEVICE __inline__ float bsdf_pdf(const CudaIntersection &isect,
                                   const Vector3D &wo,
                                   const Vector3D &wi);
 

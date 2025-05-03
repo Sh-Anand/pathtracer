@@ -12,8 +12,15 @@
 namespace CGL {
 
 struct CudaIntersection {
-  DEVICE CudaIntersection() : t (INFINITY) { }
-  double t;
+  DEVICE CudaIntersection() {
+    #ifdef __CUDA_ARCH__
+      #include <math_constants.h>
+      t = CUDART_INF_F;
+    #else
+      t = INFINITY;
+    #endif
+   }
+  float t;
   Vector3D n;
   Vector2D uv;
   Vector4D tangent;

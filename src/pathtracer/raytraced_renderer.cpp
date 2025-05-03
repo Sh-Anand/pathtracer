@@ -29,8 +29,8 @@ namespace CGL {
 RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
                        size_t max_ray_depth, size_t ns_area_light,
                        std::string filename,
-                       double lensRadius,
-                       double focalDistance) {
+                       float lensRadius,
+                       float focalDistance) {
   pt = new PathTracer();
 
   pt->ns_aa = ns_aa;                                        // Number of samples per pixel

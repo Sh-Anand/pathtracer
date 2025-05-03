@@ -61,7 +61,7 @@ void RaytracedRenderer::gpu_raytrace() {
     std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
 
     std::cout << "Raytracing on GPU done!" << std::endl;
-    std::cout << "Time: " << (std::chrono::duration<double>(t1 - t0)).count() << " sec" << std::endl;
+    std::cout << "Time: " << (std::chrono::duration<float>(t1 - t0)).count() << " sec" << std::endl;
     
     CUDA_ERR(cudaMemcpy(pt, pt_cuda, sizeof(PathTracer), cudaMemcpyDeviceToHost));
     
@@ -95,7 +95,7 @@ void RaytracedRenderer::build_accel(std::vector<CudaPrimitive> &primitives,
 
   bvh_cuda = new BVHCuda(primitives, vertices, normals, texcoords, tangents);
   std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
-  fprintf(stdout, "Done! (%.4f sec)\n", (std::chrono::duration<double>(t1 - t0)).count());
+  fprintf(stdout, "Done! (%.4f sec)\n", (std::chrono::duration<float>(t1 - t0)).count());
 }
 
 void RaytracedRenderer::copy_host_device_pt(std::vector<CudaLight> &lights, std::vector<CudaBSDF> &bsdfs, std::vector<CudaTexture> &textures) {

@@ -9,7 +9,7 @@ namespace CGL {
 Vector3D operator*(const Matrix4x4 &m, const Vector3D &v);
 
 
-Matrix4x4 translate(double dx, double dy, double dz){
+Matrix4x4 translate(float dx, float dy, float dz){
     return Matrix4x4(
 		1, 0, 0, dx,
 		0, 1, 0, dy,
@@ -18,7 +18,7 @@ Matrix4x4 translate(double dx, double dy, double dz){
 		);
 }
 
-Matrix4x4 scale(double sx, double sy, double sz){
+Matrix4x4 scale(float sx, float sy, float sz){
     return Matrix4x4(
         sx,   0,   0,   0,  
         0,   sy,   0,   0,

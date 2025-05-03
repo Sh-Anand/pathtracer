@@ -78,12 +78,6 @@ HOST_DEVICE static float next_float(RNGState &state) {
     return static_cast<float>(next_u64(state) >> 40) * INV_2_POW_24;
 }
 
-HOST_DEVICE static double next_double(RNGState &state) {
-    // 53 MSBs → IEEE‑754 mantissa for [0,1)
-    constexpr double INV_2_POW_53 = 1.0 / 9007199254740992.0;
-    return static_cast<double>(next_u64(state) >> 11) * INV_2_POW_53;
-}
-
 } // namespace CGL
 
 #endif // GPU_RAND_H

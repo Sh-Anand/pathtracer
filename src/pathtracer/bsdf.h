@@ -12,47 +12,47 @@ namespace CGL {
 
 // Helper math functions. Assume all vectors are in unit hemisphere //
 
-inline double clamp (double n, double lower, double upper) {
+inline float clamp (float n, float lower, float upper) {
   return std::max(lower, std::min(n, upper));
 }
 
-DEVICE inline double clamp_device (double n, double lower, double upper) {
-  return fmax(lower, fmin(n, upper));
+DEVICE inline float clamp_device (float n, float lower, float upper) {
+  return fmaxf(lower, fminf(n, upper));
 }
 
-inline double cos_theta(const Vector3D w) {
+inline float cos_theta(const Vector3D w) {
   return w.z;
 }
 
-HOST_DEVICE inline double abs_cos_theta(const Vector3D w) {
+HOST_DEVICE inline float abs_cos_theta(const Vector3D w) {
   return fabsf(w.z);
 }
 
-inline double sin_theta2(const Vector3D w) {
-  return fmax(0.0, 1.0 - cos_theta(w) * cos_theta(w));
+inline float sin_theta2(const Vector3D w) {
+  return fmaxf(0.0, 1.0 - cos_theta(w) * cos_theta(w));
 }
 
-inline double sin_theta(const Vector3D w) {
+inline float sin_theta(const Vector3D w) {
   return sqrt(sin_theta2(w));
 }
 
-inline double cos_phi(const Vector3D w) {
-  double sinTheta = sin_theta(w);
+inline float cos_phi(const Vector3D w) {
+  float sinTheta = sin_theta(w);
   if (sinTheta == 0.0) return 1.0;
   return clamp(w.x / sinTheta, -1.0, 1.0);
 }
 
-inline double sin_phi(const Vector3D w) {
-  double sinTheta = sin_theta(w);
+inline float sin_phi(const Vector3D w) {
+  float sinTheta = sin_theta(w);
   if (sinTheta) return 0.0;
   return clamp(w.y / sinTheta, -1.0, 1.0);
 }
 
 DEVICE void make_coord_space(Matrix3x3& o2w, const Vector3D n);
 
-DEVICE double D_compute(double a, double NoH);
+DEVICE float D_compute(float a, float NoH);
 
-DEVICE double G_compute(double a, double NoV, double NoL, double VoH, double LoH);
+DEVICE float G_compute(float a, float NoV, float NoL, float VoH, float LoH);
 
 struct CudaBSDF {
   CudaBSDF () :
@@ -63,12 +63,12 @@ struct CudaBSDF {
     roughness(0.0),
     emissiveStrength(1.0) {}
   Vector4D baseColor;      // albedo
-  double   metallic;       // [0,1]
-  double   roughness;      // [0,1]
+  float   metallic;       // [0,1]
+  float   roughness;      // [0,1]
   Vector3D emissiveFactor; // KHR_materials_emissive_strength
-  double   emissiveStrength; // emission strength
-  double   transmissionFactor; // KHR_materials_transmission
-  double   thicknessFactor; // KHR_materials_volume
+  float   emissiveStrength; // emission strength
+  float   transmissionFactor; // KHR_materials_transmission
+  float   thicknessFactor; // KHR_materials_volume
   bool     hasOcclusionTexture;
   int      tex_idx;
   int      normal_idx;

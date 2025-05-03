@@ -31,8 +31,8 @@ void Camera::configure(const CameraInfo& info, size_t screenW, size_t screenH) {
   hFov = info.hFov;
   vFov = info.vFov;
 
-  double ar1 = tan(radians(hFov) / 2) / tan(radians(vFov) / 2);
-  ar = static_cast<double>(screenW) / screenH;
+  float ar1 = tan(radians(hFov) / 2) / tan(radians(vFov) / 2);
+  ar = static_cast<float>(screenW) / screenH;
   if (ar1 < ar) {
     // hFov is too small
     hFov = 2 * degrees(atan(tan(radians(vFov) / 2) * ar));
@@ -40,18 +40,18 @@ void Camera::configure(const CameraInfo& info, size_t screenW, size_t screenH) {
     // vFov is too small
     vFov = 2 * degrees(atan(tan(radians(hFov) / 2) / ar));
   }
-  screenDist = ((double) screenH) / (2.0 * tan(radians(vFov) / 2));
+  screenDist = ((float) screenH) / (2.0 * tan(radians(vFov) / 2));
 }
 
 /**
  * This function places the camera at the target position and sets the arguments.
  * Phi and theta are in RADIANS.
  */
-void Camera::place(const Vector3D targetPos, const double phi,
-                   const double theta, const double r, const double minR,
-                   const double maxR) {
-  double r_ = min(max(r, minR), maxR);
-  double phi_ = (sin(phi) == 0) ? (phi + EPS_F) : phi;
+void Camera::place(const Vector3D targetPos, const float phi,
+                   const float theta, const float r, const float minR,
+                   const float maxR) {
+  float r_ = min(max(r, minR), maxR);
+  float phi_ = (sin(phi) == 0) ? (phi + EPS_F) : phi;
   this->targetPos = targetPos;
   this->phi = phi_;
   this->theta = theta;
@@ -81,15 +81,15 @@ void Camera::set_screen_size(const size_t screenW, const size_t screenH) {
   this->screenW = screenW;
   this->screenH = screenH;
   ar = 1.0 * screenW / screenH;
-  hFov = 2 * degrees(atan(((double) screenW) / (2 * screenDist)));
-  vFov = 2 * degrees(atan(((double) screenH) / (2 * screenDist)));
+  hFov = 2 * degrees(atan(((float) screenW) / (2 * screenDist)));
+  vFov = 2 * degrees(atan(((float) screenH) / (2 * screenDist)));
 }
 
 /**
  * This function translates the camera position
  */
-void Camera::move_by(const double dx, const double dy, const double d) {
-  const double scaleFactor = d / screenDist;
+void Camera::move_by(const float dx, const float dy, const float d) {
+  const float scaleFactor = d / screenDist;
   const Vector3D displacement =
     c2w[0] * (dx * scaleFactor) + c2w[1] * (dy * scaleFactor);
   pos += displacement;
@@ -99,8 +99,8 @@ void Camera::move_by(const double dx, const double dy, const double d) {
 /**
  * This function translates the camera position (in forward direction)
  */
-void Camera::move_forward(const double dist) {
-  double newR = min(max(r - dist, minR), maxR);
+void Camera::move_forward(const float dist) {
+  float newR = min(max(r - dist, minR), maxR);
   pos = targetPos + ((pos - targetPos) * (newR / r));
   r = newR;
 }
@@ -108,8 +108,8 @@ void Camera::move_forward(const double dist) {
 /**
  * This function rotates the camera position
  */
-void Camera::rotate_by(const double dPhi, const double dTheta) {
-  phi = clamp_T(phi + dPhi, 0.0, (double) PI);
+void Camera::rotate_by(const float dPhi, const float dTheta) {
+  phi = clamp_T(phi + dPhi, 0.0f, PI);
   theta += dTheta;
   compute_position();
 }
@@ -118,7 +118,7 @@ void Camera::rotate_by(const double dPhi, const double dTheta) {
  * This function computes the camera position, basis vectors, and the view matrix
  */
 void Camera::compute_position() {
-  double sinPhi = sin(phi);
+  float sinPhi = sin(phi);
   if (sinPhi == 0) {
     phi += EPS_F;
     sinPhi = sin(phi);

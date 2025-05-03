@@ -10,7 +10,7 @@ namespace CGL {
         this->max_t = INFINITY;
         this->inv_d = 1/d;
     }
-    HOST_DEVICE Ray::Ray(const Vector3D o, const Vector3D d, double max_t, int depth) {
+    HOST_DEVICE Ray::Ray(const Vector3D o, const Vector3D d, float max_t, int depth) {
         this->inv_d = 1/d;
         this->max_t = max_t;
         Ray(o, d, depth);

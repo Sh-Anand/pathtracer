@@ -21,20 +21,20 @@ class Quaternion : public Vector4D {
   /**
    * Construct from 3D vector and w.
    */
-  Quaternion(const Vector3D& v, double w) : Vector4D(v.x, v.y, v.z, w) { }
+  Quaternion(const Vector3D& v, float w) : Vector4D(v.x, v.y, v.z, w) { }
 
   Quaternion(const Vector4D& v) : Vector4D(v.x, v.y, v.z, v.w) { }
 
-  Quaternion(double x, double y, double z, double w) : Vector4D(x, y, z, w) { }
+  Quaternion(float x, float y, float z, float w) : Vector4D(x, y, z, w) { }
 
   /**
    * Initializes a quaternion that represents a rotation about the given axis
    * and angle.
    */
-  void from_axis_angle(const Vector3D& axis, double radians) {
+  void from_axis_angle(const Vector3D& axis, float radians) {
     radians /= 2;
     const Vector3D& nAxis = axis.unit();
-    double sinTheta = sin(radians);
+    float sinTheta = sin(radians);
     x = sinTheta * nAxis.x;
     y = sinTheta * nAxis.y;
     z = sinTheta * nAxis.z;
@@ -50,8 +50,8 @@ class Quaternion : public Vector4D {
 	z = c.z;
   }
 
-  double real() const { return w; }
-  void setReal(double r) { w = r; }
+  float real() const { return w; }
+  void setReal(float r) { w = r; }
 
   Quaternion conjugate(void) const
   {
@@ -122,7 +122,7 @@ class Quaternion : public Vector4D {
    */
   Matrix4x4 matrix() const {
 
-	double m[16] = {
+	float m[16] = {
 	   w,  -z,  y, x,
 	   z,   w, -x, y,
 	  -y,   x,  w, z,
@@ -145,7 +145,7 @@ class Quaternion : public Vector4D {
    * represented by a unit quaternion.
    */
   Matrix4x4 rightMatrix() const {
-	double m[16] = {
+	float m[16] = {
 	  +w, -z,  y, -x,
 	  +z,  w, -x, -y,
 	  -y,  x,  w, -z,
@@ -171,7 +171,7 @@ class Quaternion : public Vector4D {
    * rotation if the quaternion is non-unit.
    */
   Matrix3x3 rotationMatrix() const {
-	double m[9] = {
+	float m[9] = {
 	  1-2*y*y-2*z*z, 2*x*y - 2*z*w, 2*x*z + 2*y*w,
 	  2*x*y + 2*z*w, 1-2*x*x-2*z*z, 2*y*z - 2*x*w,
 	  2*x*z - 2*y*w, 2*y*z + 2*x*w, 1-2*x*x-2*y*y
@@ -190,7 +190,7 @@ class Quaternion : public Vector4D {
 	Quaternion q1 = (Quaternion)unit();
 
 	// s must be positive, because q1 <= 1, due to normalization.
-	double s = sqrt(1-q1.w*q1.w);
+	float s = sqrt(1-q1.w*q1.w);
 
 	// Avoid dividing by 0.
 	if (s < 0.001)
@@ -216,12 +216,12 @@ class Quaternion : public Vector4D {
    */
   void scaledAxis(const Vector3D& vec_in)
   {
-	double theta = vec_in.norm();
+	float theta = vec_in.norm();
 
 	// Small magnitudes are handled via the default vector.
 	if (theta > 0.0001)
 	{
-	  double s = sin(theta / 2.0);
+	  float s = sin(theta / 2.0);
 	  Vector3D W(vec_in / theta * s);
 	  x = W.x;
 	  y = W.y;
