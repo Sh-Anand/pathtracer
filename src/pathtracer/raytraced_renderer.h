@@ -73,8 +73,11 @@ public:
    */
   void set_frame_size(size_t width, size_t height);
 
-  void render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy,
-                      std::vector<CudaLight> &lights, std::vector<CudaBSDF> &bsdfs, std::vector<CudaTexture> &textures);
+  void render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy);
+
+  void set_cuda_camera();
+
+  void update_camera();
 
   /**
    * Save rendered result to png file.

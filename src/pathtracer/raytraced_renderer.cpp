@@ -85,16 +85,14 @@ bool RaytracedRenderer::has_valid_configuration() {
   return camera;
 }
 
-void RaytracedRenderer::render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy, 
-                                       std::vector<CudaLight> &lights, std::vector<CudaBSDF> &bsdfs, std::vector<CudaTexture> &textures) {
+void RaytracedRenderer::set_cuda_camera(){
   pt->set_frame_size(frameBuffer.w, frameBuffer.h);
-
   pt->camera = CudaCamera(camera);
+}
 
+void RaytracedRenderer::render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy) {
   // launch threads
   fprintf(stdout, "[PathTracer] Rendering... "); fflush(stdout);
-
-  copy_host_device_pt(lights, bsdfs, textures);
 
   gpu_raytrace();
 

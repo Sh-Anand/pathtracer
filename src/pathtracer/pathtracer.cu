@@ -475,6 +475,7 @@ DEVICE void PathTracer::spatial_resampling(uint16_t x, uint16_t y) {
   const uint16_t neighbouring_pixel_radius = floor(0.1 * min(sampleBuffer.w, sampleBuffer.h));
 
   Reservoir Rs = spatialReservoirBuffer[x + y * sampleBuffer.w];
+  Rs.clear();
   Sample q = initialSampleBuffer[x + y * sampleBuffer.w];
   RNGState rand_state = rand_states[x + y * sampleBuffer.w];
   const uint8_t max_neighbouring_samples = 9; // ReSTIR GI paper value without temporal sampling

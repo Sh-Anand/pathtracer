@@ -1,6 +1,7 @@
 #ifndef CGL_UTIL_RESERVOIR_H
 #define CGL_UTIL_RESERVOIR_H
 
+#include "util/cuda_defs.h"
 #include "vector3D.h"
 #include "gpu_rand.h"
 namespace CGL {
@@ -12,6 +13,15 @@ struct Sample {
     double pdf; // pdf of the sample
     Vector3D fcos; // product of bsdf and cosine factor
     Vector3D emittance; // zero + one bounce radiance
+
+    DEVICE void clear(){
+        x_v = Vector3D(0), n_v = Vector3D(0);
+        x_s = Vector3D(0), n_s = Vector3D(0);
+        L = Vector3D(0);
+        pdf = 0;
+        fcos = Vector3D(0);
+        emittance = Vector3D(0);
+    }
 };
 
 #define cos_angle_threshold 0.9f // cos(25 degrees) 
@@ -39,6 +49,8 @@ class Reservoir {
         DEVICE void update(Sample s_new, double w_new, RNGState &rand_state);
 
         DEVICE void merge(Reservoir r, double p_hat, RNGState &rand_state);
+
+        DEVICE void clear();
 };
 
 }  // namespace CGL

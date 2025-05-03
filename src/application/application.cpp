@@ -10,6 +10,7 @@
 #include "util/transforms.h"
 #include "util/vector3D.h"
 #include "util/vector4D.h"
+#include <cmath>
 
 namespace CGL {
 
@@ -373,8 +374,8 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
                           max_view_distance);
 
     camera.place(target,
-                        acos(cam.view_dir.y),
-                        atan2(cam.view_dir.x, cam.view_dir.z),
+                        acos(cam.view_dir.y) - M_PI / 8,
+                        atan2(cam.view_dir.x, cam.view_dir.z) - M_PI / 8,
                 view_distance,
                 min_view_distance,
                 max_view_distance);

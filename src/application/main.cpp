@@ -23,6 +23,7 @@ void usage(const char *binaryName) {
   printf("Program Options:\n");
   printf("  -s  <INT>        Number of camera rays per pixel\n");
   printf("  -l  <INT>        Number of samples per area light\n");
+  printf("  -g  <INT>        Number of total image generated\n");
   printf("  -t  <INT>        Number of render threads\n");
   printf("  -m  <INT>        Maximum ray depth\n");
   printf("  -o  <INT>        Accumulate Bounces of Light \n");
@@ -50,7 +51,7 @@ int main(int argc, char **argv) {
   size_t w = 0, h = 0, x = -1, y = 0, dx = 0, dy = 0;
   string output_file_name, cam_settings = "";
   string sceneFilePath;
-  while ((opt = getopt(argc, argv, "s:l:t:m:o:e:h:H:f:r:c:b:d:a:p:")) !=
+  while ((opt = getopt(argc, argv, "s:l:t:m:o:e:h:H:f:r:c:b:d:a:p:g:")) !=
           -1) { // for each option...
     switch (opt) {
     case 'f':
@@ -73,6 +74,9 @@ int main(int argc, char **argv) {
       break;
     case 'l':
       config.pathtracer_ns_area_light = atoi(optarg);
+      break;
+    case 'g':
+      config.total_image_generated = atoi(optarg);
       break;
     case 't':
       config.pathtracer_num_threads = atoi(optarg);
@@ -167,6 +171,11 @@ int main(int argc, char **argv) {
   if (cam_settings != "")
     app->load_camera(cam_settings);
 
-  app->render_to_file(output_file_name, x, y, dx, dy);
+
+  if(config.total_image_generated == 1){
+    app->render_to_file(output_file_name, x, y, dx, dy);
+  }else{
+    app->render_to_video(output_file_name, x, y, dx, dy, config.total_image_generated);
+  }
   return 0;
 }

@@ -1,5 +1,8 @@
+#include "pathtracer/camera.h"
+#include "pathtracer/pathtracer.h"
 #include "raytraced_renderer.h"
 
+#include <cstddef>
 #include <cuda_runtime.h>
 
 #include "scene/light.h"
@@ -60,15 +63,24 @@ void RaytracedRenderer::gpu_raytrace() {
     std::cout << "Raytracing on GPU done!" << std::endl;
     std::cout << "Time: " << (std::chrono::duration<double>(t1 - t0)).count() << " sec" << std::endl;
     
-    PathTracer *pt_tmp = (PathTracer*) malloc(sizeof(PathTracer));
-    CUDA_ERR(cudaMemcpy(pt_tmp, pt_cuda, sizeof(PathTracer), cudaMemcpyDeviceToHost));
+    CUDA_ERR(cudaMemcpy(pt, pt_cuda, sizeof(PathTracer), cudaMemcpyDeviceToHost));
+    
+    auto data_tmp = pt->sampleBuffer.data;
     pt->sampleBuffer.data = (Vector3D*) malloc(width * height * sizeof(Vector3D));
-    CUDA_ERR(cudaMemcpy(pt->sampleBuffer.data, pt_tmp->sampleBuffer.data, width * height * sizeof(Vector3D), cudaMemcpyDeviceToHost));
+    CUDA_ERR(cudaMemcpy(pt->sampleBuffer.data, data_tmp, width * height * sizeof(Vector3D), cudaMemcpyDeviceToHost));
     
     // write_to_framebuffer
     pt->sampleBuffer.toColor(frameBuffer, 0, 0, frameBuffer.w, frameBuffer.h);
     free (pt->sampleBuffer.data);
-    free(pt_tmp);
+
+    // restore back
+    pt->sampleBuffer.data = data_tmp;
+}
+
+void RaytracedRenderer::update_camera(){
+    cudaMemcpy(pt_cuda, pt, sizeof(PathTracer), cudaMemcpyHostToDevice);
+    CUDA_ERR(cudaGetLastError());
+    CUDA_ERR(cudaDeviceSynchronize());
 }
 
 void RaytracedRenderer::build_accel(std::vector<CudaPrimitive> &primitives, 

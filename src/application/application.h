@@ -2,6 +2,8 @@
 #define CGL_APPLICATION_H
 
 // STL
+#include <cmath>
+#include <cstddef>
 #include <string>
 #include <iostream>
 #include <sstream>
@@ -53,6 +55,8 @@ struct AppConfig {
     pathtracer_filename = "";
     pathtracer_lensRadius = 0.0;
     pathtracer_focalDistance = 4.7;
+
+    total_image_generated = 1;
   }
 
   size_t pathtracer_ns_aa;
@@ -76,6 +80,8 @@ struct AppConfig {
 
   double pathtracer_lensRadius;
   double pathtracer_focalDistance;
+
+  size_t total_image_generated;
 };
 
 class Application {
@@ -101,7 +107,30 @@ class Application {
   void load_from_gltf_model(const tinygltf::Model &model);
   void render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy) { 
     set_up_pathtracer();
-    renderer->render_to_file(filename, x, y, dx, dy, lights, bsdfs, textures); 
+    renderer->set_cuda_camera();
+    renderer->copy_host_device_pt(lights, bsdfs, textures);
+    renderer->render_to_file(filename, x, y, dx, dy); 
+  }
+
+  void render_to_video(std::string filename, size_t x, size_t y, size_t dx, size_t dy, size_t num_images){
+    const double TOTAL_ROTATION = M_PI;
+    double angle_per_image = TOTAL_ROTATION / (double)num_images;
+    size_t dot_pos = filename.find_last_of('.');
+    auto name = filename.substr(0, dot_pos);
+    auto dot_extension = filename.substr(dot_pos);
+
+    set_up_pathtracer();
+    renderer->set_cuda_camera();
+    renderer->copy_host_device_pt(lights, bsdfs, textures);
+
+    for(size_t i = 0; i < num_images; ++i){
+      std::cout << 'render images: ' << i << std::endl;
+      auto filename_per_image = name + std::to_string(i) + dot_extension;
+      camera.rotate_by(0, angle_per_image);
+      renderer->set_cuda_camera();
+      renderer->update_camera();
+      renderer->render_to_file(filename_per_image, x, y, dx, dy); 
+    }
   }
 
   void load_camera(std::string filename) {
