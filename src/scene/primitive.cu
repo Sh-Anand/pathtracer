@@ -44,5 +44,15 @@ DEVICE bool CudaPrimitive::intersect(Ray &r, CudaIntersection *isect, Vector3D* 
   return true;
 }
 
+DEVICE bool CudaPrimitive::has_intersect(Ray &r, const Vector3D * vertices, double &t) const {
+  Vector3D tp1 = vertices[i_p1], tp2 = vertices[i_p2], tp3 = vertices[i_p3];
+  double a, b;
+  if (!test_intersect(r, tp1, tp2, tp3, t, a, b)) {
+    return false;
+  }
+
+  return true;
+}
+
 }
 }

@@ -17,56 +17,6 @@ DEVICE __inline__ void cosine_weighted_hemisphere_sample_3d(RNGState &rand_state
   *wi = Vector3D(r*cos(theta), r*sin(theta), sqrt(1-Xi1));
 }
 
-DEVICE __inline__ Vector3D sample_L(const CudaLight *light,
-                                    const Vector3D         p,
-                                    Vector3D*              wi,
-                                    double*                distToLight,
-                                    double*                pdf,
-                                    RNGState&              rand_state,
-                                    const Vector3D*        vertices) {
-
-  if (light->is_point_light) {
-    Vector3D d = light->position - p;
-    double dist = d.norm();
-    *distToLight = dist - EPS_D;
-    Vector3D dir = d / dist;
-    *wi = dir;
-    *pdf = 1.0;
-    return light->radiance;
-  }
-  Vector3D p1 = vertices[light->triangle.i_p1];
-  Vector3D p2 = vertices[light->triangle.i_p2];
-  Vector3D p3 = vertices[light->triangle.i_p3];
-  // 1) Uniformly sample a point on the triangle via barycentrics
-  double r1 = next_double(rand_state);
-  double r2 = next_double(rand_state);
-  if (r1 + r2 > 1.0) {
-    r1 = 1.0 - r1;
-    r2 = 1.0 - r2;
-  }
-  Vector3D samplePos = p1
-                     + (p2 - p1) * r1
-                     + (p3 - p1) * r2;
-
-  // 2) Compute direction & distance from shading point to the sample
-  Vector3D d = samplePos - p;
-  double  dist = d.norm();
-  *distToLight = dist - EPS_D;
-  Vector3D dir = d / dist;
-  *wi = dir;
-
-  // 3) Compute triangle normal for the geometry term
-  Vector3D N = cross((p2 - p1), (p3 - p1)).unit();
-
-  // 4) Convert area‐pdf to solid‐angle pdf:
-  //    pdf_ω = (distance²) / (area * cosθ)
-  double cosTheta = fmax(dot(N, -dir), 0.0);
-  *pdf = (dist * dist) / (light->area * cosTheta);
-
-  // 5) Return the emitted radiance
-  return light->radiance;
-}
-
 DEVICE __inline__ Vector3D PathTracer::get_emission(const CudaIntersection &isect) {
   CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
   Vector2D uv = isect.uv;
@@ -323,7 +273,7 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
     CudaLight &L = lights[i];
     Vector3D wi;
     double   distToL, pdfL;
-    Vector3D Li = sample_L(&L, hit_p, &wi, &distToL, &pdfL,
+    Vector3D Li = L.sample_L(hit_p, &wi, &distToL, &pdfL,
                            rand_states[x + y * sampleBuffer.w], bvh->vertices);
 
     double cosNL = fmax(dot(isect.n, wi), 0.0);
@@ -332,8 +282,7 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
       Ray shadow(hit_p, wi);
       shadow.min_t = EPS_D;
       shadow.max_t = distToL;
-      CudaIntersection light_isect;
-      if (!bvh->intersect(shadow, &light_isect)) {
+      if (!bvh->has_intersect(shadow)) {
         // BRDF eval and PDF of sampling that same wi via BSDF
         Vector3D f_val = f(isect, w_out, wi, &occlusion);
         double  pdfB   = bsdf_pdf(isect, w_out, wi);
@@ -355,14 +304,21 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
     CudaIntersection Lhit;
     shadow.min_t = EPS_D;
     shadow.max_t = INFINITY;
-    if (bvh->intersect(shadow, &Lhit)) {
-      CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
-      // get the light and compute its PDF for this direction
-      double pdfL = 1/lights[0].area;
-      Vector3D Li = bsdf.emissiveFactor * bsdf.emissiveStrength;
-      double w    = mis_weight(pdfB, pdfL);
-      L_out += f_bsdf * Li * cosNL * w / pdfB;
+
+    // bad, checking every light, assumes few lights
+    CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
+
+    for (int i = 0; i < num_lights; ++i) {
+      CudaLight &L = lights[i];
+      double pdfL;
+      if (L.has_intersect(shadow, hit_p, isect.n, bvh->vertices, &pdfL)) {
+        // get the light and compute its PDF for this direction
+        Vector3D Li = bsdf.emissiveFactor * bsdf.emissiveStrength;
+        double w    = mis_weight(pdfB, pdfL);
+        L_out += f_bsdf * Li * cosNL * w / pdfB;
+      }
     }
+    
   }
 
   return L_out;
@@ -547,8 +503,7 @@ DEVICE void PathTracer::spatial_resampling(uint16_t x, uint16_t y) {
     Ray shadow_ray(q.x_v, (Rn.z.x_s - q.x_v).unit());
     shadow_ray.min_t = EPS_D;
     shadow_ray.max_t = (Rn.z.x_s - q.x_v).norm() - EPS_D;
-    CudaIntersection isect;
-    if (bvh->intersect(shadow_ray, &isect)) p_prime_q = 0;
+    if (bvh->has_intersect(shadow_ray)) p_prime_q = 0;
 
     // Merge Rn into the current reservoir
     Rs.merge(Rn, p_prime_q, rand_state);

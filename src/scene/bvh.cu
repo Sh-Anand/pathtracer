@@ -93,5 +93,44 @@ DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i, uint32_t root_idx)
   return hit;
 }
 
+DEVICE bool BVHCuda::has_intersect(Ray &ray, uint32_t root_idx) const {
+  constexpr int STACK_SIZE = 64;
+  uint32_t stack[STACK_SIZE];
+  int stack_ptr = 0;
+
+  // start with the root
+  stack[stack_ptr++] = root_idx;
+  
+  double t;
+  // traverse until stack empty
+  while (stack_ptr > 0) {
+      uint32_t idx = stack[--stack_ptr];
+      const BVHNode &node = nodes[idx];
+
+      // 1) bounding‑box test
+      double t0, t1;
+      if (!node.bb.intersect(ray, t0, t1))
+          continue;
+
+      if (node.leaf) {
+          // 2) test each primitive in the leaf
+          CudaIntersection tmp;
+          for (uint32_t p = node.start; p < node.end; ++p) {
+              if (primitives[p].has_intersect(ray, vertices, t)) {
+                  return true;
+              }
+          }
+      } else {
+          // 3) push children (no need for order)
+          if (stack_ptr + 2 <= STACK_SIZE) {
+              stack[stack_ptr++] = node.l;
+              stack[stack_ptr++] = node.r;
+          }
+      }
+  }
+
+  return false;
+}
+
 }
 }

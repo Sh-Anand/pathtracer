@@ -262,7 +262,7 @@ if (worldTransform.det() < 0.0f) {
         int lightIndex = ext.Get("light").Get<int>();
         const auto& light = model.lights[lightIndex];
 
-        if (light.type == "point") {
+        if (light.type == "spot") {
           Vector3D color = {1.0f, 1.0f, 1.0f};
             if (!light.color.empty()) {
                 color = {
@@ -272,12 +272,18 @@ if (worldTransform.det() < 0.0f) {
                 };
             }
           float intensity = (float)light.intensity; // in lux
+          float innerConeAngle = (float)light.spot.innerConeAngle;
+          float outerConeAngle = (float)light.spot.outerConeAngle - PI/16;
           // Position is from the node's transform
           Vector3D position = (worldTransform * Vector4D(0, 0, 0, 1)).to3D();
-          std::cout << "Point light position: (" << position.x << ", " << position.y << ", " << position.z << ")\n";
-          std::cout << "Point light color: (" << color.x << ", " << color.y << ", " << color.z << ")\n";
-          std::cout << "Point light intensity: " << intensity << "\n";
-          lights.push_back(CudaLight(color * intensity/5000, position));
+          Vector3D direction = (worldTransform * Vector4D(0,0,-1,1)).to3D().unit();
+          std::cout << "Cone light position: (" << position.x << ", " << position.y << ", " << position.z << ")\n";
+          std::cout << "Cone light direction: (" << direction.x << ", " << direction.y << ", " << direction.z << ")\n";
+          std::cout << "Cone light color: (" << color.x << ", " << color.y << ", " << color.z << ")\n";
+          std::cout << "Cone light intensity: " << intensity << "\n";
+          std::cout << "Cone light inner angle: " << innerConeAngle << "\n";
+          std::cout << "Cone light outer angle: " << outerConeAngle << "\n";
+          lights.push_back(CudaLight(color * intensity/1000, position, direction, innerConeAngle, outerConeAngle));
         }
     }
   }
@@ -355,7 +361,7 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
     Vector3D target = bbox.centroid();
     canonical_view_distance = bbox.extent.norm() / 2 * 1.5;
 
-    double view_distance = canonical_view_distance * 2;
+    double view_distance = canonical_view_distance * 3;
     double min_view_distance = canonical_view_distance / 10.0;
     double max_view_distance = canonical_view_distance * 20.0;
 
@@ -367,8 +373,8 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
                           max_view_distance);
 
     camera.place(target,
-                        acos(cam.view_dir.y) - M_PI / 8,
-                        atan2(cam.view_dir.x, cam.view_dir.z) - M_PI / 8,
+                        acos(cam.view_dir.y),
+                        atan2(cam.view_dir.x, cam.view_dir.z),
                 view_distance,
                 min_view_distance,
                 max_view_distance);

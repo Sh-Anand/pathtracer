@@ -38,7 +38,13 @@ class BVHCuda {
       return intersect(r, i, root);
     }
 
+    DEVICE bool has_intersect(Ray& r) const {
+      return has_intersect(r, root);
+    }
+
     DEVICE bool intersect(Ray& r, CudaIntersection* i, uint32_t node) const;
+    DEVICE bool has_intersect(Ray& r, uint32_t node) const;
+
     
     CudaPrimitive *primitives;
     BVHNode* nodes;

@@ -55,6 +55,8 @@ set(APPLICATION_SOURCE
     # Application
     src/application/application.cpp
     src/application/main.cpp
+
+    src/scene/light.cu
 )
 
 set(APPLICATION_HEADERS

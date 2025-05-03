@@ -3,16 +3,23 @@
 
 #include "scene/primitive.h"
 #include "util/vector3D.h"
+#include "util/gpu_rand.h"
 
 namespace CGL { namespace SceneObjects {
 
 struct CudaLight {
   CudaLight(const Vector3D rad, 
-            const Vector3D pos) 
+            const Vector3D pos,
+            const Vector3D direction,
+            double inner_cone_angle,
+            double outer_cone_angle) 
       : radiance(rad), 
-        position(pos) {
+        position(pos),
+        direction(direction),
+        inner_cone_angle(inner_cone_angle),
+        outer_cone_angle(outer_cone_angle) {
           area = 1;
-          is_point_light = true;
+          is_cone_light = true;
         }
   CudaLight(const Vector3D rad, 
             const CudaPrimitive tri,
@@ -20,7 +27,7 @@ struct CudaLight {
       : radiance(rad), 
         triangle(tri) {
           area = 0.5 * cross(vertices[tri.i_p2] - vertices[tri.i_p1], vertices[tri.i_p3] - vertices[tri.i_p1]).norm();
-          is_point_light = false;
+          is_cone_light = false;
         }
 
   Vector3D radiance;
@@ -29,7 +36,21 @@ struct CudaLight {
 
   // if point light
   Vector3D position;
-  bool is_point_light = false;
+  Vector3D direction;
+  bool is_cone_light = false;
+  double inner_cone_angle = 0.0;
+  double outer_cone_angle = 0.0;
+
+  DEVICE Vector3D sample_L(const  Vector3D         p,
+                                  Vector3D*              wi,
+                                  double*                distToLight,
+                                  double*                pdf,
+                                  RNGState&              rand_state,
+                                  const Vector3D*        vertices);
+
+  DEVICE bool has_intersect(Ray& r, const Vector3D &p, const Vector3D &N,
+                            const Vector3D* vertices, double *pdf) const;
+
 };
 
 } // namespace SceneObjects
