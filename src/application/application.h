@@ -88,7 +88,7 @@ struct AppConfig {
 class Application {
  public:
 
-  Application(AppConfig config, bool gl = true);
+  Application(AppConfig config);
 
   ~Application();
 
@@ -159,7 +159,7 @@ private:
   double canonical_view_distance;
 
   // Initialization functions to get the opengl cooking with oil.
-  void init_camera(CameraInfo& camera, const Matrix4x4& transform);
+  void init_camera(CameraInfo& camera);
   void ParseMaterial(const tinygltf::Model&);
   void ParseNode(const tinygltf::Model &model, int nodeIdx, const Matrix4x4 &parentTransform);
   void ParseTexture(const tinygltf::Model &model);

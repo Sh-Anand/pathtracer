@@ -189,10 +189,6 @@ class Quaternion : public Vector4D {
 
 	Quaternion q1 = (Quaternion)unit();
 
-	// Algorithm from http://www.euclideanspace.com/maths/geometry/rotations/conversions/quaternionToAngle/
-
-	double angle = 2 * acos(q1.w);
-
 	// s must be positive, because q1 <= 1, due to normalization.
 	double s = sqrt(1-q1.w*q1.w);
 
@@ -252,127 +248,7 @@ class Quaternion : public Vector4D {
 	return (((*this) * Quaternion(v, 0)) * conjugate()).complex();
   }
 
-
-
-  /**
-   * @brief Computes and sets this quaternion that is equivalent to a given
-   * euler angle rotation.
-   * @param euler A 3-vector in order:  roll-pitch-yaw.
-   */
-  void euler(const Vector3D& euler) {
-	double c1 = cos(euler[2] * 0.5);
-	double c2 = cos(euler[1] * 0.5);
-	double c3 = cos(euler[0] * 0.5);
-	double s1 = sin(euler[2] * 0.5);
-	double s2 = sin(euler[1] * 0.5);
-	double s3 = sin(euler[0] * 0.5);
-
-	x = c1*c2*s3 - s1*s2*c3;
-	y = c1*s2*c3 + s1*c2*s3;
-	z = s1*c2*c3 - c1*s2*s3;
-	w = c1*c2*c3 + s1*s2*s3;
-  }
-
-  /** @brief Returns an equivalent euler angle representation of
-   * this quaternion.
-   * @return Euler angles in roll-pitch-yaw order.
-   */
-  Vector3D euler(void) const
-  {
-	Vector3D euler;
-	const static double PI_OVER_2 = PI * 0.5;
-	double sqw, sqx, sqy, sqz;
-
-	// quick conversion to Euler angles to give tilt to user
-	sqw = w*w;
-	sqx = x*x;
-	sqy = y*y;
-	sqz = z*z;
-
-	euler[1] = asin(2.0 * (w*y - x*z));
-	if (PI_OVER_2 - fabs(euler[1]) > EPS_F) {
-	  euler[2] = atan2(2.0 * (x*y + w*z),
-					   sqx - sqy - sqz + sqw);
-	  euler[0] = atan2(2.0 * (w*x + y*z),
-					   sqw - sqx - sqy + sqz);
-	}
-	else
-	{
-	  // compute heading from local 'down' vector
-	  euler[2] = atan2(2*y*z - 2*x*w,
-					   2*x*z + 2*y*w);
-	  euler[0] = 0.0;
-
-	  // If facing down, reverse yaw
-	  if (euler[1] < 0)
-	  {
-		euler[2] = PI - euler[2];
-	  }
-	}
-
-	return euler;
-  }
-
-  /**
-   * @brief Computes a special representation that decouples the Z
-   * rotation.
-   *
-   * The decoupled representation is two rotations, Qxy and Qz,
-   * so that Q = Qxy * Qz.
-   */
-  void decoupleZ(Quaternion* Qxy, Quaternion* Qz) const {
-	Vector3D ztt(0,0,1);
-	Vector3D zbt = this->rotatedVector(ztt);
-	Vector3D axis_xy = cross(ztt, zbt);
-	double axis_norm = axis_xy.norm();
-
-	double axis_theta = acos(clamp_T(zbt.z, -1.0, 1.0));
-	if (axis_norm > 0.00001)
-	{
-	  axis_xy = axis_xy * (axis_theta/axis_norm); // limit is *1
-	}
-
-	Qxy->scaledAxis(axis_xy);
-	*Qz = (Qxy->conjugate() * (*this));
-  }
-
-  /**
-   * @brief Returns the quaternion slerped between this and q1 by fraction 0 <= t <= 1.
-   * Bryce Likes the sound of this.
-   */
-  Quaternion slerp(const Quaternion& q1, double t)
-  {
-    return slerp(*this, q1, t);
-  }
-
-  /// Returns quaternion that is slerped by fraction 't' between q0 and q1.
-  static Quaternion slerp(const Quaternion& q0, const Quaternion& q1, double t) {
-
-    double omega = acos(clamp_T(q0.x*q1.x +
-                              q0.y*q1.y +
-                              q0.z*q1.z +
-                              q0.w*q1.w, -1.0, 1.0));
-    if (fabs(omega) < 1e-10)
-	{
-      omega = 1e-10;
-    }
-    double som = sin(omega);
-    double st0 = sin((1-t) * omega) / som;
-    double st1 = sin(t * omega) / som;
-
-    return Quaternion(q0.x*st0 + q1.x*st1,
-                      q0.y*st0 + q1.y*st1,
-                      q0.z*st0 + q1.z*st1,
-                      q0.w*st0 + q1.w*st1);
-  }
-
-
 };
-
-/**
- * @brief Global operator allowing left-multiply by scalar.
- */
-Quaternion operator*(double s, const Quaternion& q);
 
 } // namespace CGL
 

@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
   // }
 
   // create application
-  Application *app = new Application(config, false);
+  Application *app = new Application(config);
 
   msg("Rendering using " << config.pathtracer_num_threads << " threads");
 

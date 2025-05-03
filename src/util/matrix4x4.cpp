@@ -76,8 +76,6 @@ Matrix4x4 Matrix4x4::operator-(void) const {
 void Matrix4x4::operator+=(const Matrix4x4 &B) {
 
   Matrix4x4 &A(*this);
-  double *Aij = (double *)&A;
-  const double *Bij = (const double *)&B;
 
   A[0] += B[0];
   A[1] += B[1];

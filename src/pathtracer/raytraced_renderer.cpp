@@ -27,13 +27,7 @@ namespace CGL {
  * A pathtracer with BVH accelerator and BVH visualization capabilities.
  */
 RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
-                       size_t max_ray_depth, bool isAccumBounces, size_t ns_area_light,
-                       size_t ns_diff, size_t ns_glsy, size_t ns_refr,
-                       size_t num_threads,
-                       size_t samples_per_batch,
-                       float max_tolerance,
-                       HDRImageBuffer* envmap,
-                       bool direct_hemisphere_sample,
+                       size_t max_ray_depth, size_t ns_area_light,
                        std::string filename,
                        double lensRadius,
                        double focalDistance) {

@@ -14,20 +14,11 @@
 
 namespace CGL {
 
-Application::Application(AppConfig config, bool gl) {
+Application::Application(AppConfig config) {
   renderer = new RaytracedRenderer (
     config.pathtracer_ns_aa,
     config.pathtracer_max_ray_depth,
-    config.pathtracer_accumulate_bounces,
     config.pathtracer_ns_area_light,
-    config.pathtracer_ns_diff,
-    config.pathtracer_ns_glsy,
-    config.pathtracer_ns_refr,
-    config.pathtracer_num_threads,
-    config.pathtracer_samples_per_patch,
-    config.pathtracer_max_tolerance,
-    config.pathtracer_envmap,
-    config.pathtracer_direct_hemisphere_sample,
     config.pathtracer_filename,
     config.pathtracer_lensRadius,
     config.pathtracer_focalDistance
@@ -251,7 +242,7 @@ if (worldTransform.det() < 0.0f) {
     cam.view_dir = view;
     cam.up_dir   = up;
 
-    init_camera(cam, camTransform);
+  init_camera(cam);
 
   }else if(node.light >= 0){
     // adding lights
@@ -284,7 +275,7 @@ if (worldTransform.det() < 0.0f) {
           std::cout << "Cone light intensity: " << intensity << "\n";
           std::cout << "Cone light inner angle: " << innerConeAngle << "\n";
           std::cout << "Cone light outer angle: " << outerConeAngle << "\n";
-          lights.push_back(CudaLight(color * intensity/1000, position, direction, innerConeAngle, outerConeAngle));
+          lights.push_back(CudaLight(color * intensity, position, direction, innerConeAngle, outerConeAngle));
         }
     }
   }
@@ -323,7 +314,7 @@ void Application::ParseMaterial(const tinygltf::Model &model) {
 void Application::ParseTexture(const tinygltf::Model &model) {
   for (const auto &texture : model.textures) {
     const auto &image = model.images[texture.source];
-    const auto &sampler = model.samplers[texture.sampler]; // we will not use this, only need for mipmapping and clamping
+    // const auto &sampler = model.samplers[texture.sampler]; // we will not use this, only need for mipmapping and clamping
 
     CudaTexture ctex;
     ctex.width = image.width;
@@ -382,8 +373,7 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
   }
 }
 
-void Application::init_camera(CameraInfo& cameraInfo,
-                              const Matrix4x4& transform) {
+void Application::init_camera(CameraInfo& cameraInfo) {
   camera.configure(cameraInfo, screenW, screenH);
   canonicalCamera.configure(cameraInfo, screenW, screenH);
 }
