@@ -120,6 +120,7 @@ DEVICE __inline__ Vector3D PathTracer::sample_f(const CudaIntersection &isect,
                                                 Vector3D             *wi,
                                                 double               *pdf,
                                                 double               *occlusion,
+                                                bool                 *is_delta, // is_specular?
                                                 RNGState             &rand_state) {
   // 1) Material & normal
   const CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
@@ -158,11 +159,12 @@ DEVICE __inline__ Vector3D PathTracer::sample_f(const CudaIntersection &isect,
   double alpha = roughness * roughness;
   Vector3D F0  = Vector3D(0.04) * onem + base * metal;
 
-  double P_d = onem;  // diffuse weight
-  double P_s = metal; // specular weight
-  double w   = P_d + P_s;
-  P_d /= w;
-  P_s /= w;
+  // with—compute luminance of F₀:
+  double   F0_avg = (F0.x + F0.y + F0.z) / 3.0;  
+  F0_avg         = clamp_device(F0_avg, 0.0, 1.0);
+
+  double P_s = F0_avg;   // sample specular lobe with Fresnel weight
+  double P_d = 1.0 - P_s;
 
   // 6) Randomly choose lobe
   double u = next_double(rand_state);
@@ -171,7 +173,7 @@ DEVICE __inline__ Vector3D PathTracer::sample_f(const CudaIntersection &isect,
     // sample cosine‑weighted hemisphere
     cosine_weighted_hemisphere_sample_3d(rand_state, wi, pdf);
     *pdf *= P_d;
-
+    *is_delta = false;
     // evaluate BRDF
     Vector3D H     = (wo + *wi).unit();
     double VoH     = max(dot(wo, H), 0.0);
@@ -204,6 +206,7 @@ DEVICE __inline__ Vector3D PathTracer::sample_f(const CudaIntersection &isect,
     double pdf_H = D * NoH;
     double pdf_w = pdf_H / (4.0 * VoH);
     *pdf = pdf_w * P_s;
+    *is_delta = true;
 
     // (d) evaluate microfacet BRDF
     double NoL = max(dot(N, *wi), 0.0);
@@ -294,8 +297,9 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
 
   Vector3D wi_bsdf;
   double   pdfB;
+  bool  is_delta;
   Vector3D f_bsdf = sample_f(isect, w_out, &wi_bsdf, &pdfB,
-                             &occlusion, rand_states[x + y * sampleBuffer.w]);
+                             &occlusion, &is_delta, rand_states[x + y * sampleBuffer.w]);
   double cosNL = fmax(dot(isect.n, wi_bsdf), 0.0);
 
   if (pdfB > 0 && cosNL > 0) {
@@ -364,7 +368,9 @@ DEVICE Vector3D PathTracer::at_least_one_bounce_radiance(Ray& r, const CudaInter
         Vector3D wi;
         double pdf;
         double occlusion = 1.0;
-        Vector3D fcos = occlusion * sample_f(isect, w_out, &wi, &pdf, &occlusion, rand_states[idx]) * abs_cos_theta(wi);
+        bool is_delta = false;
+        Vector3D fcos = sample_f(isect, w_out, &wi, &pdf, &occlusion, &is_delta, rand_states[idx]) * abs_cos_theta(wi);
+        fcos *= occlusion;
         if (pdf <= 0.0)
             break;
 
@@ -394,6 +400,7 @@ DEVICE Vector3D PathTracer::at_least_one_bounce_radiance(Ray& r, const CudaInter
             s->n_s   = bounce_isect.n;
             s->pdf   = pdf;
             s->fcos  = fcos;
+            s->is_delta = is_delta;
         }
 
         // prepare for next iteration
@@ -467,53 +474,53 @@ DEVICE void PathTracer::temporal_resampling(uint16_t x, uint16_t y) {
   R.W = R.w / (R.M * p_hat(R.z));
 
   temporalReservoirBuffer[x + y * sampleBuffer.w] = R;
-  spatialReservoirBuffer[x + y * sampleBuffer.w] = R;
 }
 
 DEVICE void PathTracer::spatial_resampling(uint16_t x, uint16_t y) {
 
-  const uint16_t neighbouring_pixel_radius = floor(0.1 * min(sampleBuffer.w, sampleBuffer.h));
+  const uint16_t neighbouring_pixel_radius = floor(0.2 * min(sampleBuffer.w, sampleBuffer.h));
 
-  Reservoir Rs = spatialReservoirBuffer[x + y * sampleBuffer.w];
-  Rs.clear();
+  Reservoir Rs = temporalReservoirBuffer[x + y * sampleBuffer.w];
   Sample q = initialSampleBuffer[x + y * sampleBuffer.w];
-  RNGState rand_state = rand_states[x + y * sampleBuffer.w];
-  const uint8_t max_neighbouring_samples = 9; // ReSTIR GI paper value without temporal sampling
-  for (uint8_t s = 0; s < max_neighbouring_samples; s++) {
-    // Randomly choose a neighbor pixel qn
-    int window = 2 * neighbouring_pixel_radius + 1;
-    uint16_t sample_x = x + static_cast<int>(next_double(rand_state) * window) - neighbouring_pixel_radius;
-    uint16_t sample_y = y + static_cast<int>(next_double(rand_state) * window) - neighbouring_pixel_radius;
+  if (true) {
+    RNGState rand_state = rand_states[x + y * sampleBuffer.w];
+    const uint8_t max_neighbouring_samples = 9; // ReSTIR GI paper value without temporal sampling
+    for (uint8_t s = 0; s < max_neighbouring_samples; s++) {
+      // Randomly choose a neighbor pixel qn
+      int window = 2 * neighbouring_pixel_radius + 1;
+      uint16_t sample_x = x + static_cast<int>(next_double(rand_state) * window) - neighbouring_pixel_radius;
+      uint16_t sample_y = y + static_cast<int>(next_double(rand_state) * window) - neighbouring_pixel_radius;
 
-    // Ensure the sample is within the frame buffer bounds
-    if (sample_x >= sampleBuffer.w || sample_y >= sampleBuffer.h) continue;
+      // Ensure the sample is within the frame buffer bounds
+      if (sample_x >= sampleBuffer.w || sample_y >= sampleBuffer.h) continue;
 
-    // Retrieve the reservoir from the neighboring pixel
-    Reservoir Rn = temporalReservoirBuffer[sample_x + sample_y * sampleBuffer.w];
-    // Calculate geometric similarity between q and qn
-    if (!are_geometrically_similar(q, Rn.z) || Rn.z.L == Vector3D(0, 0, 0)) continue;
+      // Retrieve the reservoir from the neighboring pixel
+      Reservoir Rn = temporalReservoirBuffer[sample_x + sample_y * sampleBuffer.w];
+      // Calculate geometric similarity between q and qn
+      if (!are_geometrically_similar(q, Rn.z) || Rn.z.L == Vector3D(0, 0, 0)) continue;
 
-    // Calculate |Jqn→q| (Jacobian determinant)
-    double Jqn_to_q = jacobian(Rn.z, q); // Placeholder for actual Jacobian calculation
+      // Calculate |Jqn→q| (Jacobian determinant)
+      double Jqn_to_q = jacobian(Rn.z, q); // Placeholder for actual Jacobian calculation
 
-    // Calculate ˆp′q
-    double p_prime_q = (p_hat(Rn.z)) / Jqn_to_q;
+      // Calculate ˆp′q
+      double p_prime_q = (p_hat(Rn.z)) / Jqn_to_q;
 
-    // visibility test
-    // if neighbour's path's point is invisible from the current path's point, p_prime_q = 0
-    Ray shadow_ray(q.x_v, (Rn.z.x_s - q.x_v).unit());
-    shadow_ray.min_t = EPS_D;
-    shadow_ray.max_t = (Rn.z.x_s - q.x_v).norm() - EPS_D;
-    if (bvh->has_intersect(shadow_ray)) p_prime_q = 0;
+      // visibility test
+      // if neighbour's path's point is invisible from the current path's point, p_prime_q = 0
+      Ray shadow_ray(q.x_v, (Rn.z.x_s - q.x_v).unit());
+      shadow_ray.min_t = EPS_D;
+      shadow_ray.max_t = (Rn.z.x_s - q.x_v).norm() - EPS_D;
+      if (bvh->has_intersect(shadow_ray)) p_prime_q = 0;
 
-    // Merge Rn into the current reservoir
-    Rs.merge(Rn, p_prime_q, rand_state);
+      // Merge Rn into the current reservoir
+      Rs.merge(Rn, p_prime_q, rand_state);
+    }
+
+    double phat = p_hat(Rs.z);
+    Rs.W = Rs.M * phat > 0 ? Rs.w / (Rs.M * phat) : 0;
+    rand_states[x + y * sampleBuffer.w] = rand_state;
   }
-
-  double phat = p_hat(Rs.z);
-  Rs.W = Rs.M * phat > 0 ? Rs.w / (Rs.M * phat) : 0;
   spatialReservoirBuffer[x + y * sampleBuffer.w] = Rs;
-  rand_states[x + y * sampleBuffer.w] = rand_state;
 }
 
 DEVICE void PathTracer::render_final_sample(uint16_t x, uint16_t y) {

@@ -13,6 +13,7 @@ struct Sample {
     double pdf; // pdf of the sample
     Vector3D fcos; // product of bsdf and cosine factor
     Vector3D emittance; // zero + one bounce radiance
+    bool is_delta;    // ← new
 
     DEVICE void clear(){
         x_v = Vector3D(0), n_v = Vector3D(0);

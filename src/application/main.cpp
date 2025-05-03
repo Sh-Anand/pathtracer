@@ -165,8 +165,10 @@ int main(int argc, char **argv) {
 
   app->load_from_gltf_model(model);
 
-  if (w && h)
+  if (w && h) {
+    cout << "Resizing";
     app->resize(w, h);
+  }
 
   if (cam_settings != "")
     app->load_camera(cam_settings);

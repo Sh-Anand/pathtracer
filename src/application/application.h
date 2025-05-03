@@ -125,7 +125,7 @@ class Application {
     renderer->copy_host_device_pt(lights, bsdfs, textures);
 
     for(size_t i = 0; i < num_images; ++i){
-      std::cout << 'Rendering image: ' << i << std::endl;
+      std::cout << "Rendering image: " << i << std::endl;
       std::ostringstream oss;
       oss << std::setw(4) << std::setfill('0') << i;
       auto filename_per_image = name + oss.str() + dot_extension;

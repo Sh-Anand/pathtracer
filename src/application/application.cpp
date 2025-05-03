@@ -226,7 +226,7 @@ if (worldTransform.det() < 0.0f) {
             primitives.push_back(cprimitive);
 
             if(bsdfs[cprimitive.bsdf_idx].emissiveStrength > 0.0f) {
-              CudaLight clight(bsdfs[cprimitive.bsdf_idx].emissiveFactor * bsdfs[cprimitive.bsdf_idx].emissiveStrength, cprimitive, vertices);
+              CudaLight clight(bsdfs[cprimitive.bsdf_idx].emissiveFactor * bsdfs[cprimitive.bsdf_idx].emissiveStrength/2, cprimitive, vertices);
               lights.push_back(clight);
             }
         }
@@ -362,7 +362,7 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
     Vector3D target = bbox.centroid();
     canonical_view_distance = bbox.extent.norm() / 2 * 1.5;
 
-    double view_distance = canonical_view_distance * 3;
+    double view_distance = canonical_view_distance * 1.5;
     double min_view_distance = canonical_view_distance / 10.0;
     double max_view_distance = canonical_view_distance * 20.0;
 
@@ -374,8 +374,8 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
                           max_view_distance);
 
     camera.place(target,
-                        acos(cam.view_dir.y) - M_PI / 8,
-                        atan2(cam.view_dir.x, cam.view_dir.z) - M_PI / 8,
+                        acos(cam.view_dir.y),
+                        atan2(cam.view_dir.x, cam.view_dir.z),
                 view_distance,
                 min_view_distance,
                 max_view_distance);

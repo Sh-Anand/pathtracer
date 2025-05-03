@@ -42,6 +42,7 @@ namespace CGL {
                                                 Vector3D *wi,
                                                 double *pdf,
                                                 double *occlusion,
+                                                bool   *is_delta,
                                                 RNGState &rand_state);
         DEVICE __inline__ double bsdf_pdf(const CudaIntersection &isect,
                                   const Vector3D &wo,
