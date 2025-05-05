@@ -17,6 +17,9 @@ PathTracer::PathTracer() {
   tm_level = 1.0f;
   tm_key = 0.18;
   tm_wht = 5.0f;
+  ns_area_light    = 32;   // <<< up from 1 → smoother direct light
+  samplesPerBatch  = 32;   // <<< adaptive sampling granularity
+  maxTolerance     = 0.02; // <<< stricter error threshold
 }
 
 PathTracer::~PathTracer() {
@@ -69,13 +72,13 @@ PathTracer::estimate_direct_lighting_hemisphere(const Ray &r,
   // same number of samples for clarity of comparison.
   int num_samples = scene->lights.size() * ns_area_light;
   Vector3D L_out = Vector3D(0, 0, 0);
-  Intersection light_isect;
 
   for (int i = 0; i < num_samples; i++) {
     Vector3D wi = hemisphereSampler->get_sample();
     Ray shadow_ray = Ray(hit_p, o2w * wi);
     shadow_ray.min_t = EPS_D;
 
+    Intersection light_isect;
     if (bvh->intersect(shadow_ray, &light_isect)) {
       Vector3D light_L = light_isect.bsdf->get_emission();
       L_out += isect.bsdf->f(w_out, wi) * light_L * dot(wi, w2o*isect.n) * 2 * PI;
@@ -165,7 +168,6 @@ Vector3D PathTracer::at_least_one_bounce_radiance(const Ray &r,
 
   Vector3D hit_p = r.o + r.d * isect.t;
   Vector3D w_out = w2o * (-r.d);
-  Vector3D L_out(0, 0, 0);
 
   // TODO: Part 4, Task 2
   // Returns the one bounce radiance + radiance from extra bounces at this point.
@@ -180,18 +182,41 @@ Vector3D PathTracer::at_least_one_bounce_radiance(const Ray &r,
   Vector3D wi;
   double pdf;
   Vector3D f = isect.bsdf->sample_f(w_out, &wi, &pdf);
+  if (pdf == 0.0 || (f.x == 0.0 && f.y == 0.0 && f.z == 0.0)) {
+    return one_bounce_radiance(r, isect);
+  }
   
   Ray bounce_ray = Ray(hit_p, o2w * wi);
   bounce_ray.min_t = EPS_D;
   bounce_ray.depth = r.depth + 1;
 
+  Vector3D throughput = f * abs_cos_theta(wi) / pdf;
+
+  const double CLAMP = 10.0;                    // firefly clamp
+  double max_c = std::max(throughput.x, std::max(throughput.y, throughput.z));
+  if (max_c > CLAMP) throughput *= CLAMP / max_c;
+
+  if (r.depth == 1 && isect.bsdf->is_delta()) {
+    const double FIRST_CLAMP = 4.0;
+    double m = std::max(throughput.x, std::max(throughput.y, throughput.z));
+    if (m > FIRST_CLAMP) throughput *= FIRST_CLAMP / m;
+  }
+
+  Vector3D L_out;
   Intersection bounce_isect;
   if (bvh->intersect(bounce_ray, &bounce_isect)) {
-    Vector3D bounce_radiance = at_least_one_bounce_radiance(bounce_ray, bounce_isect);
+    Vector3D Le = bounce_isect.bsdf->get_emission();
+    if (Le.x != 0 || Le.y != 0 || Le.z != 0) {          // <-- was “!= Vector3D()”
+        return throughput * Le;                                   // done – hit a light
+    }
+    if (isect.bsdf->is_delta() && !bounce_isect.bsdf->is_delta()) {
+      L_out += throughput * estimate_direct_lighting_importance(bounce_ray, bounce_isect);
+    }
+    Vector3D bounce_rad = at_least_one_bounce_radiance(bounce_ray, bounce_isect);
     if (isAccumBounces) {
-      L_out = one_bounce_radiance(r, isect) + f * abs_cos_theta(wi) * bounce_radiance / pdf / RRT;
+      L_out += one_bounce_radiance(r, isect) + throughput * bounce_rad / RRT;
     } else {
-      L_out = f * abs_cos_theta(wi) * bounce_radiance / pdf / RRT;
+      L_out += throughput * bounce_rad / RRT;
     }
   } else {
     L_out = one_bounce_radiance(r, isect);

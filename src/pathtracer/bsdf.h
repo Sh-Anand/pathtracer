@@ -42,8 +42,15 @@ inline double cos_phi(const Vector3D w) {
 
 inline double sin_phi(const Vector3D w) {
   double sinTheta = sin_theta(w);
-  if (sinTheta) return 0.0;
+  if (sinTheta == 0.0) return 0.0;
   return clamp(w.y / sinTheta, -1.0, 1.0);
+}
+
+inline double tan_theta(const Vector3D w) {
+  double cos_t = cos_theta(w);
+  if (cos_t == 0)
+    return 0;
+  return sin_theta(w) / cos_t;
 }
 
 void make_coord_space(Matrix3x3& o2w, const Vector3D n);
@@ -172,7 +179,7 @@ public:
     return 0.5 * (erf(a) - 1.0 + exp(-a * a) / (a * PI));
   }
 
-  Vector3D F(const Vector3D wi);
+  Vector3D F(const Vector3D wi, const Vector3D h);
 
   double G(const Vector3D wo, const Vector3D wi);
 
