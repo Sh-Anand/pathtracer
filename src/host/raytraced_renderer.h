@@ -8,18 +8,12 @@
 
 
 #include "scene/bvh.h"
-#include "pathtracer/camera.h"
+#include "scene/camera.h"
 #include "util/image.h"
-#include "pathtracer/intersection.h"
-#include "pathtracer/texture.h"
+#include "target/intersection.h"
+#include "scene/texture.h"
 
-using CGL::SceneObjects::BVHNode;
-using CGL::CudaBSDF;
-using CGL::SceneObjects::CudaPrimitive;
-
-#include "pathtracer.h"
-
-namespace CGL {
+#include "target/pathtracer.h"
 
 /**
  * A pathtracer with BVH accelerator and BVH visualization capabilities.
@@ -98,9 +92,8 @@ public:
   void copy_host_device_pt(std::vector<CudaLight> &lights,
                            std::vector<CudaBSDF> &bsdfs, std::vector<CudaTexture> &textures);
 
-
-  PathTracer *pt;
-  PathTracer *pt_cuda;
+  PathTracer *pt_host;
+  PathTracer *pt_target;
 
   // Configurables //
 
@@ -111,14 +104,12 @@ public:
 
   // Components //
 
-  BVHCuda* bvh_cuda;             ///< BVH accelerator aggregate for cuda
+  BVHCuda* bvh;             ///< BVH accelerator aggregate for cuda
   ImageBuffer frameBuffer;       ///< frame buffer
 
   std::string filename;
 
   bool debug;
 };
-
-}  // namespace CGL
 
 #endif  // CGL_RAYTRACER_H

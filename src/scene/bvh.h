@@ -2,10 +2,9 @@
 #define CGL_BVH_H
 
 #include "primitive.h"
+#include "scene/bbox.h"
 
 #include <vector>
-
-namespace CGL { namespace SceneObjects {
 
 /**
  * A node in the BVH accelerator aggregate.
@@ -18,32 +17,30 @@ namespace CGL { namespace SceneObjects {
  * constructing the BVH.
  */
 struct BVHNode {
-  BBox bb;        ///< bounding box of the node
-  bool leaf;
+  Vector3D bbmin, bbmax;        ///< bounding box of the node
   uint32_t start;
   uint32_t end;
   uint32_t l, r;
 
-  BVHNode(BBox b) : bb(b) { }
+  BVHNode(Vector3D bbmin, Vector3D bbmax) : bbmin(bbmin), bbmax(bbmax), start(0), end(0) { }
 };
 
 // CUDA BVH
 class BVHCuda {
   public:
-    BVHCuda(std::vector<CudaPrimitive> &primitives_vec, std::vector<Vector3D> &vertices, std::vector<Vector3D> &normals, std::vector<Vector2D> &texcoords, std::vector<Vector4D> &tangents, bool debug, size_t max_leaf_size = 4);
+    BVHCuda(std::vector<CudaPrimitive> &primitives_vec,
+            const std::vector<Vector3D> &vertices, 
+            const std::vector<Vector3D> &normals, 
+            const std::vector<Vector2D> &texcoords,
+            const std::vector<Vector4D> &tangents,
+            bool debug,
+            size_t max_leaf_size = 2);
   
     ~BVHCuda();
     
-    DEVICE bool intersect(Ray& r, CudaIntersection* i) const {
-      return intersect(r, i, root);
-    }
+    DEVICE bool intersect(Ray& r, CudaIntersection* i) const;
 
-    DEVICE bool has_intersect(Ray& r) const {
-      return has_intersect(r, root);
-    }
-
-    DEVICE bool intersect(Ray& r, CudaIntersection* i, uint32_t node) const;
-    DEVICE bool has_intersect(Ray& r, uint32_t node) const;
+    DEVICE bool has_intersect(Ray& r) const;
 
     
     CudaPrimitive *primitives;
@@ -51,14 +48,14 @@ class BVHCuda {
     Vector3D *vertices;
     Vector3D *normals;
     Vector2D *texcoords;
-    Vector4D *tangets;
+    Vector4D *tangents;
     uint32_t root;
 
     int construct_bvh(size_t start, size_t end, size_t max_leaf_size, std::vector<uint32_t> &primitives, std::vector<BBox> &bboxes, std::vector<BVHNode>& nodes);
   
 };
 
-} // namespace SceneObjects
-} // namespace CGL
+
+
 
 #endif // CGL_BVH_H

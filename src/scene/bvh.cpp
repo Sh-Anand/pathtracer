@@ -1,12 +1,10 @@
 #include "bvh.h"
 
 #include <iostream>
+#include <cfloat>
 #include <stack>
 
 using namespace std;
-
-namespace CGL {
-namespace SceneObjects {
 
 BVHCuda::~BVHCuda() {
   free(primitives);
@@ -18,104 +16,96 @@ int BVHCuda::construct_bvh(size_t start, size_t end,
                            std::vector<uint32_t> &prims,
                            std::vector<BBox> &bboxes,
                            std::vector<BVHNode> &nodes) {
-  // 1) Compute object and centroid bounds
+  // 1) Compute object bounds and centroid bounds
   BBox node_bbox, cent_bbox;
   for (size_t i = start; i < end; ++i) {
-    BBox b = bboxes[prims[i]];
+    BBox const &b = bboxes[prims[i]];
     node_bbox.expand(b);
     cent_bbox.expand(b.centroid());
   }
 
+  // Create this node
   int idx = nodes.size();
-  nodes.emplace_back(node_bbox);
+  nodes.emplace_back(node_bbox.min, node_bbox.max);
 
   size_t n = end - start;
   if (n <= max_leaf_size) {
-    // leaf
-    nodes[idx].leaf  = true;
+    // Make a leaf
     nodes[idx].start = start;
     nodes[idx].end   = end;
     nodes[idx].l = nodes[idx].r = 0;
     return idx;
   }
 
-  // 2) Choose split axis = longest centroid axis
+  // 2) Choose split axis = longest axis of centroid bounds
   Vector3D e = cent_bbox.extent;
   int axis = (e.x > e.y && e.x > e.z) ? 0
            : (e.y > e.z)               ? 1
                                         : 2;
 
-  // 3) Bucket SAH
-  const int B = 16;
-  struct Bucket { int count = 0; BBox bbox; } buckets[B];
-  float minA = cent_bbox.min[axis], maxA = cent_bbox.max[axis];
-  float invBin = (maxA>minA) ? B/(maxA-minA) : 0;
-
-  // fill buckets
+  // 3) Gather centroids and sort exactly by centroid
+  std::vector<std::pair<float,uint32_t>> centroids;
+  centroids.reserve(n);
   for (size_t i = start; i < end; ++i) {
-    float c = bboxes[prims[i]].centroid()[axis];
-    int b = std::min(int((c - minA)*invBin), B-1);
-    buckets[b].count++;
-    buckets[b].bbox.expand(bboxes[prims[i]]);
+    auto p = prims[i];
+    float c = bboxes[p].centroid()[axis];
+    centroids.emplace_back(c, p);
+  }
+  std::sort(centroids.begin(), centroids.end(),
+            [](auto &a, auto &b){ return a.first < b.first; });
+
+  // 4) Compute prefix/suffix bounds for all split positions
+  std::vector<BBox> leftBBox(n), rightBBox(n);
+  leftBBox[0] = bboxes[centroids[0].second];
+  for (size_t i = 1; i < n; ++i) {
+    leftBBox[i] = leftBBox[i-1];
+    leftBBox[i].expand(bboxes[centroids[i].second]);
+  }
+  rightBBox[n-1] = bboxes[centroids[n-1].second];
+  for (int i = int(n)-2; i >= 0; --i) {
+    rightBBox[i] = rightBBox[i+1];
+    rightBBox[i].expand(bboxes[centroids[i].second]);
   }
 
-  // prefix sums for cost
-  float leftCount[B-1]={}, rightCount[B-1]={};
-  BBox   leftBBox[B-1], rightBBox[B-1];
-  // left side
-  int cnt=0;
-  for (int i=0; i<B-1; ++i) {
-    cnt += buckets[i].count;
-    leftCount[i] = cnt;
-    if (i==0) leftBBox[i] = buckets[i].bbox;
-    else      { leftBBox[i] = leftBBox[i-1]; leftBBox[i].expand(buckets[i].bbox); }
-  }
-  // right side
-  cnt=0;
-  for (int i=B-1; i>0; --i) {
-    cnt += buckets[i].count;
-    rightCount[i-1] = cnt;
-    if (i==B-1) rightBBox[i-1] = buckets[i].bbox;
-    else        { rightBBox[i-1] = rightBBox[i]; rightBBox[i-1].expand(buckets[i].bbox); }
-  }
-
-  // evaluate SAH cost for each split
-  float invSA = 1.0/node_bbox.surface_area();
-  float bestCost = 1e300;
-  int    bestB   = -1;
-  for (int i=0; i<B-1; ++i) {
-    float cost =  /* travCost=1 */   1
-                + /* isectCost=1 */ ( leftCount[i]*leftBBox[i].surface_area()
-                                     + rightCount[i]*rightBBox[i].surface_area())
-                  * invSA;
+  // 5) Evaluate SAH cost at each possible split
+  float invSA = 1.0f / node_bbox.surface_area();
+  float bestCost = FLT_MAX;
+  size_t bestSplit = 0;
+  // we can only split between [1..n-1]
+  for (size_t i = 1; i < n; ++i) {
+    float leftArea  = leftBBox[i-1].surface_area();
+    float rightArea = rightBBox[i].surface_area();
+    float cost = 1.0f                                     // traversal cost
+               + (i * leftArea + (n - i) * rightArea)    // intersection cost
+                 * invSA;
     if (cost < bestCost) {
-      bestCost = cost;
-      bestB    = i;
+      bestCost   = cost;
+      bestSplit  = i;
     }
   }
 
-  // 4) Partition primitives at that bucket boundary
-  float splitPos = minA + (bestB+1)/float(B)*(maxA-minA);
-  auto midIt = std::partition(prims.begin()+start,
-                              prims.begin()+end,
-                              [&](const uint32_t &p){
-                                return bboxes[p].centroid()[axis] < splitPos;
-                              });
-  size_t mid = midIt - prims.begin();
-  // fallback if degenerate
-  if (mid==start || mid==end)
+  // 6) Partition primitives according to the exact sort
+  size_t mid = start + bestSplit;
+  for (size_t i = 0; i < bestSplit; ++i)
+    prims[start + i] = centroids[i].second;
+  for (size_t i = bestSplit; i < n; ++i)
+    prims[start + i] = centroids[i].second;
+
+  // Fallback if degenerate
+  if (bestSplit == 0 || bestSplit == n) {
     mid = start + n/2;
+  }
 
-  // 5) recurse
-  int left  = construct_bvh(start, mid, max_leaf_size, prims, bboxes, nodes);
-  int right = construct_bvh(mid,   end, max_leaf_size, prims, bboxes, nodes);
+  // 7) Recurse on each side
+  int leftIdx  = construct_bvh(start, mid, max_leaf_size, prims, bboxes, nodes);
+  int rightIdx = construct_bvh(mid,   end, max_leaf_size, prims, bboxes, nodes);
 
-  nodes[idx].leaf = false;
-  nodes[idx].l    = left;
-  nodes[idx].r    = right;
+  nodes[idx].l = leftIdx;
+  nodes[idx].r = rightIdx;
   return idx;
 }
 
 
-} // namespace SceneObjects
-} // namespace CGL
+
+
+

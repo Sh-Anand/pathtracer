@@ -7,9 +7,7 @@
 #include "util/vector3D.h"
 #include "util/vector4D.h"
 
-#include "pathtracer/bsdf.h"
-
-namespace CGL {
+#include "scene/bsdf.h"
 
 struct CudaIntersection {
   DEVICE CudaIntersection() {
@@ -26,7 +24,5 @@ struct CudaIntersection {
   Vector4D tangent;
   int bsdf_idx;
 };
-
-} // namespace CGL
 
 #endif // CGL_INTERSECT_H

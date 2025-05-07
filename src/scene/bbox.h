@@ -4,16 +4,58 @@
 #include <utility>
 #include <algorithm>
 
-#include "pathtracer/ray.h"
+#include "scene/ray.h"
 
-namespace CGL {
+HOST_DEVICE inline bool intersect_bbox(
+    Ray &r,
+    const Vector3D &mn,
+    const Vector3D &mx,
+    float &t0,
+    float &t1) {
 
-/**
- * Axis-aligned bounding box.
- * An AABB is given by two positions in space, the min and the max. An addition
- * component, the extent of the bounding box is stored as it is useful in a lot
- * of the operations on bounding boxes.
- */
+  // Precompute
+  const float inv_dx = r.inv_d.x;
+  const float inv_dy = r.inv_d.y;
+  const float inv_dz = r.inv_d.z;
+
+  // X slab
+  float tx1 = (mn.x - r.o.x) * inv_dx;
+  float tx2 = (mx.x - r.o.x) * inv_dx;
+  float tmin = fminf(tx1, tx2);
+  float tmax = fmaxf(tx1, tx2);
+  // early exit if miss or outside [min_t,max_t]
+  if (tmax < r.min_t || tmin > r.max_t || tmin > tmax) 
+    return false;
+
+  // Y slab
+  float ty1 = (mn.y - r.o.y) * inv_dy;
+  float ty2 = (mx.y - r.o.y) * inv_dy;
+  float tymin = fminf(ty1, ty2);
+  float tymax = fmaxf(ty1, ty2);
+  // tighten interval
+  tmin = fmaxf(tmin, tymin);
+  tmax = fminf(tmax, tymax);
+  // early exit again
+  if (tmax < r.min_t || tmin > r.max_t || tmin > tmax) 
+    return false;
+
+  // Z slab
+  float tz1 = (mn.z - r.o.z) * inv_dz;
+  float tz2 = (mx.z - r.o.z) * inv_dz;
+  float tzmin = fminf(tz1, tz2);
+  float tzmax = fmaxf(tz1, tz2);
+  // final tighten
+  tmin = fmaxf(tmin, tzmin);
+  tmax = fminf(tmax, tzmax);
+  if (tmax < r.min_t || tmin > r.max_t || tmin > tmax) 
+    return false;
+
+  // Hit!
+  t0 = tmin;
+  t1 = tmax;
+  return true;
+}
+
 struct BBox {
 
   Vector3D max;	    ///< min corner of the bounding box
@@ -124,11 +166,9 @@ struct BBox {
    * \param t0 lower bound of intersection time
    * \param t1 upper bound of intersection time
    */
-  HOST_DEVICE bool intersect(Ray& r, float& t0, float& t1) const;
+  HOST_DEVICE bool intersect(Ray& r, float& t0, float& t1) const {
+    return intersect_bbox(r, min, max, t0, t1);
+  }
 };
-
-std::ostream& operator<<(std::ostream& os, const BBox& b);
-
-} // namespace CGL
 
 #endif // CGL_BBOX_H

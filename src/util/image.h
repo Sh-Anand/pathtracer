@@ -9,7 +9,7 @@
 
 #include "util/cuda_defs.h"
 
-namespace CGL {
+
 
 /**
  * Image buffer which stores color space values with RGBA pixel layout using
@@ -206,6 +206,6 @@ struct HDRImageBuffer {
 }; // class HDRImageBuffer
 
 
-} // namespace CGL
+
 
 #endif // CGL_IMAGE_H

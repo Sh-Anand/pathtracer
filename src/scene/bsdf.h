@@ -8,8 +8,6 @@
 
 #include <algorithm>
 
-namespace CGL {
-
 // Helper math functions. Assume all vectors are in unit hemisphere //
 
 inline float clamp (float n, float lower, float upper) {
@@ -60,13 +58,12 @@ struct CudaBSDF {
     normal_idx(-1),
     baseColor(1.0),
     metallic(0.0),
-    roughness(0.0),
-    emissiveStrength(1.0) {}
+    roughness(0.0)
+    {}
   Vector4D baseColor;      // albedo
   float   metallic;       // [0,1]
   float   roughness;      // [0,1]
-  Vector3D emissiveFactor; // KHR_materials_emissive_strength
-  float   emissiveStrength; // emission strength
+  Vector3D emission; // KHR_materials_emissive_strength
   float   transmissionFactor; // KHR_materials_transmission
   float   thicknessFactor; // KHR_materials_volume
   bool     hasOcclusionTexture;
@@ -75,7 +72,5 @@ struct CudaBSDF {
   int      orm_idx;
   int      emission_idx;
 };
-
-}  // namespace CGL
 
 #endif  // CGL_STATICSCENE_BSDF_H

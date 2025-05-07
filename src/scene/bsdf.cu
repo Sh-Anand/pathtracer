@@ -1,7 +1,5 @@
 #include "bsdf.h"
 
-namespace CGL {
-
 DEVICE void make_coord_space(Matrix3x3 &o2w, const Vector3D n) {
 
   Vector3D z = Vector3D(n.x, n.y, n.z);
@@ -52,6 +50,4 @@ DEVICE float G_compute(
   float GV      = (2.0 * NoV) / denomV;
   float GL      = (2.0 * NoL) / denomL;
   return GV * GL;
-}
-
 }

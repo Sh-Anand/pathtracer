@@ -3,14 +3,18 @@
 
 #include <iostream>
 
-#include "scene/camera_info.h"
 #include "util/matrix3x3.h"
 
 #include "math.h"
 #include "ray.h"
 
+struct CameraInfo {
 
-namespace CGL {
+	Vector3D view_dir;
+	Vector3D up_dir;
+
+  float hFov, vFov, nClip, fClip;
+};
 
 /**
  * Camera.
@@ -107,13 +111,13 @@ class Camera {
 
 struct CudaCamera {
   CudaCamera () {}
-  CudaCamera (Camera * cam) {
-    hFov = cam->hFov;
-    vFov = cam->vFov;
-    nClip = cam->nClip;
-    fClip = cam->fClip;
-    pos = cam->pos;
-    c2w = cam->c2w;
+  CudaCamera (Camera &cam) {
+    hFov = cam.hFov;
+    vFov = cam.vFov;
+    nClip = cam.nClip;
+    fClip = cam.fClip;
+    pos = cam.pos;
+    c2w = cam.c2w;
   }
   /**
    * Returns a world-space ray from the camera that corresponds to a
@@ -130,7 +134,5 @@ struct CudaCamera {
   Vector3D pos;
   Matrix3x3 c2w;
 };
-
-} // namespace CGL
 
 #endif // CGL_CAMERA_H

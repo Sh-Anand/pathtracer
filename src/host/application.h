@@ -12,26 +12,19 @@
 #include <string>
 #include <vector>
 
-// COLLADA
-#include "scene/camera_info.h"
-
 // RaytracedRenderer
-#include "pathtracer/raytraced_renderer.h"
+#include "raytraced_renderer.h"
 #include "util/image.h"
 
 // Shared modules
-#include "pathtracer/camera.h"
-#include "pathtracer/texture.h"
+#include "scene/camera.h"
+#include "scene/texture.h"
 
 // GLTF parser
 #include "util/tiny_gltf.h"
 #include "util/vector3D.h"
 
 using namespace std;
-
-namespace CGL {
-
-  class VisualDebugger;
 
 struct AppConfig {
 
@@ -180,6 +173,4 @@ private:
 
 }; // class Application
 
-} // namespace CGL
-
-  #endif // CGL_APPLICATION_H
+#endif // CGL_APPLICATION_H

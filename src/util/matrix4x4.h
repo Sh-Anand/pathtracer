@@ -5,8 +5,6 @@
 
 #include <iosfwd>
 
-namespace CGL {
-
 /**
  * Defines a 4x4 matrix.
  * 4x4 matrices are also extremely useful in computer graphics.
@@ -143,6 +141,6 @@ Matrix4x4 operator*( float c, const Matrix4x4& A );
 // prints entries
 std::ostream& operator<<( std::ostream& os, const Matrix4x4& A );
 
-} // namespace CGL
+
 
 #endif // CGL_MATRIX4X4_H

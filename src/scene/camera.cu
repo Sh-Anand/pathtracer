@@ -1,6 +1,5 @@
 #include "camera.h"
 
-namespace CGL {
 /**
  * This function generates a ray from camera perspective, passing through camera / sensor plane (x,y)
  */
@@ -23,6 +22,4 @@ DEVICE Ray CudaCamera::generate_ray(float x, float y) {
   camera_ray.min_t = nClip; camera_ray.max_t = fClip;
 
   return camera_ray;
-}
-
 }

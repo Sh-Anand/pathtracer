@@ -6,7 +6,7 @@
 #include <ostream>
 #include <cmath>
 
-namespace CGL {
+
 
 /**
  * Defines 4D standard vectors.
@@ -187,6 +187,6 @@ HOST_DEVICE inline float dot( const Vector4D& u, const Vector4D& v ) {
 // prints components
 std::ostream& operator<<( std::ostream& os, const Vector4D& v );
 
-} // namespace CGL
+
 
 #endif // CGL_VECTOR3D_H

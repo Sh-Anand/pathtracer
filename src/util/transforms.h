@@ -4,11 +4,6 @@
 #include "vector3D.h"
 #include "matrix4x4.h"
 
-namespace CGL {
-
-Vector3D operator*(const Matrix4x4 &m, const Vector3D &v);
-
-
 Matrix4x4 translate(float dx, float dy, float dz){
     return Matrix4x4(
 		1, 0, 0, dx,
@@ -25,11 +20,6 @@ Matrix4x4 scale(float sx, float sy, float sz){
         0,    0,  sz,   0, 
         0,    0,   0,   1
     );
-}
-
-
-// Matrix4x4 rotate(float deg);
-
 }
 
 

@@ -1,6 +1,8 @@
 #include "raytraced_renderer.h"
-#include "bsdf.h"
-#include "pathtracer/ray.h"
+#include "scene/bsdf.h"
+#include "scene/camera.h"
+#include "scene/light.h"
+#include "scene/ray.h"
 
 #include <stack>
 #include <random>
@@ -11,14 +13,8 @@
 #include "util/matrix3x3.h"
 #include "util/lodepng.h"
 
-#include "scene/light.h"
-
-using namespace CGL::SceneObjects;
-
 using std::min;
 using std::max;
-
-namespace CGL {
 
 /**
  * Raytraced Renderer is a render controller that in this case.
@@ -32,11 +28,11 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
                        float lensRadius,
                        float focalDistance,
                        bool debug) {
-  pt = new PathTracer();
+  pt_host = new PathTracer();
 
-  pt->ns_aa = ns_aa;                                        // Number of samples per pixel
-  pt->max_ray_depth = max_ray_depth;                        // Maximum recursion ray depth
-  pt->ns_area_light = ns_area_light;                        // Number of samples for area light
+  pt_host->ns_aa = ns_aa;                                        // Number of samples per pixel
+  pt_host->max_ray_depth = max_ray_depth;                        // Maximum recursion ray depth
+  pt_host->ns_area_light = ns_area_light;                        // Number of samples for area light
 
   this->lensRadius = lensRadius;
   this->focalDistance = focalDistance;
@@ -53,7 +49,7 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
  * Frees all the internal resources used by the pathtracer.
  */
 RaytracedRenderer::~RaytracedRenderer() {
-  delete pt;
+  delete pt_host;
 }
 
 /**
@@ -75,7 +71,7 @@ void RaytracedRenderer::set_camera(Camera *camera) {
 void RaytracedRenderer::set_frame_size(size_t width, size_t height) {
   frameBuffer.resize(width, height);
 
-  pt->set_frame_size(width, height);
+  pt_host->sampleBuffer.resize(width, height);
 }
 
 bool RaytracedRenderer::has_valid_configuration() {
@@ -83,8 +79,8 @@ bool RaytracedRenderer::has_valid_configuration() {
 }
 
 void RaytracedRenderer::set_cuda_camera(){
-  pt->set_frame_size(frameBuffer.w, frameBuffer.h);
-  pt->camera = CudaCamera(camera);
+  pt_host->sampleBuffer.resize(frameBuffer.w, frameBuffer.h);
+  pt_host->camera = CudaCamera(*camera);
 }
 
 void RaytracedRenderer::render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy) {
@@ -135,5 +131,3 @@ void RaytracedRenderer::save_image(std::string filename) {
   
   delete[] frame_out;
 }
-
-}  // namespace CGL

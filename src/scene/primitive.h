@@ -1,11 +1,9 @@
 #ifndef CGL_STATICSCENE_PRIMITIVE_H
 #define CGL_STATICSCENE_PRIMITIVE_H
 
-#include "pathtracer/intersection.h"
+#include "target/intersection.h"
 #include "scene/bbox.h"
 #include <cstddef>
-
-namespace CGL { namespace SceneObjects {
 
 struct CudaPrimitive {
 
@@ -18,9 +16,5 @@ struct CudaPrimitive {
   
   int bsdf_idx;
 };
-
-
-} // namespace SceneObjects
-} // namespace CGL
 
 #endif //CGL_STATICSCENE_PRIMITIVE_H

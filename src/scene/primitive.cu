@@ -1,7 +1,5 @@
 #include "primitive.h"
 
-namespace CGL { namespace SceneObjects {
-
 DEVICE bool test_intersect(Ray &r, const Vector3D &p1,
                   const Vector3D &p2, const Vector3D &p3, float &t, float &u,
                   float &v) {
@@ -52,7 +50,4 @@ DEVICE bool CudaPrimitive::has_intersect(Ray &r, const Vector3D * vertices, floa
   }
 
   return true;
-}
-
-}
 }

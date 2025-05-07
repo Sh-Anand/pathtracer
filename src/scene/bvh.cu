@@ -1,15 +1,22 @@
 #include "bvh.h"
 #include <cstddef>
 
-namespace CGL { namespace SceneObjects {
+ 
 
-BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec, std::vector<Vector3D> &vertices, std::vector<Vector3D> &normals, std::vector<Vector2D> &texcoords, std::vector<Vector4D> &tangets, bool debug, size_t max_leaf_size) {
+BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec,
+                const std::vector<Vector3D> &vertices, 
+                const std::vector<Vector3D> &normals, 
+                const std::vector<Vector2D> &texcoords,
+                const std::vector<Vector4D> &tangents,
+                bool debug,
+                size_t max_leaf_size) {
+
   DEBUG(debug,
   std::cout << "Building BVHCuda" << std::endl;
   std::cout << "Vertices size: " << vertices.size() << std::endl;
   std::cout << "Normals size: " << normals.size() << std::endl;
   std::cout << "Texcoords size: " << texcoords.size() << std::endl;
-  std::cout << "Tangets size: " << tangets.size() << std::endl;
+  std::cout << "Tangets size: " << tangents.size() << std::endl;
   std::cout << "Primitives size: " << primitives_vec.size() << std::endl;
   )
 
@@ -41,14 +48,14 @@ BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec, std::vector<Vector3
   size_t num_vertices = vertices.size();
   size_t num_normals = normals.size();
   size_t num_texcoords = texcoords.size();
-  size_t num_tangets = tangets.size();
+  size_t num_tangents = tangents.size();
 
   CUDA_ERR(cudaMalloc(&primitives, num_primitives * sizeof(CudaPrimitive)));
   CUDA_ERR(cudaMalloc(&nodes, num_nodes * sizeof(BVHNode)));
   CUDA_ERR(cudaMalloc(&this->vertices, num_vertices * sizeof(Vector3D)));
   CUDA_ERR(cudaMalloc(&this->normals, num_normals * sizeof(Vector3D)));
   CUDA_ERR(cudaMalloc(&this->texcoords, num_texcoords * sizeof(Vector2D)));
-  CUDA_ERR(cudaMalloc(&this->tangets, num_tangets * sizeof(Vector4D)));
+  CUDA_ERR(cudaMalloc(&this->tangents, num_tangents * sizeof(Vector4D)));
 
 
   CUDA_ERR(cudaMemcpy(primitives, primitives_vec.data(), num_primitives * sizeof(CudaPrimitive), cudaMemcpyHostToDevice));
@@ -56,19 +63,19 @@ BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec, std::vector<Vector3
   CUDA_ERR(cudaMemcpy(this->vertices, vertices.data(), num_vertices * sizeof(Vector3D), cudaMemcpyHostToDevice));
   CUDA_ERR(cudaMemcpy(this->normals, normals.data(), num_normals * sizeof(Vector3D), cudaMemcpyHostToDevice));
   CUDA_ERR(cudaMemcpy(this->texcoords, texcoords.data(), num_texcoords * sizeof(Vector2D), cudaMemcpyHostToDevice));
-  CUDA_ERR(cudaMemcpy(this->tangets, tangets.data(), num_tangets * sizeof(Vector4D), cudaMemcpyHostToDevice));
+  CUDA_ERR(cudaMemcpy(this->tangents, tangents.data(), num_tangents * sizeof(Vector4D), cudaMemcpyHostToDevice));
 
   DEBUG(debug,
   std::cout<< "BVHCuda Built: " << num_nodes << " nodes" << std::endl;
   )
 }
 
-DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i, uint32_t root_idx) const {
-  constexpr int STACK_SIZE = 64;
+DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i) const {
+  constexpr int STACK_SIZE = 20;
   uint32_t stack[STACK_SIZE];
   int stack_ptr = 0;
 
-  stack[stack_ptr++] = root_idx;
+  stack[stack_ptr++] = 0;
   bool hit = false;
 
   while (stack_ptr > 0) {
@@ -76,12 +83,12 @@ DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i, uint32_t root_idx)
     const BVHNode &node = nodes[idx];
 
     float t0, t1;
-    if (!node.bb.intersect(ray, t0, t1)) continue;
+    if (!intersect_bbox(ray, node.bbmin, node.bbmax, t0, t1)) continue;
 
-    if (node.leaf) {
+    if (node.start != node.end) {
       CudaIntersection tmp;
       for (uint32_t p = node.start; p < node.end; p++) {
-          if (primitives[p].intersect(ray, &tmp, vertices, normals, texcoords, tangets) && tmp.t < i->t) {
+          if (primitives[p].intersect(ray, &tmp, vertices, normals, texcoords, tangents) && tmp.t < i->t) {
             hit = true;
             *i = tmp;
           }
@@ -97,13 +104,13 @@ DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i, uint32_t root_idx)
   return hit;
 }
 
-DEVICE bool BVHCuda::has_intersect(Ray &ray, uint32_t root_idx) const {
-  constexpr int STACK_SIZE = 64;
+DEVICE bool BVHCuda::has_intersect(Ray &ray) const {
+  constexpr int STACK_SIZE = 20;
   uint32_t stack[STACK_SIZE];
   int stack_ptr = 0;
 
   // start with the root
-  stack[stack_ptr++] = root_idx;
+  stack[stack_ptr++] = 0;
   
   float t;
   // traverse until stack empty
@@ -113,10 +120,10 @@ DEVICE bool BVHCuda::has_intersect(Ray &ray, uint32_t root_idx) const {
 
       // 1) bounding‑box test
       float t0, t1;
-      if (!node.bb.intersect(ray, t0, t1))
+      if (!intersect_bbox(ray, node.bbmin, node.bbmax, t0, t1))
           continue;
 
-      if (node.leaf) {
+      if (node.start != node.end) {
           // 2) test each primitive in the leaf
           CudaIntersection tmp;
           for (uint32_t p = node.start; p < node.end; ++p) {
@@ -134,7 +141,4 @@ DEVICE bool BVHCuda::has_intersect(Ray &ray, uint32_t root_idx) const {
   }
 
   return false;
-}
-
-}
 }

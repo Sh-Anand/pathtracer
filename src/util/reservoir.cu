@@ -1,7 +1,5 @@
 #include "reservoir.h"
 
-namespace CGL {
-
 DEVICE void Reservoir::update(Sample s_new, float w_new, RNGState &rand_state) {
     w = w + w_new;
     M = M + 1;  
@@ -21,6 +19,4 @@ DEVICE void Reservoir::clear(){
     M = 0;
     W = 0;
     z.clear();
-}
-
 }

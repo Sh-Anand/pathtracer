@@ -14,8 +14,6 @@ using std::min;
 using std::ifstream;
 using std::ofstream;
 
-namespace CGL {
-
 /**
  * Sets the field of view to match screen screenW/H.
  * NOTE: data and screenW/H will almost certainly disagree about the aspect
@@ -182,5 +180,3 @@ void Camera::load_settings(std::string filename) {
   file >> focalDistance >> lensRadius;
   cout << "[Camera] Loaded settings from " << filename << endl;
 }
-
-} // namespace CGL

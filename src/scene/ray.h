@@ -12,9 +12,6 @@
 #define PART_4 (PART >= 4)
 #define PART_5 (PART >= 5)
 
-namespace CGL {
-
-
 struct Ray {
   uint16_t depth;  ///< depth of the Ray
 
@@ -53,18 +50,5 @@ struct Ray {
    */
   inline Vector3D at_time(float t) const { return o + t * d; }
 };
-
-// structure used for logging rays for subsequent visualization
-struct LoggedRay {
-
-    LoggedRay(Ray& r, float hit_t)
-        : o(r.o), d(r.d), hit_t(hit_t) {}
-
-    Vector3D o;
-    Vector3D d;
-    float hit_t;
-};
-
-}  // namespace CGL
 
 #endif  // CGL_RAY_H

@@ -1,12 +1,5 @@
 #include "pathtracer.h"
 
-using namespace CGL::SceneObjects;
-using namespace CGL;
-
-namespace CGL {
-
-///< random state for each thread
-
 DEVICE __inline__ void cosine_weighted_hemisphere_sample_3d(RNGState &rand_state, Vector3D *wi, float *pdf) {
   float Xi1 = next_float(rand_state);
   float Xi2 = next_float(rand_state);
@@ -15,19 +8,6 @@ DEVICE __inline__ void cosine_weighted_hemisphere_sample_3d(RNGState &rand_state
   float theta = 2. * PI * Xi2;
   *pdf = sqrt(1-Xi1) / PI;
   *wi = Vector3D(r*cos(theta), r*sin(theta), sqrt(1-Xi1));
-}
-
-DEVICE __inline__ Vector3D PathTracer::get_emission(const CudaIntersection &isect) {
-  CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
-  Vector2D uv = isect.uv;
-  Vector3D emission = bsdf.emissiveFactor * bsdf.emissiveStrength;
-  if (bsdf.emission_idx >= 0) {
-    Vector4D tc = textures[bsdf.emission_idx].sample(uv);
-    emission.x *= tc.x * tc.w;
-    emission.y *= tc.y * tc.w;
-    emission.z *= tc.z * tc.w;
-  }
-  return emission;
 }
 
 DEVICE __inline__ void PathTracer::perturb_normal(CudaIntersection &isect) {
@@ -61,7 +41,7 @@ DEVICE __inline__ void PathTracer::perturb_normal(CudaIntersection &isect) {
 // following code adapted from https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#appendix-b-brdf-implementation
 // wo = V, wi = L
 DEVICE __inline__ Vector3D PathTracer::f(const CudaIntersection &isect, const Vector3D &wo, const Vector3D &wi, float *occlusion) {
-  CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
+  CudaBSDF bsdf = bsdfs[isect.bsdf_idx];
   Vector3D N = isect.n; // perturbed normal
   Vector2D uv = isect.uv;
 
@@ -232,7 +212,7 @@ DEVICE __inline__ float PathTracer::bsdf_pdf(const CudaIntersection &isect,
   if (NoL == 0) return 0.0;
 
   // fetch metallic & roughness
-  CudaBSDF &b = bsdfs[isect.bsdf_idx];
+  CudaBSDF b = bsdfs[isect.bsdf_idx];
   float metal    = clamp_device(b.metallic,  0.0, 1.0);
   float roughness= clamp_device(b.roughness, 0.02,1.0);
   float onem     = 1.0 - metal;
@@ -252,7 +232,7 @@ DEVICE __inline__ float PathTracer::bsdf_pdf(const CudaIntersection &isect,
 }
 
 
-DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
+DEVICE __inline__ Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
                                                 const CudaIntersection &isect) {
   Matrix3x3 o2w;
 
@@ -273,7 +253,7 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
 
   float occlusion; //ignored for dir lighting
   for (int i = 0; i < num_lights; ++i) {
-    CudaLight &L = lights[i];
+    CudaLight L = lights[i];
     Vector3D wi;
     float   distToL, pdfL;
     Vector3D Li = L.sample_L(hit_p, &wi, &distToL, &pdfL,
@@ -310,14 +290,14 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
     shadow.max_t = INFINITY;
 
     // bad, checking every light, assumes few lights
-    CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
+    CudaBSDF bsdf = bsdfs[isect.bsdf_idx];
 
     for (int i = 0; i < num_lights; ++i) {
-      CudaLight &L = lights[i];
+      CudaLight L = lights[i];
       float pdfL;
       if (L.has_intersect(shadow, hit_p, isect.n, bvh->vertices, &pdfL)) {
         // get the light and compute its PDF for this direction
-        Vector3D Li = bsdf.emissiveFactor * bsdf.emissiveStrength;
+        Vector3D Li = bsdf.emission;
         float w    = mis_weight(pdfB, pdfL);
         L_out += f_bsdf * Li * cosNL * w / pdfB;
       }
@@ -331,97 +311,86 @@ DEVICE Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
 
 #define RRT 0.7f
 
-DEVICE Vector3D PathTracer::at_least_one_bounce_radiance(Ray& r, const CudaIntersection& isect_init) {
-    Vector3D L_out_total(0.0);
-    Vector3D throughput(1.0);
-    Ray current_ray = r;
-    CudaIntersection isect = isect_init;
-    bool first_bounce = true;
+DEVICE __inline__ Vector3D PathTracer::at_least_one_bounce_radiance(Ray& r, const CudaIntersection& isect_init) {
+  Vector3D L_out_total(0.0);
+  Vector3D throughput(1.0);
+  Ray current_ray = r;
+  CudaIntersection isect = isect_init;
+  bool first_bounce = true;
 
-    // constant index since x,y don’t change across bounces
-    int idx = current_ray.x + current_ray.y * sampleBuffer.w;
+  // constant index since x,y don’t change across bounces
+  int idx = current_ray.x + current_ray.y * sampleBuffer.w;
+  rays_traced[idx] = 0;
+  while (true) {
+    rays_traced[idx]++;
+    // build shading frame
+    Matrix3x3 o2w;
+    make_coord_space(o2w, isect.n);
+    Matrix3x3 w2o = o2w.T();
 
-    while (true) {
-        // build shading frame
-        Matrix3x3 o2w;
-        make_coord_space(o2w, isect.n);
-        Matrix3x3 w2o = o2w.T();
+    // hit point & outgoing dir in local space
+    Vector3D hit_p  = current_ray.o + current_ray.d * isect.t;
+    Vector3D w_out  = w2o * (-current_ray.d);
 
-        // hit point & outgoing dir in local space
-        Vector3D hit_p  = current_ray.o + current_ray.d * isect.t;
-        Vector3D w_out  = w2o * (-current_ray.d);
+    // direct lighting
+    Vector3D L_out = estimate_direct_lighting_importance(current_ray, isect);
+    if (first_bounce) {
+        initialSampleBuffer[idx].emittance = L_out;
+    }
+    L_out_total += throughput * L_out;
 
-        // direct lighting
-        Vector3D L_out = estimate_direct_lighting_importance(current_ray, isect);
-        if (first_bounce) {
-            initialSampleBuffer[idx].emittance = L_out;
-        }
-        L_out_total += throughput * L_out;
+    // russian-roulette survival
+    float p_survive = (current_ray.depth == 1) ? 1.0f : RRT;
+    if (current_ray.depth > 1 &&
+        next_float(rand_states[idx]) >= RRT)
+        break;
 
-        // russian-roulette survival
-        float p_survive = (current_ray.depth == 1) ? 1.0f : RRT;
-        if (current_ray.depth > 1 &&
-            next_float(rand_states[idx]) >= RRT)
-            break;
+    // sample BSDF
+    Vector3D wi;
+    float pdf;
+    float occlusion = 1.0;
+    bool is_delta = false;
+    Vector3D fcos = sample_f(isect, w_out, &wi, &pdf, &occlusion, &is_delta, rand_states[idx]) * abs_cos_theta(wi);
+    fcos *= occlusion;
+    if (pdf <= 0.0)
+        break;
 
-        // sample BSDF
-        Vector3D wi;
-        float pdf;
-        float occlusion = 1.0;
-        bool is_delta = false;
-        Vector3D fcos = sample_f(isect, w_out, &wi, &pdf, &occlusion, &is_delta, rand_states[idx]) * abs_cos_theta(wi);
-        fcos *= occlusion;
-        if (pdf <= 0.0)
-            break;
+    // update throughput
+    throughput = throughput * (first_bounce ? 1.0 : fcos);
+    throughput /= (pdf * p_survive);
 
-        // update throughput
-        throughput = throughput * (first_bounce ? 1.0 : fcos);
-        throughput /= (pdf * p_survive);
+    // spawn next ray
+    Ray bounce_ray(hit_p, o2w * wi);
+    bounce_ray.min_t = EPS_F;
+    bounce_ray.depth = current_ray.depth + 1;
+    bounce_ray.x = current_ray.x;
+    bounce_ray.y = current_ray.y;
 
-        // spawn next ray
-        Ray bounce_ray(hit_p, o2w * wi);
-        bounce_ray.min_t = EPS_F;
-        bounce_ray.depth = current_ray.depth + 1;
-        bounce_ray.x = current_ray.x;
-        bounce_ray.y = current_ray.y;
+    CudaIntersection bounce_isect;
+    if (!bvh->intersect(bounce_ray, &bounce_isect))
+        break;
 
-        CudaIntersection bounce_isect;
-        if (!bvh->intersect(bounce_ray, &bounce_isect))
-            break;
+    // perturb_normal(bounce_isect);
 
-        // perturb_normal(bounce_isect);
-
-        if (first_bounce) {
-            Vector3D bounce_p = bounce_ray.o + bounce_ray.d * bounce_isect.t;
-            Sample* s = &initialSampleBuffer[idx];
-            s->x_v   = hit_p;
-            s->n_v   = isect.n;
-            s->x_s   = bounce_p;
-            s->n_s   = bounce_isect.n;
-            s->pdf   = pdf;
-            s->fcos  = fcos;
-            s->is_delta = is_delta;
-        }
-
-        // prepare for next iteration
-        current_ray = bounce_ray;
-        isect       = bounce_isect;
-        first_bounce = false;
+    if (first_bounce) {
+        Vector3D bounce_p = bounce_ray.o + bounce_ray.d * bounce_isect.t;
+        Sample* s = &initialSampleBuffer[idx];
+        s->x_v   = hit_p;
+        s->n_v   = isect.n;
+        s->x_s   = bounce_p;
+        s->n_s   = bounce_isect.n;
+        s->pdf   = pdf;
+        s->fcos  = fcos;
+        s->is_delta = is_delta;
     }
 
-    return L_out_total - initialSampleBuffer[idx].emittance;
-}
+    // prepare for next iteration
+    current_ray = bounce_ray;
+    isect       = bounce_isect;
+    first_bounce = false;
+  }
 
-DEVICE Vector3D PathTracer::est_radiance_global_illumination(Ray &r) {
-  CudaIntersection isect;
-  Vector3D L_out;
-
-  if (!bvh->intersect(r, &isect))
-    return L_out;
-
-  L_out = get_emission(isect) + at_least_one_bounce_radiance(r, isect);
-
-  return L_out;
+  return L_out_total - initialSampleBuffer[idx].emittance;
 }
 
 DEVICE void PathTracer::raytrace_pixel(uint16_t x, uint16_t y) {
@@ -440,87 +409,88 @@ DEVICE void PathTracer::raytrace_pixel(uint16_t x, uint16_t y) {
   } while (i++ != num_samples && !bvh->intersect(r, &isect));
   if (i == num_samples + 1) {
     initialSampleBuffer[x + y * sampleBuffer.w].L = Vector3D(0, 0, 0);
+    initialSampleBuffer[x + y * sampleBuffer.w].emittance = Vector3D(0, 0, 0);
   } else {
     perturb_normal(isect);
     Vector3D L = at_least_one_bounce_radiance(r, isect);
-    initialSampleBuffer[r.x + r.y * sampleBuffer.w].emittance += get_emission(isect);
+    initialSampleBuffer[r.x + r.y * sampleBuffer.w].emittance += bsdfs[isect.bsdf_idx].emission;
     initialSampleBuffer[r.x + r.y * sampleBuffer.w].L = L;
   }
 }
 
 // Computes jacobian from s1->s2 as defined in Equation 11 of the ReSTIR-GI paper
 DEVICE __inline__ float jacobian(const Sample& s1, const Sample& s2) {
-    Vector3D xq1 = s1.x_v;
-    Vector3D xq2 = s1.x_s;
-    Vector3D xr1 = s2.x_v;
+  Vector3D xq1 = s1.x_v;
+  Vector3D xq2 = s1.x_s;
+  Vector3D xr1 = s2.x_v;
 
-    Vector3D nq2 = s1.n_s;
+  Vector3D nq2 = s1.n_s;
 
-    float cos_phi_q2 = fabs(dot(nq2, (xq1 - xq2).unit())); 
-    float cos_phi_r2 = fabs(dot(nq2, (xr1 - xq2).unit()));
+  float cos_phi_q2 = fabs(dot(nq2, (xq1 - xq2).unit())); 
+  float cos_phi_r2 = fabs(dot(nq2, (xr1 - xq2).unit()));
 
-    float distance_q = (xq1 - xq2).norm2();
-    float distance_r = (xr1 - xq2).norm2();
+  float distance_q = (xq1 - xq2).norm2();
+  float distance_r = (xr1 - xq2).norm2();
 
-    return (cos_phi_r2 / cos_phi_q2) * (distance_q / distance_r);
+  return (cos_phi_r2 / cos_phi_q2) * (distance_q / distance_r);
 }
 
 DEVICE void PathTracer::temporal_resampling(uint16_t x, uint16_t y) {
-  Sample S = initialSampleBuffer[x + y * sampleBuffer.w];
+  int idx = x + y * sampleBuffer.w;
+  Sample S = initialSampleBuffer[idx];
   Reservoir R = Reservoir();
 
   float w = p_hat(S);
-  R.update(S, w, rand_states[x + y * sampleBuffer.w]);
+  R.update(S, w, rand_states[idx]);
   R.W = R.w / (R.M * p_hat(R.z));
 
-  temporalReservoirBuffer[x + y * sampleBuffer.w] = R;
+  temporalReservoirBuffer[idx] = R;
 }
 
 DEVICE void PathTracer::spatial_resampling(uint16_t x, uint16_t y) {
 
   const uint16_t neighbouring_pixel_radius = floor(0.2 * min(sampleBuffer.w, sampleBuffer.h));
 
-  Reservoir Rs = temporalReservoirBuffer[x + y * sampleBuffer.w];
-  Sample q = initialSampleBuffer[x + y * sampleBuffer.w];
-  if (true) {
-    RNGState rand_state = rand_states[x + y * sampleBuffer.w];
-    const uint8_t max_neighbouring_samples = 9; // ReSTIR GI paper value without temporal sampling
-    for (uint8_t s = 0; s < max_neighbouring_samples; s++) {
-      // Randomly choose a neighbor pixel qn
-      int window = 2 * neighbouring_pixel_radius + 1;
-      uint16_t sample_x = x + static_cast<int>(next_float(rand_state) * window) - neighbouring_pixel_radius;
-      uint16_t sample_y = y + static_cast<int>(next_float(rand_state) * window) - neighbouring_pixel_radius;
+  int idx = x + y * sampleBuffer.w;
+  Reservoir Rs = temporalReservoirBuffer[idx];
+  Sample q = initialSampleBuffer[idx];
+  RNGState rand_state = rand_states[idx];
+  const uint8_t max_neighbouring_samples = 9; // ReSTIR GI paper value without temporal sampling
+  for (uint8_t s = 0; s < max_neighbouring_samples; s++) {
+    // Randomly choose a neighbor pixel qn
+    int window = 2 * neighbouring_pixel_radius + 1;
+    uint16_t sample_x = x + static_cast<int>(next_float(rand_state) * window) - neighbouring_pixel_radius;
+    uint16_t sample_y = y + static_cast<int>(next_float(rand_state) * window) - neighbouring_pixel_radius;
 
-      // Ensure the sample is within the frame buffer bounds
-      if (sample_x >= sampleBuffer.w || sample_y >= sampleBuffer.h) continue;
+    // Ensure the sample is within the frame buffer bounds
+    if (sample_x >= sampleBuffer.w || sample_y >= sampleBuffer.h) continue;
 
-      // Retrieve the reservoir from the neighboring pixel
-      Reservoir Rn = temporalReservoirBuffer[sample_x + sample_y * sampleBuffer.w];
-      // Calculate geometric similarity between q and qn
-      if (!are_geometrically_similar(q, Rn.z) || Rn.z.L == Vector3D(0, 0, 0)) continue;
+    // Retrieve the reservoir from the neighboring pixel
+    Reservoir Rn = temporalReservoirBuffer[sample_x + sample_y * sampleBuffer.w];
+    // Calculate geometric similarity between q and qn
+    if (!are_geometrically_similar(q, Rn.z) || Rn.z.L == Vector3D(0, 0, 0)) continue;
 
-      // Calculate |Jqn→q| (Jacobian determinant)
-      float Jqn_to_q = jacobian(Rn.z, q); // Placeholder for actual Jacobian calculation
+    // Calculate |Jqn→q| (Jacobian determinant)
+    float Jqn_to_q = jacobian(Rn.z, q); // Placeholder for actual Jacobian calculation
 
-      // Calculate ˆp′q
-      float p_prime_q = (p_hat(Rn.z)) / Jqn_to_q;
+    // Calculate ˆp′q
+    float p_prime_q = (p_hat(Rn.z)) / Jqn_to_q;
 
-      // visibility test
-      // if neighbour's path's point is invisible from the current path's point, p_prime_q = 0
-      Ray shadow_ray(q.x_v, (Rn.z.x_s - q.x_v).unit());
-      shadow_ray.min_t = EPS_F;
-      shadow_ray.max_t = (Rn.z.x_s - q.x_v).norm() - EPS_F;
-      if (bvh->has_intersect(shadow_ray)) p_prime_q = 0;
+    // visibility test
+    // if neighbour's path's point is invisible from the current path's point, p_prime_q = 0
+    Ray shadow_ray(q.x_v, (Rn.z.x_s - q.x_v).unit());
+    shadow_ray.min_t = EPS_F;
+    shadow_ray.max_t = (Rn.z.x_s - q.x_v).norm() - EPS_F;
+    if (bvh->has_intersect(shadow_ray)) p_prime_q = 0;
 
-      // Merge Rn into the current reservoir
-      Rs.merge(Rn, p_prime_q, rand_state);
-    }
-
-    float phat = p_hat(Rs.z);
-    Rs.W = Rs.M * phat > 0 ? Rs.w / (Rs.M * phat) : 0;
-    rand_states[x + y * sampleBuffer.w] = rand_state;
+    // Merge Rn into the current reservoir
+    Rs.merge(Rn, p_prime_q, rand_state);
   }
-  spatialReservoirBuffer[x + y * sampleBuffer.w] = Rs;
+
+  float phat = p_hat(Rs.z);
+  Rs.W = Rs.M * phat > 0 ? Rs.w / (Rs.M * phat) : 0;
+  rand_states[idx] = rand_state;
+  spatialReservoirBuffer[idx] = Rs;
 }
 
 DEVICE void PathTracer::render_final_sample(uint16_t x, uint16_t y) {
@@ -530,6 +500,4 @@ DEVICE void PathTracer::render_final_sample(uint16_t x, uint16_t y) {
   Vector3D L = initial.emittance + S.fcos * S.L * R.W;
 
   sampleBuffer.update_pixel(L, x, y);
-}
-
 }

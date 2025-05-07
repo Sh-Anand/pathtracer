@@ -7,7 +7,7 @@
 
 #include <iosfwd>
 
-namespace CGL {
+
 
 class Quaternion : public Vector4D {
  public:
@@ -250,6 +250,6 @@ class Quaternion : public Vector4D {
 
 };
 
-} // namespace CGL
+
 
 #endif /* CGL_QUATERNION_H */

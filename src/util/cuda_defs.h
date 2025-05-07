@@ -18,6 +18,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line) {
         exit(code);
     }
 }
+
 #else
 #define CUDA_ERR(ans) ans
 #endif

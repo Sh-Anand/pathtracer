@@ -14,7 +14,7 @@
 
 #include "cuda_defs.h"
 
-namespace CGL {
+
 // -----------------------------------------------------------------------------
 // PRNG state (16 bytes)
 // -----------------------------------------------------------------------------
@@ -78,6 +78,6 @@ HOST_DEVICE static float next_float(RNGState &state) {
     return static_cast<float>(next_u64(state) >> 40) * INV_2_POW_24;
 }
 
-} // namespace CGL
+
 
 #endif // GPU_RAND_H
