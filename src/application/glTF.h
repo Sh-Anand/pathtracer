@@ -1,70 +1,35 @@
-#include "application.h"
-
-#include "pathtracer/bsdf.h"
+#include "pathtracer/camera.h"
 #include "pathtracer/texture.h"
+
+#include "scene/light.h"
 #include "scene/primitive.h"
-#include "util/matrix3x3.h"
+
+#define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "util/tiny_gltf.h"
 #include "util/matrix4x4.h"
 #include "util/quaternion.h"
-#include "util/tiny_gltf.h"
 #include "util/transforms.h"
+#include "util/vector2D.h"
 #include "util/vector3D.h"
 #include "util/vector4D.h"
-#include <cmath>
 
-namespace CGL {
+CameraInfo cam;
+tinygltf::Model model;
+tinygltf::TinyGLTF loader;
+std::string err;
+std::string warn;
 
-Application::Application(AppConfig config) {
-  renderer = new RaytracedRenderer (
-    config.pathtracer_ns_aa,
-    config.pathtracer_max_ray_depth,
-    config.pathtracer_ns_area_light,
-    config.pathtracer_filename,
-    config.pathtracer_lensRadius,
-    config.pathtracer_focalDistance,
-    config.debug
-  );
-  filename = config.pathtracer_filename;
+void ParseNode(const tinygltf::Model &model, int nodeIdx, const Matrix4x4 &parentTransform, int screenW, int screenH,
+                std::vector<Vector3D> &vertices, std::vector<Vector3D> &normals,
+    std::vector<Vector2D> &texcoords, std::vector<Vector4D> &tangents,
+    std::vector<CudaPrimitive> &primitives, std::vector<CudaLight> &lights,
+    std::vector<CudaBSDF> &bsdfs, std::vector<CudaTexture> &textures,
+    Camera &camera) {
+  const auto &node = model.nodes[nodeIdx];
 
-  texcoords.clear();
-  vertices.clear();
-  normals.clear();
-  tangents.clear();
-  bsdfs.clear();
-  lights.clear();
-  textures.clear();
-  
-  texcoords.push_back(Vector2D(0, 0)); // dummy texcoord for all non-textured materials
-  tangents.push_back(Vector4D(0)); // dummy tangent for all non-bump mapped materials
-}
-
-Application::~Application() {
-  delete renderer;
-}
-
-void Application::init() {
-  // Make a dummy camera so resize() doesn't crash before the scene has been
-  // loaded.
-  // NOTE: there's a chicken-and-egg problem here, because loadScene
-  // requires init, and init requires init_camera (which is only called by
-  // loadScene).
-  screenW = 800; screenH = 600; // Default value
-  CameraInfo cameraInfo;
-  cameraInfo.hFov = 50;
-  cameraInfo.vFov = 35;
-  cameraInfo.nClip = 0.01;
-  cameraInfo.fClip = 100;
-  camera.configure(cameraInfo, screenW, screenH);
-}
-
-void Application::resize(size_t w, size_t h) {
-  screenW = w;
-  screenH = h;
-  camera.set_screen_size(w, h);
-  renderer->set_frame_size(w, h);
-}
-
-Matrix4x4 GetNodeTransform(const tinygltf::Node &node) {
+  // Get transform from parent node
   Matrix4x4 T(1.0f);
 
   if (!node.matrix.empty()) {
@@ -73,8 +38,8 @@ Matrix4x4 GetNodeTransform(const tinygltf::Node &node) {
     for (int i = 0; i < 16; i+=4) {
       M[i%4] = Vector4D(node.matrix[i], node.matrix[i+1], node.matrix[i+2], node.matrix[i+3]);
     }
-    return M;
-  }
+    T = M;
+  } else {
   Vector3D translation(0.0f), _scale(1.0f);
   Quaternion rotation = Quaternion(0, 0, 0, 1);
 
@@ -88,21 +53,15 @@ Matrix4x4 GetNodeTransform(const tinygltf::Node &node) {
   T = translate(translation.x, translation.y, translation.z)
     * rotation.rotationMatrix().to4x4()
     * scale(_scale.x, _scale.y, _scale.z);
-
-  return T;
-}
-
-CameraInfo cam;
-
-void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Matrix4x4 &parentTransform){
-  const auto &node = model.nodes[nodeIdx];
-  Matrix4x4 worldTransform = parentTransform * GetNodeTransform(node);
+  }
+  
+  Matrix4x4 worldTransform = parentTransform * T;
   Matrix3x3 normalMatrix = Matrix3x3(worldTransform).inv().T();
 
-if (worldTransform.det() < 0.0f) {
-  // flip the handedness
-  normalMatrix = normalMatrix * (-1.0f);
-}
+  if (worldTransform.det() < 0.0f) {
+    // flip the handedness
+    normalMatrix = normalMatrix * (-1.0f);
+  }
   
   if (node.mesh >= 0) {
     const auto &mesh = model.meshes[node.mesh];
@@ -243,7 +202,7 @@ if (worldTransform.det() < 0.0f) {
     cam.view_dir = view;
     cam.up_dir   = up;
 
-  init_camera(cam);
+    camera.configure(cam, screenW, screenH);
 
   }else if(node.light >= 0){
     // adding lights
@@ -274,11 +233,44 @@ if (worldTransform.det() < 0.0f) {
   }
 
   for (int childIdx : node.children) {
-    ParseNode(model, childIdx, worldTransform);
+    ParseNode(model, childIdx, worldTransform, screenW, screenH,
+              vertices, normals, texcoords, tangents,
+              primitives, lights, bsdfs, textures,
+              camera);
   }
 }
 
-void Application::ParseMaterial(const tinygltf::Model &model) {
+void parse_glTF(const std::string sceneFilePath, int screenW, int screenH,
+                          std::vector<Vector3D> &vertices,
+                          std::vector<Vector3D> &normals,
+                          std::vector<Vector2D> &texcoords,
+                          std::vector<Vector4D> &tangents,
+                          std::vector<CudaPrimitive> &primitives,
+                          std::vector<CudaLight> &lights,
+                          std::vector<CudaBSDF> &bsdfs,
+                          std::vector<CudaTexture> &textures,
+                          Camera &camera) {
+
+  std::string sceneFile = sceneFilePath.substr(sceneFilePath.find_last_of('/') + 1);
+  sceneFile = sceneFile.substr(0, sceneFile.find(".dae"));
+
+    // bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, argv[1]);
+  bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, sceneFilePath); // for binary glTF(.glb)
+
+  if (!warn.empty()) {
+    printf("Warn: %s\n", warn.c_str());
+  }
+
+  if (!err.empty()) {
+    printf("Err: %s\n", err.c_str());
+  }
+
+  if (!ret) {
+    printf("Failed to parse glTF\n");
+    std::abort();  
+  }
+
+  // load material
   for(const auto &material: model.materials) {
     CudaBSDF bsdf;
     bsdf.baseColor = Vector4D(material.pbrMetallicRoughness.baseColorFactor[0],
@@ -298,13 +290,12 @@ void Application::ParseMaterial(const tinygltf::Model &model) {
     bsdf.tex_idx = material.pbrMetallicRoughness.baseColorTexture.index;
     bsdf.normal_idx = material.normalTexture.index;
     bsdf.hasOcclusionTexture = material.occlusionTexture.index >= 0;
-    bsdf.orm_idx = max(material.occlusionTexture.index, material.pbrMetallicRoughness.metallicRoughnessTexture.index);
+    bsdf.orm_idx = std::max(material.occlusionTexture.index, material.pbrMetallicRoughness.metallicRoughnessTexture.index);
     bsdf.emission_idx = material.emissiveTexture.index;
     bsdfs.push_back(bsdf);
   }
-}
 
-void Application::ParseTexture(const tinygltf::Model &model) {
+  // load textures
   for (const auto &texture : model.textures) {
     const auto &image = model.images[texture.source];
     // const auto &sampler = model.samplers[texture.sampler]; // we will not use this, only need for mipmapping and clamping
@@ -317,19 +308,13 @@ void Application::ParseTexture(const tinygltf::Model &model) {
     memcpy(ctex.data, image.image.data(), image.width * image.height * image.component);
     textures.push_back(ctex);
   }
-}
-
-void Application::load_from_gltf_model(const tinygltf::Model &model) {
-
-  // load material
-  ParseMaterial(model);
-
-  // load textures
-  ParseTexture(model);
 
   const auto &scene = model.scenes[model.defaultScene > -1 ? model.defaultScene : 0];
   for (int rootNode : scene.nodes) {
-    ParseNode(model, rootNode, Matrix4x4(1.0f));
+    ParseNode(model, rootNode, Matrix4x4(1.0f), screenW, screenH,
+              vertices, normals, texcoords, tangents,
+              primitives, lights, bsdfs, textures,
+              camera);
   }
 
   BBox bbox;
@@ -344,18 +329,11 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
   if (!bbox.empty()) {
 
     Vector3D target = bbox.centroid();
-    canonical_view_distance = bbox.extent.norm() / 2 * 1.5;
+    double canonical_view_distance = bbox.extent.norm() / 2 * 1.5;
 
     double view_distance = canonical_view_distance;
     double min_view_distance = canonical_view_distance / 10.0;
     double max_view_distance = canonical_view_distance * 20.0;
-
-    canonicalCamera.place(target,
-                          acos(cam.view_dir.y) - M_PI / 8,
-                          atan2(cam.view_dir.x, cam.view_dir.z) - M_PI / 8,
-                          view_distance,
-                          min_view_distance,
-                          max_view_distance);
 
     camera.place(target,
                         acos(cam.view_dir.y),
@@ -365,17 +343,3 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
                 max_view_distance);
   }
 }
-
-void Application::init_camera(CameraInfo& cameraInfo) {
-  camera.configure(cameraInfo, screenW, screenH);
-  canonicalCamera.configure(cameraInfo, screenW, screenH);
-}
-
-
-void Application::set_up_pathtracer() {
-  renderer->set_camera(&camera);
-  renderer->set_frame_size(screenW, screenH);
-  renderer->build_accel(primitives, vertices, normals, texcoords, tangents);
-}
-
-} // namespace CGL

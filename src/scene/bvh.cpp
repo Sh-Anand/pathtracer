@@ -5,9 +5,6 @@
 
 using namespace std;
 
-namespace CGL {
-namespace SceneObjects {
-
 BVHCuda::~BVHCuda() {
   free(primitives);
   free(nodes);
@@ -117,5 +114,5 @@ int BVHCuda::construct_bvh(size_t start, size_t end,
 }
 
 
-} // namespace SceneObjects
-} // namespace CGL
+
+

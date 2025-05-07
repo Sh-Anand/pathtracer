@@ -12,9 +12,6 @@
 #define PART_4 (PART >= 4)
 #define PART_5 (PART >= 5)
 
-namespace CGL {
-
-
 struct Ray {
   uint16_t depth;  ///< depth of the Ray
 
@@ -64,7 +61,5 @@ struct LoggedRay {
     Vector3D d;
     float hit_t;
 };
-
-}  // namespace CGL
 
 #endif  // CGL_RAY_H

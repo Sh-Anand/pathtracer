@@ -1,12 +1,5 @@
 #include "pathtracer.h"
 
-using namespace CGL::SceneObjects;
-using namespace CGL;
-
-namespace CGL {
-
-///< random state for each thread
-
 DEVICE __inline__ void cosine_weighted_hemisphere_sample_3d(RNGState &rand_state, Vector3D *wi, float *pdf) {
   float Xi1 = next_float(rand_state);
   float Xi2 = next_float(rand_state);
@@ -530,6 +523,4 @@ DEVICE void PathTracer::render_final_sample(uint16_t x, uint16_t y) {
   Vector3D L = initial.emittance + S.fcos * S.L * R.W;
 
   sampleBuffer.update_pixel(L, x, y);
-}
-
 }

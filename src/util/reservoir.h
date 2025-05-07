@@ -4,7 +4,7 @@
 #include "util/cuda_defs.h"
 #include "vector3D.h"
 #include "gpu_rand.h"
-namespace CGL {
+
 
 struct Sample {
     Vector3D x_v, n_v; // visible point and normal (normalized)
@@ -53,7 +53,5 @@ class Reservoir {
 
         DEVICE void clear();
 };
-
-}  // namespace CGL
 
 #endif  // CGL_UTIL_RESERVOIR_H

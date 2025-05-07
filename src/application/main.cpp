@@ -1,20 +1,14 @@
-#include "application.h"
+#include "main.h"
+#include <cstdint>
 typedef uint32_t gid_t;
-#include "../util/image.h"
-typedef uint32_t gid_t;
-
-// gltf stuff
-#define TINYGLTF_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-// #define TINYGLTF_NOEXCEPTION // optional. disable exception handling.
-#include "../util/tiny_gltf.h"
-
 #include <iostream>
 #include <unistd.h>
 
+#include "glTF.h"
+
+#include "util/lodepng.h"
+
 using namespace std;
-using namespace CGL;
 
 #define msg(s) cerr << "[PathTracer] " << s << endl;
 
@@ -38,20 +32,93 @@ void usage(const char *binaryName) {
   printf("\n");
 }
 
-tinygltf::Model model;
-tinygltf::TinyGLTF loader;
-std::string err;
-std::string warn;
+void Main::parse_scene(string sceneFilePath) {
+  string sceneFile = sceneFilePath.substr(sceneFilePath.find_last_of('/') + 1);
+  sceneFile = sceneFile.substr(0, sceneFile.find(".dae"));
+  pathtracer_filename = sceneFile;
 
-int main(int argc, char **argv) {
+  parse_glTF(sceneFilePath, screenW, screenH,
+        vertices, normals, texcoords, tangents,
+        primitives, lights, bsdfs, textures,
+        camera);
+}
+
+void Main::save_image(std::string filename) {
+
+  ImageBuffer* buffer = &frameBuffer;
+  if (filename == "") {
+    time_t rawtime;
+    time (&rawtime);
+
+    time_t t = time(nullptr);
+    tm *lt = localtime(&t);
+    std::stringstream ss;
+    ss << filename << "_screenshot_" << lt->tm_mon+1 << "-" << lt->tm_mday << "_" 
+      << lt->tm_hour << "-" << lt->tm_min << "-" << lt->tm_sec << ".png";
+    filename = ss.str();  
+  }
+
+  uint32_t* frame = &buffer->data[0];
+  size_t w = buffer->w;
+  size_t h = buffer->h;
+  uint32_t* frame_out = new uint32_t[w * h];
+  for(size_t i = 0; i < h; ++i) {
+    memcpy(frame_out + i * w, frame + (h - i - 1) * w, 4 * w);
+  }
+  
+  for (size_t i = 0; i < w * h; ++i) {
+    frame_out[i] |= 0xFF000000;
+  }
+
+  DEBUG(debug, fprintf(stderr, "[PathTracer] Saving to file: %s... ", filename.c_str());)
+  lodepng::encode(filename, (unsigned char*) frame_out, w, h);
+  DEBUG(debug, fprintf(stderr, "Done!\n");)
+  
+  delete[] frame_out;
+}
+
+void Main::render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy) { 
+  frameBuffer.resize(screenW, screenH);
+  pt_host->set_frame_size(screenW, screenH);
+  pt_host->camera = CudaCamera(camera);
+  build_accel(primitives, vertices, normals, texcoords, tangents, lights, bsdfs, textures);
+
+  DEBUG(debug, fprintf(stderr, "[PathTracer] Rendering to file: %s... ", filename.c_str());)
+  gpu_raytrace();
+  save_image(filename); 
+  DEBUG(debug, fprintf(stderr, "Done!\n");)
+}
+
+void Main::render_to_video(std::string filename, size_t x, size_t y, size_t dx, size_t dy, size_t num_images){
+  const double TOTAL_ROTATION = M_PI * 2;
+  double angle_per_image = TOTAL_ROTATION / (double)num_images;
+  size_t dot_pos = filename.find_last_of('.');
+  auto name = filename.substr(0, dot_pos);
+  auto dot_extension = filename.substr(dot_pos);
+
+  frameBuffer.resize(screenW, screenH);
+  pt_host->set_frame_size(screenW, screenH);
+  build_accel(primitives, vertices, normals, texcoords, tangents, lights, bsdfs, textures);  
+  for(size_t i = 0; i < num_images; ++i){
+    std::ostringstream oss;
+    oss << std::setw(4) << std::setfill('0') << i;
+    auto filename_per_image = name + oss.str() + dot_extension;
+    camera.rotate_by(0, angle_per_image);
+    pt_host->camera = CudaCamera(camera);
+    update_camera();
+    gpu_raytrace();
+    save_image(filename_per_image); 
+  }
+}
+
+int Main::main(int argc, char **argv) {
 
   // get the options
-  AppConfig config;
   int opt;
   size_t w = 0, h = 0, x = -1, y = 0, dx = 0, dy = 0;
-  string output_file_name, cam_settings = "";
+  string output_file_name;
   string sceneFilePath;
-  while ((opt = getopt(argc, argv, "s:l:t:m:o:e:h:H:f:r:c:b:d:a:p:g:")) !=
+  while ((opt = getopt(argc, argv, "s:l:t:m:e:h:f:r:d:p:g:")) !=
           -1) { // for each option...
     switch (opt) {
     case 'f':
@@ -70,21 +137,18 @@ int main(int argc, char **argv) {
       optind += 3;
       break;
     case 's':
-      config.pathtracer_ns_aa = atoi(optarg);
+      pathtracer_ns_aa = atoi(optarg);
       break;
     case 'l':
-      config.pathtracer_ns_area_light = atoi(optarg);
+      pathtracer_ns_area_light = atoi(optarg);
       break;
     case 'g':
-      config.total_image_generated = atoi(optarg);
+      total_image_generated = atoi(optarg);
       break;
     case 't':
       break;
     case 'm':
-      config.pathtracer_max_ray_depth = atoi(optarg);
-      break;
-    case 'o':
-      config.pathtracer_accumulate_bounces = atoi(optarg) > 0;
+      pathtracer_max_ray_depth = atoi(optarg);
       break;
     case 'e':
       std::cout << "[PathTracer] Loading environment map " << optarg
@@ -92,23 +156,8 @@ int main(int argc, char **argv) {
       std::cout << "Environment map not implemented" << std::endl;
       std::abort();
       break;
-    case 'c':
-      cam_settings = string(optarg);
-      break;
-    case 'b':
-      config.pathtracer_lensRadius = atof(optarg);
-      break;
     case 'd':
-      config.debug = true;
-      break;
-    case 'a':
-      config.pathtracer_samples_per_patch = atoi(argv[optind - 1]);
-      config.pathtracer_max_tolerance = atof(argv[optind]);
-      optind++;
-      break;
-    case 'H':
-      config.pathtracer_direct_hemisphere_sample = true;
-      optind--;
+      debug = atoi(optarg) > 0;
       break;
     default:
       usage(argv[0]);
@@ -123,56 +172,43 @@ int main(int argc, char **argv) {
 
     sceneFilePath = argv[optind];
   }
-  string sceneFile = sceneFilePath.substr(sceneFilePath.find_last_of('/') + 1);
-  sceneFile = sceneFile.substr(0, sceneFile.find(".dae"));
-  config.pathtracer_filename = sceneFile;
 
-    // bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, argv[1]);
-  bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, sceneFilePath); // for binary glTF(.glb)
+  // set cam
+  // init camera
+  CameraInfo cameraInfo;
+  cameraInfo.hFov = 50;
+  cameraInfo.vFov = 35;
+  cameraInfo.nClip = 0.01;
+  cameraInfo.fClip = 100;
+  camera.configure(cameraInfo, screenW, screenH);
 
-  if (!warn.empty()) {
-    printf("Warn: %s\n", warn.c_str());
-  }
+  parse_scene(sceneFilePath);
 
-  if (!err.empty()) {
-    printf("Err: %s\n", err.c_str());
-  }
-
-  if (!ret) {
-    printf("Failed to parse glTF\n");
-    return -1;
-  }
-
-
-  // // parse scene
-  // Collada::SceneInfo *sceneInfo = new Collada::SceneInfo();
-  // if (Collada::ColladaParser::load(sceneFilePath.c_str(), sceneInfo) < 0) {
-  //   delete sceneInfo;
-  //   exit(0);
-  // }
-
-  // create application
-  Application *app = new Application(config);
-
-  // write straight to file without opening a window if -f option provided
-  app->init();
-  // app->load(sceneInfo);
-  // delete sceneInfo;
-
-  app->load_from_gltf_model(model);
+  bsdfs = bsdfs;
+  lights = lights;
+  textures = textures;
+  vertices = vertices;
+  normals = normals;
+  texcoords = texcoords;
+  primitives = primitives;
+  tangents = tangents;
 
   if (w && h) {
-    app->resize(w, h);
+    screenW = w;
+    screenH = h;
+    camera.set_screen_size(w, h);
+    camera = camera;
   }
 
-  if (cam_settings != "")
-    app->load_camera(cam_settings);
-
-
-  if(config.total_image_generated == 1){
-    app->render_to_file(output_file_name, x, y, dx, dy);
+  if(total_image_generated == 1){
+    render_to_file(output_file_name, x, y, dx, dy);
   }else{
-    app->render_to_video(output_file_name, x, y, dx, dy, config.total_image_generated);
+    render_to_video(output_file_name, x, y, dx, dy, total_image_generated);
   }
   return 0;
+}
+
+int main(int argc, char **argv) {
+  Main main;
+  return main.main(argc, argv);
 }

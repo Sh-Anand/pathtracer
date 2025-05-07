@@ -6,8 +6,6 @@
 
 #include "pathtracer/ray.h"
 
-namespace CGL {
-
 /**
  * Axis-aligned bounding box.
  * An AABB is given by two positions in space, the min and the max. An addition
@@ -126,9 +124,5 @@ struct BBox {
    */
   HOST_DEVICE bool intersect(Ray& r, float& t0, float& t1) const;
 };
-
-std::ostream& operator<<(std::ostream& os, const BBox& b);
-
-} // namespace CGL
 
 #endif // CGL_BBOX_H

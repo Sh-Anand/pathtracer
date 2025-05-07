@@ -9,8 +9,6 @@
 
 #include "pathtracer/bsdf.h"
 
-namespace CGL {
-
 struct CudaIntersection {
   DEVICE CudaIntersection() {
     #ifdef __CUDA_ARCH__
@@ -26,7 +24,5 @@ struct CudaIntersection {
   Vector4D tangent;
   int bsdf_idx;
 };
-
-} // namespace CGL
 
 #endif // CGL_INTERSECT_H

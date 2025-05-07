@@ -6,7 +6,7 @@
 
 using namespace std;
 
-namespace CGL {
+
 
 float &Matrix4x4::operator()(int i, int j) { return entries[j][i]; }
 
@@ -277,4 +277,4 @@ std::ostream &operator<<(std::ostream &os, const Matrix4x4 &A) {
 Vector4D &Matrix4x4::column(int i) { return entries[i]; }
 
 const Vector4D &Matrix4x4::column(int i) const { return entries[i]; }
-} // namespace CGL
+

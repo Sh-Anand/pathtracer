@@ -8,15 +8,12 @@
 #ifndef __CUDACC__
 struct uchar4;
 #endif
-
-
-namespace CGL {
-    struct CudaTexture {
-        uint16_t width;
-        uint16_t height;
-        bool has_alpha;
-        uint8_t * data;
-        DEVICE Vector4D sample(const Vector2D &uv);    };
-} // CGL
+struct CudaTexture {
+    uint16_t width;
+    uint16_t height;
+    bool has_alpha;
+    uint8_t * data;
+    DEVICE Vector4D sample(const Vector2D &uv);
+};
 
 #endif  // CGL_STATICSCENE_TEXTURE_H

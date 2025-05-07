@@ -7,8 +7,6 @@
 
 #include <iosfwd>
 
-namespace CGL {
-
 /**
  * Defines a 3x3 matrix.
  * 3x3 matrices are extremely useful in computer graphics.
@@ -155,6 +153,6 @@ HOST_DEVICE Matrix3x3 operator*( float c, const Matrix3x3& A );
 // prints entries
 std::ostream& operator<<( std::ostream& os, const Matrix3x3& A );
 
-} // namespace CGL
+
 
 #endif // CGL_MATRIX3X3_H

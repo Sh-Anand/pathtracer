@@ -10,7 +10,7 @@
 #include <ostream>
 #include <new>
 
-namespace CGL {
+
 
 /**
  * Defines 3D vectors.
@@ -140,6 +140,6 @@ HOST_DEVICE __inline__ Vector3D reflect(const Vector3D &u, const Vector3D &v) {
 
 HOST_DEVICE std::ostream& operator<<(std::ostream& os, const Vector3D& v);
 
-} // namespace CGL
+
 
 #endif // CGL_VECTOR3D_H

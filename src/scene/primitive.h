@@ -5,8 +5,6 @@
 #include "scene/bbox.h"
 #include <cstddef>
 
-namespace CGL { namespace SceneObjects {
-
 struct CudaPrimitive {
 
   DEVICE bool intersect(Ray& r, CudaIntersection* i, Vector3D* vertices, Vector3D* normals, Vector2D* texcoords, Vector4D* tangets) const;
@@ -18,9 +16,5 @@ struct CudaPrimitive {
   
   int bsdf_idx;
 };
-
-
-} // namespace SceneObjects
-} // namespace CGL
 
 #endif //CGL_STATICSCENE_PRIMITIVE_H

@@ -5,8 +5,6 @@
 #include "util/vector3D.h"
 #include "util/gpu_rand.h"
 
-namespace CGL { namespace SceneObjects {
-
 struct CudaLight {
   CudaLight(const Vector3D rad, 
             const Vector3D pos,
@@ -52,8 +50,5 @@ struct CudaLight {
                             const Vector3D* vertices, float *pdf) const;
 
 };
-
-} // namespace SceneObjects
-} // namespace CGL
 
 #endif  // CGL_STATICSCENE_BSDF_H

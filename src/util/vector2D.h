@@ -6,7 +6,7 @@
 #include <ostream>
 #include <cmath>
 
-namespace CGL {
+
 
 /**
  * Defines 2D vectors.
@@ -143,6 +143,6 @@ HOST_DEVICE inline float cross( const Vector2D& v1, const Vector2D& v2 ) {
 // prints components
 std::ostream& operator<<( std::ostream& os, const Vector2D& v );
 
-} // namespace CGL
+
 
 #endif // CGL_VECTOR2D_H

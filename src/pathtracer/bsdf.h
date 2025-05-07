@@ -8,8 +8,6 @@
 
 #include <algorithm>
 
-namespace CGL {
-
 // Helper math functions. Assume all vectors are in unit hemisphere //
 
 inline float clamp (float n, float lower, float upper) {
@@ -75,7 +73,5 @@ struct CudaBSDF {
   int      orm_idx;
   int      emission_idx;
 };
-
-}  // namespace CGL
 
 #endif  // CGL_STATICSCENE_BSDF_H
