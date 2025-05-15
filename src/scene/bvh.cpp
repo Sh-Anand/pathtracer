@@ -6,12 +6,7 @@
 
 using namespace std;
 
-BVHCuda::~BVHCuda() {
-  free(primitives);
-  free(nodes);
-}
-
-int BVHCuda::construct_bvh(size_t start, size_t end,
+int construct_nodes(size_t start, size_t end,
                            size_t max_leaf_size,
                            std::vector<uint32_t> &prims,
                            std::vector<BBox> &bboxes,
@@ -26,7 +21,11 @@ int BVHCuda::construct_bvh(size_t start, size_t end,
 
   // Create this node
   int idx = nodes.size();
-  nodes.emplace_back(node_bbox.min, node_bbox.max);
+  BVHNode node;
+  node.bbmin = node_bbox.min;
+  node.bbmax = node_bbox.max;
+  node.start = node.end = 0;
+  nodes.push_back(node);
 
   size_t n = end - start;
   if (n <= max_leaf_size) {
@@ -48,8 +47,12 @@ int BVHCuda::construct_bvh(size_t start, size_t end,
   centroids.reserve(n);
   for (size_t i = start; i < end; ++i) {
     auto p = prims[i];
-    float c = bboxes[p].centroid()[axis];
-    centroids.emplace_back(c, p);
+    if (axis == 0)
+      centroids.emplace_back(bboxes[p].centroid().x, p);
+    else if (axis == 1)
+      centroids.emplace_back(bboxes[p].centroid().y, p);
+    else
+      centroids.emplace_back(bboxes[p].centroid().z, p);
   }
   std::sort(centroids.begin(), centroids.end(),
             [](auto &a, auto &b){ return a.first < b.first; });
@@ -97,8 +100,8 @@ int BVHCuda::construct_bvh(size_t start, size_t end,
   }
 
   // 7) Recurse on each side
-  int leftIdx  = construct_bvh(start, mid, max_leaf_size, prims, bboxes, nodes);
-  int rightIdx = construct_bvh(mid,   end, max_leaf_size, prims, bboxes, nodes);
+  int leftIdx  = construct_nodes(start, mid, max_leaf_size, prims, bboxes, nodes);
+  int rightIdx = construct_nodes(mid,   end, max_leaf_size, prims, bboxes, nodes);
 
   nodes[idx].l = leftIdx;
   nodes[idx].r = rightIdx;

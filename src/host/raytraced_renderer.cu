@@ -7,22 +7,22 @@
 
 #include "scene/light.h"
 
+#include "target/pathtracer.cu"
+
 __global__ void kernel_raytrace_temporal(PathTracer* pt) {
-    assert (pt != nullptr);
     uint16_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
     uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
     
-    pt->raytrace_pixel(x,y);
-    pt->temporal_resampling(x,y);
+    raytrace_pixel(pt, x,y);
+    temporal_resampling(pt, x,y);
 }
 
 __global__ void kernel_spatial_sample(PathTracer* pt) {
-    assert (pt != nullptr);
     uint16_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
     uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
     
-    pt->spatial_resampling(x,y);
-    pt->render_final_sample(x,y);
+    spatial_resampling(pt, x,y);
+    render_final_sample(pt, x,y);
 }
 
 void RaytracedRenderer::gpu_raytrace() {
@@ -42,7 +42,7 @@ void RaytracedRenderer::gpu_raytrace() {
     std::cout << "GridDim: " << gridDim.x << " x " << gridDim.y << std::endl;
     )
 
-    // cudaDeviceSetLimit(cudaLimitStackSize, 8192);
+    // cudaDeviceSetLimit(cudaLimitStackSize, 4096);
 
     std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now();
 
@@ -103,7 +103,7 @@ void RaytracedRenderer::build_accel(std::vector<CudaPrimitive> &primitives,
   )
   std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now();
 
-  bvh = new BVHCuda(primitives, vertices, normals, texcoords, tangents, debug);
+  create_bvh(primitives, vertices, normals, texcoords, tangents, debug, 2, &bvh);
   std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
   DEBUG(debug, 
   fprintf(stdout, "Done! (%.4f sec)\n", (std::chrono::duration<float>(t1 - t0)).count());

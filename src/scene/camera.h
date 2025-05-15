@@ -3,10 +3,10 @@
 
 #include <iostream>
 
-#include "util/matrix3x3.h"
+#include "util/matrix.h"
 
 #include "math.h"
-#include "ray.h"
+#include "geometry.h"
 
 struct CameraInfo {
 
@@ -71,14 +71,11 @@ class Camera {
 
   Vector3D position() const { return pos; }
   Vector3D view_point() const { return targetPos; }
-  Vector3D up_dir() const { return c2w[1]; }
+  Vector3D up_dir() const { return c2w.c[1]; }
   float v_fov() const { return vFov; }
   float aspect_ratio() const { return ar; }
   float near_clip() const { return nClip; }
   float far_clip() const { return fClip; }
-
-  virtual void dump_settings(std::string filename);
-  virtual void load_settings(std::string filename);
 
   Ray generate_ray_for_thin_lens(float x, float y, float rndR, float rndTheta) const;
 
@@ -109,30 +106,25 @@ class Camera {
   float screenDist;
 };
 
-struct CudaCamera {
-  CudaCamera () {}
-  CudaCamera (Camera &cam) {
-    hFov = cam.hFov;
-    vFov = cam.vFov;
-    nClip = cam.nClip;
-    fClip = cam.fClip;
-    pos = cam.pos;
-    c2w = cam.c2w;
-  }
-  /**
-   * Returns a world-space ray from the camera that corresponds to a
-   * ray exiting the camera that deposits light at the sensor plane
-   * position given by (x,y).  x and y are provided in the normalized
-   * coordinate space of the sensor.  For example (0.5, 0.5)
-   * corresponds to the middle of the screen.
-   *
-   * \param x x-coordinate of the ray sample in the view plane
-   * \param y y-coordinate of the ray sample in the view plane
-   */
-  DEVICE Ray generate_ray(float x, float y);
+typedef struct {
   float hFov, vFov, nClip, fClip;
   Vector3D pos;
   Matrix3x3 c2w;
-};
+} CudaCamera;
+
+HOST_DEVICE inline float d_radians(float degrees) {
+  return degrees * (PI / 180.0);
+}
+
+DEVICE static inline Ray generate_ray(CudaCamera *cam, float x, float y) {
+  Vector3D sensor = Vector3D{(x - 0.5f) * 2 * tanf(d_radians(cam->hFov) * 0.5f), (y - 0.5f) * 2 * tanf(d_radians(cam->vFov) * 0.5f),-1};
+  Vector3D dir = matrix3x3_vector_multiply(&cam->c2w, &sensor);
+  Ray camera_ray;
+  camera_ray.o = cam->pos; camera_ray.d = vector3d_unit(dir); camera_ray.depth = 0; camera_ray.inv_d = vector3d_rcp(camera_ray.d);
+  camera_ray.min_t = cam->nClip; camera_ray.max_t = cam->fClip;
+
+  return camera_ray;
+}
+
 
 #endif // CGL_CAMERA_H

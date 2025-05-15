@@ -1,8 +1,8 @@
 #include "raytraced_renderer.h"
-#include "scene/bsdf.h"
+#include "scene/material.h"
 #include "scene/camera.h"
 #include "scene/light.h"
-#include "scene/ray.h"
+#include "scene/geometry.h"
 
 #include <stack>
 #include <random>
@@ -11,32 +11,21 @@
 #include <fstream>
 #include <cmath>
 
-#include "util/vector3D.h"
-#include "util/matrix3x3.h"
-
 using std::min;
 using std::max;
 
-/**
- * Raytraced Renderer is a render controller that in this case.
- * It controls a path tracer to produce an rendered image from the input parameters.
- *
- * A pathtracer with BVH accelerator and BVH visualization capabilities.
- */
 RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
                        size_t max_ray_depth, size_t ns_area_light,
                        std::string filename,
                        float lensRadius,
                        float focalDistance,
                        bool debug) {
-  pt_host = new PathTracer();
+  pt_host = (PathTracer*) malloc(sizeof(PathTracer));
 
   pt_host->ns_aa = ns_aa;                                        // Number of samples per pixel
   pt_host->max_ray_depth = max_ray_depth;                        // Maximum recursion ray depth
   pt_host->ns_area_light = ns_area_light;                        // Number of samples for area light
 
-  this->lensRadius = lensRadius;
-  this->focalDistance = focalDistance;
 
   this->filename = filename;
 
@@ -45,43 +34,29 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
   camera = NULL;
 }
 
-/**
- * Destructor.
- * Frees all the internal resources used by the pathtracer.
- */
-RaytracedRenderer::~RaytracedRenderer() {
-  delete pt_host;
-}
-
-/**
- * This DOES NOT take ownership of the camera, and doesn't delete it ever.
- * \param camera the camera to use in rendering
- */
 void RaytracedRenderer::set_camera(Camera *camera) {
 
-  camera->focalDistance = focalDistance;
-  camera->lensRadius = lensRadius;
   this->camera = camera;
 }
 
-/**
- * Sets the pathtracer's frame size.
- * \param width width of the frame
- * \param height height of the frame
- */
 void RaytracedRenderer::set_frame_size(size_t width, size_t height) {
-  frameBuffer.resize(width, height);
+  frameBuffer.w = width; 
+  frameBuffer.h = height;
 
-  pt_host->sampleBuffer.resize(width, height);
+  pt_host->sampleBuffer.w = width;
+  pt_host->sampleBuffer.h = height;
 }
 
-bool RaytracedRenderer::has_valid_configuration() {
-  return camera;
-}
 
 void RaytracedRenderer::set_cuda_camera(){
-  pt_host->sampleBuffer.resize(frameBuffer.w, frameBuffer.h);
-  pt_host->camera = CudaCamera(*camera);
+  pt_host->sampleBuffer.w = frameBuffer.w;
+  pt_host->sampleBuffer.h = frameBuffer.h;
+  pt_host->camera.c2w = camera->c2w;
+  pt_host->camera.pos = camera->pos;
+  pt_host->camera.fClip = camera->fClip;
+  pt_host->camera.nClip = camera->nClip;
+  pt_host->camera.hFov = camera->hFov;
+  pt_host->camera.vFov = camera->vFov;
 }
 
 void RaytracedRenderer::render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy) {

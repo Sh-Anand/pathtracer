@@ -1,15 +1,14 @@
 #include "bvh.h"
 #include <cstddef>
 
- 
-
-BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec,
+void create_bvh(std::vector<CudaPrimitive> &primitives_vec,
                 const std::vector<Vector3D> &vertices, 
                 const std::vector<Vector3D> &normals, 
                 const std::vector<Vector2D> &texcoords,
                 const std::vector<Vector4D> &tangents,
                 bool debug,
-                size_t max_leaf_size) {
+                size_t max_leaf_size,
+                BVHCuda **bvh_ret) {
 
   DEBUG(debug,
   std::cout << "Building BVHCuda" << std::endl;
@@ -33,7 +32,7 @@ BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec,
   }
 
   std::vector<BVHNode> nodes_vec;
-  root = construct_bvh(0, primitives_vec.size(), max_leaf_size, indices, bboxes, nodes_vec);
+  size_t root = construct_nodes(0, primitives_vec.size(), max_leaf_size, indices, bboxes, nodes_vec);
 
   //reorder primitives according to reordered indices inplace
   std::vector<CudaPrimitive> primitives_vec_reordered(primitives_vec.size());
@@ -50,95 +49,43 @@ BVHCuda::BVHCuda(std::vector<CudaPrimitive> &primitives_vec,
   size_t num_texcoords = texcoords.size();
   size_t num_tangents = tangents.size();
 
-  CUDA_ERR(cudaMalloc(&primitives, num_primitives * sizeof(CudaPrimitive)));
-  CUDA_ERR(cudaMalloc(&nodes, num_nodes * sizeof(BVHNode)));
-  CUDA_ERR(cudaMalloc(&this->vertices, num_vertices * sizeof(Vector3D)));
-  CUDA_ERR(cudaMalloc(&this->normals, num_normals * sizeof(Vector3D)));
-  CUDA_ERR(cudaMalloc(&this->texcoords, num_texcoords * sizeof(Vector2D)));
-  CUDA_ERR(cudaMalloc(&this->tangents, num_tangents * sizeof(Vector4D)));
+  CudaPrimitive* primitives_bvh;
+  BVHNode* nodes_bvh;
+  Vector3D* vertices_bvh;
+  Vector3D* normals_bvh;
+  Vector2D* texcoords_bvh;
+  Vector4D* tangents_bvh;
+
+  CUDA_ERR(cudaMalloc(&primitives_bvh, num_primitives * sizeof(CudaPrimitive)));
+  CUDA_ERR(cudaMalloc(&nodes_bvh, num_nodes * sizeof(BVHNode)));
+  CUDA_ERR(cudaMalloc(&vertices_bvh, num_vertices * sizeof(Vector3D)));
+  CUDA_ERR(cudaMalloc(&normals_bvh, num_normals * sizeof(Vector3D)));
+  CUDA_ERR(cudaMalloc(&texcoords_bvh, num_texcoords * sizeof(Vector2D)));
+  CUDA_ERR(cudaMalloc(&tangents_bvh, num_tangents * sizeof(Vector4D)));
 
 
-  CUDA_ERR(cudaMemcpy(primitives, primitives_vec.data(), num_primitives * sizeof(CudaPrimitive), cudaMemcpyHostToDevice));
-  CUDA_ERR(cudaMemcpy(nodes, nodes_vec.data(), num_nodes * sizeof(BVHNode), cudaMemcpyHostToDevice));
-  CUDA_ERR(cudaMemcpy(this->vertices, vertices.data(), num_vertices * sizeof(Vector3D), cudaMemcpyHostToDevice));
-  CUDA_ERR(cudaMemcpy(this->normals, normals.data(), num_normals * sizeof(Vector3D), cudaMemcpyHostToDevice));
-  CUDA_ERR(cudaMemcpy(this->texcoords, texcoords.data(), num_texcoords * sizeof(Vector2D), cudaMemcpyHostToDevice));
-  CUDA_ERR(cudaMemcpy(this->tangents, tangents.data(), num_tangents * sizeof(Vector4D), cudaMemcpyHostToDevice));
+  CUDA_ERR(cudaMemcpy(primitives_bvh, primitives_vec.data(), num_primitives * sizeof(CudaPrimitive), cudaMemcpyHostToDevice));
+  CUDA_ERR(cudaMemcpy(nodes_bvh, nodes_vec.data(), num_nodes * sizeof(BVHNode), cudaMemcpyHostToDevice));
+  CUDA_ERR(cudaMemcpy(vertices_bvh, vertices.data(), num_vertices * sizeof(Vector3D), cudaMemcpyHostToDevice));
+  CUDA_ERR(cudaMemcpy(normals_bvh, normals.data(), num_normals * sizeof(Vector3D), cudaMemcpyHostToDevice));
+  CUDA_ERR(cudaMemcpy(texcoords_bvh, texcoords.data(), num_texcoords * sizeof(Vector2D), cudaMemcpyHostToDevice));
+  CUDA_ERR(cudaMemcpy(tangents_bvh, tangents.data(), num_tangents * sizeof(Vector4D), cudaMemcpyHostToDevice));
 
   DEBUG(debug,
   std::cout<< "BVHCuda Built: " << num_nodes << " nodes" << std::endl;
   )
-}
 
-DEVICE bool BVHCuda::intersect(Ray &ray, CudaIntersection *i) const {
-  constexpr int STACK_SIZE = 20;
-  uint32_t stack[STACK_SIZE];
-  int stack_ptr = 0;
+  BVHCuda bvh_tmp = (BVHCuda) {
+    .primitives = primitives_bvh,
+    .nodes = nodes_bvh,
+    .vertices = vertices_bvh,
+    .normals = normals_bvh,
+    .texcoords = texcoords_bvh,
+    .tangents = tangents_bvh
+  };
 
-  stack[stack_ptr++] = 0;
-  bool hit = false;
+  BVHCuda *bvh = (BVHCuda*) malloc(sizeof(BVHCuda));
+  memcpy(bvh, &bvh_tmp, sizeof(BVHCuda));
 
-  while (stack_ptr > 0) {
-    uint32_t idx = stack[--stack_ptr];
-    const BVHNode &node = nodes[idx];
-
-    float t0, t1;
-    if (!intersect_bbox(ray, node.bbmin, node.bbmax, t0, t1)) continue;
-
-    if (node.start != node.end) {
-      CudaIntersection tmp;
-      for (uint32_t p = node.start; p < node.end; p++) {
-          if (primitives[p].intersect(ray, &tmp, vertices, normals, texcoords, tangents) && tmp.t < i->t) {
-            hit = true;
-            *i = tmp;
-          }
-      }
-    } else {
-      // Push children in reverse order so left is processed first
-      if (stack_ptr + 2 > STACK_SIZE) break; // Prevent stack overflow
-      stack[stack_ptr++] = node.r;
-      stack[stack_ptr++] = node.l;
-    }
-  }
-
-  return hit;
-}
-
-DEVICE bool BVHCuda::has_intersect(Ray &ray) const {
-  constexpr int STACK_SIZE = 20;
-  uint32_t stack[STACK_SIZE];
-  int stack_ptr = 0;
-
-  // start with the root
-  stack[stack_ptr++] = 0;
-  
-  float t;
-  // traverse until stack empty
-  while (stack_ptr > 0) {
-      uint32_t idx = stack[--stack_ptr];
-      const BVHNode &node = nodes[idx];
-
-      // 1) bounding‑box test
-      float t0, t1;
-      if (!intersect_bbox(ray, node.bbmin, node.bbmax, t0, t1))
-          continue;
-
-      if (node.start != node.end) {
-          // 2) test each primitive in the leaf
-          CudaIntersection tmp;
-          for (uint32_t p = node.start; p < node.end; ++p) {
-              if (primitives[p].has_intersect(ray, vertices, t)) {
-                  return true;
-              }
-          }
-      } else {
-          // 3) push children (no need for order)
-          if (stack_ptr + 2 <= STACK_SIZE) {
-              stack[stack_ptr++] = node.l;
-              stack[stack_ptr++] = node.r;
-          }
-      }
-  }
-
-  return false;
+  *bvh_ret = bvh;
 }

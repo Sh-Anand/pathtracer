@@ -14,15 +14,13 @@
 
 // RaytracedRenderer
 #include "raytraced_renderer.h"
-#include "util/image.h"
 
 // Shared modules
 #include "scene/camera.h"
-#include "scene/texture.h"
 
 // GLTF parser
 #include "util/tiny_gltf.h"
-#include "util/vector3D.h"
+#include "util/vector.h"
 
 using namespace std;
 
@@ -130,10 +128,6 @@ class Application {
       renderer->update_camera();
       renderer->render_to_file(filename_per_image, x, y, dx, dy); 
     }
-  }
-
-  void load_camera(std::string filename) {
-    camera.load_settings(filename);
   }
 
 private:

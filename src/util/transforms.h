@@ -1,25 +1,25 @@
 #ifndef CGL_TRANSFORMS_H
 #define CGL_TRANSFORMS_H
 
-#include "vector3D.h"
-#include "matrix4x4.h"
+#include "vector.h"
+#include "matrix.h"
 
 Matrix4x4 translate(float dx, float dy, float dz){
-    return Matrix4x4(
-		1, 0, 0, dx,
-		0, 1, 0, dy,
-		0, 0, 1, dz,
-        0, 0, 0, 1
-		);
+    Matrix4x4 T;
+    T.c[0] = Vector4D{1, 0, 0, 0};
+    T.c[1] = Vector4D{0, 1, 0, 0};
+    T.c[2] = Vector4D{0, 0, 1, 0};
+    T.c[3] = Vector4D{dx, dy, dz, 1};
+    return T;
 }
 
 Matrix4x4 scale(float sx, float sy, float sz){
-    return Matrix4x4(
-        sx,   0,   0,   0,  
-        0,   sy,   0,   0,
-        0,    0,  sz,   0, 
-        0,    0,   0,   1
-    );
+    Matrix4x4 S;
+    S.c[0] = Vector4D{sx, 0, 0, 0};
+    S.c[1] = Vector4D{0, sy, 0, 0};
+    S.c[2] = Vector4D{0, 0, sz, 0};
+    S.c[3] = Vector4D{0, 0, 0, 1};
+    return S;
 }
 
 

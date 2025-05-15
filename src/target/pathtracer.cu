@@ -1,127 +1,121 @@
 #include "pathtracer.h"
 
-DEVICE __inline__ void cosine_weighted_hemisphere_sample_3d(RNGState &rand_state, Vector3D *wi, float *pdf) {
-  float Xi1 = next_float(rand_state);
-  float Xi2 = next_float(rand_state);
+DEVICE static inline void make_coord_space(Matrix3x3 *o2w, const Vector3D n) {
 
-  float r = sqrt(Xi1);
-  float theta = 2. * PI * Xi2;
-  *pdf = sqrt(1-Xi1) / PI;
-  *wi = Vector3D(r*cos(theta), r*sin(theta), sqrt(1-Xi1));
+  Vector3D z = Vector3D{n.x,n.y,n.z};
+  Vector3D h = z;
+  if (fabs(h.x) <= fabs(h.y) && fabs(h.x) <= fabs(h.z))
+    h.x = 1.0;
+  else if (fabs(h.y) <= fabs(h.x) && fabs(h.y) <= fabs(h.z))
+    h.y = 1.0;
+  else
+    h.z = 1.0;
+
+  z = vector3d_unit(z);
+  Vector3D y = vector3d_unit(vector3d_cross(h, z));
+  Vector3D x = vector3d_unit(vector3d_cross(z, y));
+
+  (*o2w).c[0] = x;
+  (*o2w).c[1] = y;
+  (*o2w).c[2] = z;
 }
-
-DEVICE __inline__ void PathTracer::perturb_normal(CudaIntersection &isect) {
-  int normal_idx = bsdfs[isect.bsdf_idx].normal_idx;
-  if (normal_idx < 0) return;
-
-  Vector3D N = isect.n;
-  Vector3D T = Vector3D(isect.tangent.x,
-                        isect.tangent.y,
-                        isect.tangent.z);
-  T = (T - N * dot(N, T)).unit();
-  Vector3D B = cross(N, T) * isect.tangent.w;
-
-  Vector4D c = textures[normal_idx].sample(isect.uv);
-  Vector3D n_tangent = Vector3D(c.x, c.y, c.z) * 2.0f - Vector3D(1.0f);
-
-  Vector3D perturbed = (T * n_tangent.x +
-                        B * n_tangent.y +
-                        N * n_tangent.z).unit();
-
-  Vector3D diff = perturbed - N;
-  float diff_len = diff.norm();
-  // use original if diff small to prevent flickering. TODO: better fix
-  if (diff_len < 0.4) {
-    isect.n = N;
-  } else {
-    isect.n = perturbed;
-  }
-}
-
 // following code adapted from https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#appendix-b-brdf-implementation
 // wo = V, wi = L
-DEVICE __inline__ Vector3D PathTracer::f(const CudaIntersection &isect, const Vector3D &wo, const Vector3D &wi, float *occlusion) {
+DEVICE static inline Vector3D f( const CudaBSDF *bsdfs,
+                          const CudaTexture *textures,
+                          const CudaIntersection isect,
+                          const Vector3D wo,
+                          const Vector3D wi,
+                          float *occlusion ) {
+  // always initialize occlusion
+  *occlusion = 1.0f;
+
+  // fetch material
   CudaBSDF bsdf = bsdfs[isect.bsdf_idx];
-  Vector3D N = isect.n; // perturbed normal
-  Vector2D uv = isect.uv;
+  Vector3D N    = isect.n;  
+  Vector2D uv   = isect.uv;
 
   // 1) geometry terms
-  Vector3D H = (wo + wi).unit(); // bisector
-  float NoV   = fabs(dot(N, wo));
-  float NoL   = fabs(dot(N, wi));
-  if (NoL == 0 || NoV == 0) return Vector3D(0.0);
-  float NoH   = dot(N, H);
-  float VoH   = dot(wo, H);
-  float LoH   = dot(wi, H);
+  Vector3D H   = vector3d_unit(vector3d_add(wo, wi));
+  float NoV    = fabsf( vector3d_dot(N, wo) );
+  float NoL    = fabsf( vector3d_dot(N, wi) );
+  if (NoL == 0.0f || NoV == 0.0f)
+    return Vector3D{};                  // zero vector
 
-  // 2) get base texture
-  Vector3D base = Vector3D(bsdf.baseColor.x,
-                           bsdf.baseColor.y,
-                           bsdf.baseColor.z);
+  float NoH    = vector3d_dot(N, H);
+  float VoH    = vector3d_dot(wo, H);
+  float LoH    = vector3d_dot(wi, H);
+
+  // 2) base color (albedo)
+  Vector3D base{ bsdf.baseColor.x,
+                 bsdf.baseColor.y,
+                 bsdf.baseColor.z };
   if (bsdf.tex_idx >= 0) {
-    Vector4D t = textures[bsdf.tex_idx].sample(uv);
-    base = base * Vector3D(t.x, t.y, t.z);
+    Vector4D t = sample(textures[bsdf.tex_idx], uv);
+    base       = Vector3D{base.x * t.x, base.y * t.y, base.z * t.z};   // component‑wise
   }
 
-  // 3) get metallic roughness
-  float metal    = bsdf.metallic;
-  float roughness= bsdf.roughness;
+  // 3) metallic/roughness/Occlusion
+  float metal     = bsdf.metallic;
+  float roughness = bsdf.roughness;
   if (bsdf.orm_idx >= 0) {
-    Vector4D orm = textures[bsdf.orm_idx].sample(uv);
-    metal     = orm.z;
-    roughness = orm.y;
-    *occlusion = orm.x;
+    Vector4D orm = sample(textures[bsdf.orm_idx], uv);
+    metal        = orm.z;
+    roughness    = orm.y;
+    *occlusion   = orm.x;
   }
 
-  // clamp values : safety
-  metal     = clamp_device(metal,     0.0, 1.0);
-  roughness = clamp_device(roughness, 0.04, 1.0); // avoid ->0
-  float onemmetal = 1.0 - metal;
+  // clamp & compute derived quantities
+  metal     = clampd(metal,     0.0f, 1.0f);
+  roughness = clampd(roughness, 0.04f,1.0f);
+  float onemmetal = 1.0f - metal;
+  float alpha     = roughness * roughness;
 
-  float alpha = roughness * roughness;
+  // 4) diffuse term
+  Vector3D c_diff  = vector3d_scale(base, onemmetal);
+  float sonemmetal = 0.04f * onemmetal;
+  Vector3D f0      = Vector3D{sonemmetal + base.x * metal, sonemmetal + base.y * metal, sonemmetal + base.z * metal};
+  Vector3D F       = vector3d_add(f0, vector3d_scale((Vector3D{1 - f0.x, 1 - f0.y, 1 - f0.z}), powf(1.0f - VoH, 5.0f)));
+  Vector3D one_mF  = Vector3D{1 - F.x, 1 - F.y, 1 - F.z};
+  Vector3D diffTerm= vector3d_scale(one_mF, PI_R);
+  Vector3D f_diffuse = vector3d_mul(diffTerm, c_diff);   // component‑wise
 
-  // 4) diffuse and specular components
-  Vector3D c_diff = base * onemmetal;
-  Vector3D f0 = onemmetal * Vector3D(0.04) + metal * base;
-  Vector3D F = f0 + (Vector3D(1.0) - f0) * pow(1.0 - VoH, 5.0);
-  Vector3D f_diffuse = (Vector3D(1.0) - F) * PI_R * c_diff;
-
+  // 5) specular term
   float D = D_compute(alpha, NoH);
-  float V = G_compute(alpha, NoV, NoL, VoH, LoH) / (4.0 * NoV * NoL);
-  Vector3D f_specular = F * D * V;
+  float G = G_compute(alpha, NoV, NoL, VoH, LoH) / (4.0f * NoV * NoL);
+  Vector3D f_specular = vector3d_scale(F, D * G);
 
-  return f_diffuse + f_specular;
+  return vector3d_add(f_diffuse, f_specular);
 }
+
 
 // Importance‑sample both diffuse (Lambert) and GGX specular lobes of the metallic‑roughness BRDF.
 // Returns f(wo, *wi), writes out *wi, *pdf, and *occlusion.
-DEVICE __inline__ Vector3D PathTracer::sample_f(const CudaIntersection &isect,
-                                                const Vector3D       &wo,
-                                                Vector3D             *wi,
-                                                float               *pdf,
-                                                float               *occlusion,
-                                                bool                 *is_delta, // is_specular?
-                                                RNGState             &rand_state) {
+DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
+                                const CudaTexture* textures,
+                                const CudaIntersection isect,
+                                const Vector3D       wo,
+                                Vector3D             *wi,
+                                float               *pdf,
+                                float               *occlusion,
+                                RNGState             *rand_state) {
   // 1) Material & normal
   const CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
   Vector3D N    = isect.n;
   Vector2D uv   = isect.uv;
-  *occlusion    = 1.0;
 
   // 2) Base color
-  Vector3D base = Vector3D(bsdf.baseColor.x,
-                           bsdf.baseColor.y,
-                           bsdf.baseColor.z);
+  Vector3D base = Vector3D{bsdf.baseColor.x, bsdf.baseColor.y, bsdf.baseColor.z};
   if (bsdf.tex_idx >= 0) {
-    Vector4D t = textures[bsdf.tex_idx].sample(uv);
-    base = base * Vector3D(t.x, t.y, t.z);
+    Vector4D t = sample(textures[bsdf.tex_idx], uv);
+    base = Vector3D{base.x * t.x, base.y * t.y, base.z * t.z};
   }
 
   // 3) Metallic, roughness, occlusion from ORM
-  float metal     = clamp_device(bsdf.metallic,  0.0, 1.0);
-  float roughness = clamp_device(bsdf.roughness, 0.02,1.0);
+  float metal     = clampd(bsdf.metallic,  0.0, 1.0);
+  float roughness = clampd(bsdf.roughness, 0.02,1.0);
   if (bsdf.orm_idx >= 0) {
-    Vector4D orm = textures[bsdf.orm_idx].sample(uv);
+    Vector4D orm = sample(textures[bsdf.orm_idx], uv);
     *occlusion   = orm.x;
     roughness    = orm.y;
     metal        = orm.z;
@@ -129,19 +123,19 @@ DEVICE __inline__ Vector3D PathTracer::sample_f(const CudaIntersection &isect,
   float onem = 1.0 - metal;
 
   // // 4) Visibility check
-  float NoV = fabs(dot(N, wo));
+  float NoV = fabs(vector3d_dot(N, wo));
   if (NoV == 0.0) {
     *pdf = 0.0;
-    return Vector3D(0.0);
+    return Vector3D{};
   }
 
   // 5) Precompute F₀ and mixture weights
   float alpha = roughness * roughness;
-  Vector3D F0  = Vector3D(0.04) * onem + base * metal;
+  Vector3D F0  = Vector3D{0.04f * onem + base.x * metal, 0.04f * onem + base.y * metal, 0.04f * onem + base.z * metal};
 
   // with—compute luminance of F₀:
   float   F0_avg = (F0.x + F0.y + F0.z) / 3.0;  
-  F0_avg         = clamp_device(F0_avg, 0.0, 1.0);
+  F0_avg         = clampd(F0_avg, 0.0, 1.0);
 
   float P_s = F0_avg;   // sample specular lobe with Fresnel weight
   float P_d = 1.0 - P_s;
@@ -151,15 +145,21 @@ DEVICE __inline__ Vector3D PathTracer::sample_f(const CudaIntersection &isect,
   if (u < P_d) {
     // ── DIFFUSE ──
     // sample cosine‑weighted hemisphere
-    cosine_weighted_hemisphere_sample_3d(rand_state, wi, pdf);
+    float Xi1 = next_float(rand_state);
+    float Xi2 = next_float(rand_state);
+
+    float r = sqrt(Xi1);
+    float theta = 2. * PI * Xi2;
+    *pdf = sqrt(1-Xi1) / PI;
+    Vector3D wit = Vector3D{r*cos(theta),r*sin(theta),sqrt(1-Xi1)};
+    *wi = wit;
     *pdf *= P_d;
-    *is_delta = false;
     // evaluate BRDF
-    Vector3D H     = (wo + *wi).unit();
-    float VoH     = max(dot(wo, H), 0.0);
-    Vector3D F_geo = F0 + (Vector3D(1.0) - F0) * pow(1.0 - VoH, 5.0);
-    Vector3D c_diff = base * onem;
-    return (Vector3D(1.0) - F_geo) * (1.0 / M_PI) * c_diff;
+    Vector3D H     = vector3d_unit(vector3d_add(wo, wit));
+    float VoH     = max(vector3d_dot(wo, H), 0.0f);
+    Vector3D F_geo = vector3d_add(F0, vector3d_scale((Vector3D{1.0f - F0.x,1.0f - F0.y,1.0f - F0.z}), pow(1.0 - VoH, 5.0)));
+    Vector3D c_diff = vector3d_scale(base, onem);
+    return Vector3D{c_diff.x * (1.0f - F_geo.x * PI_R), c_diff.y * (1.0f - F_geo.y * PI_R), c_diff.z * (1.0f - F_geo.z * PI_R)};
   } else {
     // ── SPECULAR (GGX) ──
     // (a) sample microfacet normal H via GGX NDF
@@ -170,51 +170,51 @@ DEVICE __inline__ Vector3D PathTracer::sample_f(const CudaIntersection &isect,
     float sinTheta = sqrt(max(0.0, 1.0 - cosTheta*cosTheta));
 
     Matrix3x3 o2w;
-    make_coord_space(o2w, N);
-    Vector3D localH = Vector3D(sinTheta * cos(phi),
+    make_coord_space(&o2w, N);
+    Vector3D localH = Vector3D{sinTheta * cos(phi),
                                sinTheta * sin(phi),
-                               cosTheta);
-    Vector3D H = (o2w * localH).unit();
+                               cosTheta};
+    Vector3D H = vector3d_unit(matrix3x3_vector_multiply(&o2w, &localH));
 
     // (b) reflect view vector about H
-    *wi = reflect(-wo, H);
-
+    Vector3D wit = vector3d_reflect(vector3d_neg(wo), H);
+    *wi = wit;
     // (c) compute PDF
-    float NoH   = max(dot(N, H), 0.0);
-    float VoH   = max(dot(wo, H), 0.0);
+    float NoH   = max(vector3d_dot(N, H), 0.0f);
+    float VoH   = max(vector3d_dot(wo, H), 0.0f);
     float D     = D_compute(alpha, NoH);
     float pdf_H = D * NoH;
     float pdf_w = pdf_H / (4.0 * VoH);
     *pdf = pdf_w * P_s;
-    *is_delta = true;
 
     // (d) evaluate microfacet BRDF
-    float NoL = max(dot(N, *wi), 0.0);
-    float G   = G_compute(alpha, NoV, NoL, VoH, max(dot(*wi, H), 0.0));
-    Vector3D F_geo = F0 + (Vector3D(1.0) - F0) * pow(1.0 - VoH, 5.0);
-    return F_geo * (D * G / (4.0 * NoV * NoL));
+    float NoL = max(vector3d_dot(N, wit), 0.0f);
+    float G   = G_compute(alpha, NoV, NoL, VoH, max(vector3d_dot(*wi, H), 0.0f));
+    Vector3D F_geo = vector3d_add(F0, vector3d_scale(Vector3D{1.0f - F0.x , 1.0f - F0.y, 1.0f - F0.z}, pow(1.0 - VoH, 5.0)));
+    return vector3d_scale(F_geo, (D * G / (4.0 * NoV * NoL)));
   }
 }
 
 // power­-heuristic MIS weight, β=2
-inline __device__ float mis_weight(float pA, float pB) {
+DEVICE static inline float mis_weight(float pA, float pB) {
   float wA = pA*pA;
   float wB = pB*pB;
   return wA / (wA + wB);
 }
 
 // mixture PDF of your metallic‑roughness lobes
-DEVICE __inline__ float PathTracer::bsdf_pdf(const CudaIntersection &isect,
-                                  const Vector3D &wo,
-                                  const Vector3D &wi) {
+DEVICE static inline float bsdf_pdf(const CudaBSDF* bsdfs, 
+                             const CudaIntersection isect,
+                             const Vector3D wo,
+                             const Vector3D wi) {
   Vector3D N = isect.n;
-  float NoL = fabs(dot(N, wi));
+  float NoL = fabs(vector3d_dot(N, wi));
   if (NoL == 0) return 0.0;
 
   // fetch metallic & roughness
   CudaBSDF b = bsdfs[isect.bsdf_idx];
-  float metal    = clamp_device(b.metallic,  0.0, 1.0);
-  float roughness= clamp_device(b.roughness, 0.02,1.0);
+  float metal    = clampd(b.metallic,  0.0, 1.0);
+  float roughness= clampd(b.roughness, 0.02,1.0);
   float onem     = 1.0 - metal;
   float alpha    = roughness * roughness;
 
@@ -222,9 +222,9 @@ DEVICE __inline__ float PathTracer::bsdf_pdf(const CudaIntersection &isect,
   float pdf_diff = onem * (NoL / M_PI);
 
   // 2) specular pdf = D(α,NoH)·NoH / (4·VoH)
-  Vector3D H   = (wo + wi).unit();
-  float NoH   = fmaxf(dot(N, H), 0.0);
-  float VoH   = fmaxf(dot(wo, H), 0.0);
+  Vector3D H   = vector3d_unit(vector3d_add(wo, wi));
+  float NoH   = fmaxf(vector3d_dot(N, H), 0.0);
+  float VoH   = fmaxf(vector3d_dot(wo, H), 0.0);
   float D     = D_compute(alpha, NoH);
   float pdf_spec = metal * (D * NoH / (4.0 * VoH));
 
@@ -232,74 +232,70 @@ DEVICE __inline__ float PathTracer::bsdf_pdf(const CudaIntersection &isect,
 }
 
 
-DEVICE __inline__ Vector3D PathTracer::estimate_direct_lighting_importance(Ray &r,
-                                                const CudaIntersection &isect) {
+DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt, Ray r, const CudaIntersection isect) {
   Matrix3x3 o2w;
 
-  make_coord_space(o2w, isect.n);
-  Matrix3x3 w2o = o2w.T();
+  make_coord_space(&o2w, isect.n);
+  Matrix3x3 w2o = matrix3x3_transpose(&o2w);
 
   // w_out points towards the source of the ray (e.g.,
   // toward the camera if this is a primary ray)
-  const Vector3D hit_p = r.o + r.d * isect.t;
-  const Vector3D w_out = w2o * (-r.d);
-  Vector3D L_out = Vector3D(0, 0, 0);
-  Vector3D wi;
-
+  const Vector3D hit_p = ray_at(r, isect.t);
+  const Vector3D minus_out_dir = vector3d_neg(r.d);
+  const Vector3D w_out =  matrix3x3_vector_multiply(&w2o, &minus_out_dir);
+  Vector3D L_out = Vector3D{};
   //NOTE: wi here is in worldpsace,
 
   uint16_t x = blockIdx.x * blockDim.x + threadIdx.x;
   uint16_t y = blockIdx.y * blockDim.y + threadIdx.y;
 
   float occlusion; //ignored for dir lighting
-  for (int i = 0; i < num_lights; ++i) {
-    CudaLight L = lights[i];
+  for (int i = 0; i < pt->num_lights; ++i) {
+    CudaLight L = pt->lights[i];
     Vector3D wi;
     float   distToL, pdfL;
-    Vector3D Li = L.sample_L(hit_p, &wi, &distToL, &pdfL,
-                           rand_states[x + y * sampleBuffer.w], bvh->vertices);
+    Vector3D Li = sample_L(&L, hit_p, &wi, &distToL, &pdfL,
+                           &pt->rand_states[x + y * pt->sampleBuffer.w], pt->bvh->vertices);
 
-    float cosNL = fmaxf(dot(isect.n, wi), 0.0);
+    float cosNL = fmaxf(vector3d_dot(isect.n, wi), 0.0);
     if (pdfL > 0 && cosNL > 0) {
       // shadow test
-      Ray shadow(hit_p, wi);
+      Ray shadow; shadow.o = hit_p; shadow.d = wi; shadow.inv_d = vector3d_rcp(wi); shadow.depth = 0;
       shadow.min_t = EPS_F;
       shadow.max_t = distToL;
-      if (!bvh->has_intersect(shadow)) {
+      if (!has_intersect(pt->bvh, &shadow)) {
         // BRDF eval and PDF of sampling that same wi via BSDF
-        Vector3D f_val = f(isect, w_out, wi, &occlusion);
-        float  pdfB   = bsdf_pdf(isect, w_out, wi);
+        Vector3D f_val = f(pt->bsdfs, pt->textures, isect, w_out, wi, &occlusion);
+        float  pdfB   = bsdf_pdf(pt->bsdfs, isect, w_out, wi);
         float  w      = mis_weight(pdfL, pdfB);
-        L_out += f_val * Li * cosNL * w / pdfL;
+        L_out = vector3d_add(L_out, vector3d_mul(f_val, vector3d_scale(Li, (cosNL * w / pdfL))));
       }
     }
   }
 
   Vector3D wi_bsdf;
   float   pdfB;
-  bool  is_delta;
-  Vector3D f_bsdf = sample_f(isect, w_out, &wi_bsdf, &pdfB,
-                             &occlusion, &is_delta, rand_states[x + y * sampleBuffer.w]);
-  float cosNL = fmaxf(dot(isect.n, wi_bsdf), 0.0);
+  Vector3D f_bsdf = sample_f(pt->bsdfs, pt->textures, isect, w_out, &wi_bsdf, &pdfB,
+                             &occlusion, &pt->rand_states[x + y * pt->sampleBuffer.w]);
+  float cosNL = fmaxf(vector3d_dot(isect.n, wi_bsdf), 0.0);
 
   if (pdfB > 0 && cosNL > 0) {
     // trace a ray in that direction and see if it hits *any* light
-    Ray shadow(hit_p, wi_bsdf);
-    CudaIntersection Lhit;
+    Ray shadow; shadow.o = hit_p; shadow.d = wi_bsdf; shadow.inv_d = vector3d_rcp(wi_bsdf); shadow.depth = 0;
     shadow.min_t = EPS_F;
     shadow.max_t = INFINITY;
 
     // bad, checking every light, assumes few lights
-    CudaBSDF bsdf = bsdfs[isect.bsdf_idx];
+    CudaBSDF bsdf = pt->bsdfs[isect.bsdf_idx];
 
-    for (int i = 0; i < num_lights; ++i) {
-      CudaLight L = lights[i];
+    for (int i = 0; i < pt->num_lights; ++i) {
+      CudaLight L = pt->lights[i];
       float pdfL;
-      if (L.has_intersect(shadow, hit_p, isect.n, bvh->vertices, &pdfL)) {
+      if (light_has_intersect(&L, &shadow, &hit_p, &isect.n, pt->bvh->vertices, &pdfL)) {
         // get the light and compute its PDF for this direction
         Vector3D Li = bsdf.emission;
         float w    = mis_weight(pdfB, pdfL);
-        L_out += f_bsdf * Li * cosNL * w / pdfB;
+        L_out = vector3d_add(L_out, vector3d_mul(f_bsdf, vector3d_scale(Li, (cosNL * w / pdfB))));
       }
     }
     
@@ -311,78 +307,75 @@ DEVICE __inline__ Vector3D PathTracer::estimate_direct_lighting_importance(Ray &
 
 #define RRT 0.7f
 
-DEVICE __inline__ Vector3D PathTracer::at_least_one_bounce_radiance(Ray& r, const CudaIntersection& isect_init) {
-  Vector3D L_out_total(0.0);
-  Vector3D throughput(1.0);
+DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r, const CudaIntersection isect_init) {
+  Vector3D L_out_total{0.0, 0.0, 0.0};
+  Vector3D throughput{1.0, 1.0, 1.0};
   Ray current_ray = r;
   CudaIntersection isect = isect_init;
   bool first_bounce = true;
 
   // constant index since x,y don’t change across bounces
-  int idx = current_ray.x + current_ray.y * sampleBuffer.w;
-  rays_traced[idx] = 0;
+  int idx = current_ray.x + current_ray.y * pt->sampleBuffer.w;
+  pt->rays_traced[idx] = 0;
   uint8_t level = 1;
-  while (level++ <= max_ray_depth) {
-    rays_traced[idx]++;
+  while (level++ <= pt->max_ray_depth) {
+    pt->rays_traced[idx]++;
     // build shading frame
     Matrix3x3 o2w;
-    make_coord_space(o2w, isect.n);
-    Matrix3x3 w2o = o2w.T();
+    make_coord_space(&o2w, isect.n);
+    Matrix3x3 w2o = matrix3x3_transpose(&o2w);
 
     // hit point & outgoing dir in local space
-    Vector3D hit_p  = current_ray.o + current_ray.d * isect.t;
-    Vector3D w_out  = w2o * (-current_ray.d);
+    Vector3D hit_p  = ray_at(current_ray, isect.t);
+    Vector3D minus_out_dir = vector3d_neg(current_ray.d);
+    Vector3D w_out  = matrix3x3_vector_multiply(&w2o, &minus_out_dir);
 
     // direct lighting
-    Vector3D L_out = estimate_direct_lighting_importance(current_ray, isect);
+    Vector3D L_out = estimate_direct_lighting_importance(pt, current_ray, isect);
     if (first_bounce) {
-        initialSampleBuffer[idx].emittance = L_out;
+        pt->initialSampleBuffer[idx].emittance = L_out;
     }
-    L_out_total += throughput * L_out;
+    L_out_total = vector3d_add(L_out_total, vector3d_mul(throughput, L_out));
 
     // russian-roulette survival
     float p_survive = (current_ray.depth == 1) ? 1.0f : RRT;
     if (current_ray.depth > 1 &&
-        next_float(rand_states[idx]) >= RRT)
+        next_float(&pt->rand_states[idx]) >= RRT)
         break;
 
     // sample BSDF
-    Vector3D wi;
+    Vector3D wi{0,0,0};
     float pdf;
     float occlusion = 1.0;
-    bool is_delta = false;
-    Vector3D fcos = sample_f(isect, w_out, &wi, &pdf, &occlusion, &is_delta, rand_states[idx]) * abs_cos_theta(wi);
-    fcos *= occlusion;
+    Vector3D fcos = sample_f(pt->bsdfs, pt->textures, isect, w_out, &wi, &pdf, &occlusion, &pt->rand_states[idx]);
+    fcos = vector3d_scale(fcos, abs_cos_theta(wi) * occlusion);
     if (pdf <= 0.0)
         break;
 
     // update throughput
-    throughput = throughput * (first_bounce ? 1.0 : fcos);
-    throughput /= (pdf * p_survive);
+    throughput = first_bounce ? throughput: vector3d_mul(throughput, fcos);
+    throughput = vector3d_scale(throughput, 1 / (pdf * p_survive));
 
     // spawn next ray
-    Ray bounce_ray(hit_p, o2w * wi);
+    Ray bounce_ray; bounce_ray.o = hit_p; bounce_ray.d = matrix3x3_vector_multiply(&o2w, &wi); bounce_ray.max_t = INFINITY; bounce_ray.inv_d = vector3d_rcp(bounce_ray.d);
     bounce_ray.min_t = EPS_F;
     bounce_ray.depth = current_ray.depth + 1;
     bounce_ray.x = current_ray.x;
     bounce_ray.y = current_ray.y;
 
-    CudaIntersection bounce_isect;
-    if (!bvh->intersect(bounce_ray, &bounce_isect))
+    CudaIntersection bounce_isect; bounce_isect.t = INFINITY;
+    if (!intersect(pt->bvh, &bounce_ray, &bounce_isect))
         break;
 
-    // perturb_normal(bounce_isect);
-
     if (first_bounce) {
-        Vector3D bounce_p = bounce_ray.o + bounce_ray.d * bounce_isect.t;
-        Sample* s = &initialSampleBuffer[idx];
+        Vector3D bounce_p = ray_at(bounce_ray, bounce_isect.t);
+        Sample* s = &pt->initialSampleBuffer[idx];
         s->x_v   = hit_p;
         s->n_v   = isect.n;
         s->x_s   = bounce_p;
         s->n_s   = bounce_isect.n;
         s->pdf   = pdf;
         s->fcos  = fcos;
-        s->is_delta = is_delta;
     }
 
     // prepare for next iteration
@@ -391,71 +384,96 @@ DEVICE __inline__ Vector3D PathTracer::at_least_one_bounce_radiance(Ray& r, cons
     first_bounce = false;
   }
 
-  return L_out_total - initialSampleBuffer[idx].emittance;
+  return vector3d_sub(L_out_total, pt->initialSampleBuffer[idx].emittance);
 }
 
-DEVICE void PathTracer::raytrace_pixel(uint16_t x, uint16_t y) {
-  CudaIntersection isect;
+DEVICE static inline void raytrace_pixel(PathTracer *pt, uint16_t x, uint16_t y) {
+  CudaIntersection isect; isect.t = INFINITY;
   
-  uint16_t num_samples = ns_aa;
+  uint16_t num_samples = pt->ns_aa;
   Ray r;
   uint16_t i = 1;
-  initialSampleBuffer[x + y * sampleBuffer.w] = Sample();
-  init_gpu_rng(rand_states[x + y * sampleBuffer.w], 1234 + x + y * sampleBuffer.w);
+  uint32_t idx = x + y * pt->sampleBuffer.w;
+  pt->initialSampleBuffer[idx] = Sample{};
+  init_gpu_rng(&pt->rand_states[idx], 1234 + idx);
   do {
-    Vector2D origin = Vector2D(x, y);
-    Vector2D sample = origin + Vector2D(next_float(rand_states[x + y * sampleBuffer.w]), next_float(rand_states[x + y * sampleBuffer.w]));
-    r = camera.generate_ray(sample.x / sampleBuffer.w, sample.y / sampleBuffer.h);
+    Vector2D origin = Vector2D{float(x), float(y)};
+    Vector2D sample;
+    sample.x = origin.x + next_float(&pt->rand_states[idx]);
+    sample.y = origin.y + next_float(&pt->rand_states[idx]);
+    r = generate_ray(&pt->camera, sample.x / pt->sampleBuffer.w, sample.y / pt->sampleBuffer.h);
     r.depth = 1, r.x = x, r.y = y;
-  } while (i++ != num_samples && !bvh->intersect(r, &isect));
-  if (i == num_samples + 1) {
-    initialSampleBuffer[x + y * sampleBuffer.w].L = Vector3D(0, 0, 0);
-    initialSampleBuffer[x + y * sampleBuffer.w].emittance = Vector3D(0, 0, 0);
-  } else {
-    perturb_normal(isect);
-    Vector3D L = at_least_one_bounce_radiance(r, isect);
-    initialSampleBuffer[r.x + r.y * sampleBuffer.w].emittance += bsdfs[isect.bsdf_idx].emission;
-    initialSampleBuffer[r.x + r.y * sampleBuffer.w].L = L;
+  } while (i++ != num_samples && !intersect(pt->bvh, &r, &isect));
+  if (i <= num_samples) {
+    // perturb normal
+    int normal_idx = pt->bsdfs[isect.bsdf_idx].normal_idx;
+    if (normal_idx >= 0) {
+      Vector3D N = isect.n;
+      Vector3D T = Vector3D{isect.tangent.x, isect.tangent.y, isect.tangent.z};
+      T = vector3d_unit(vector3d_sub(T, vector3d_scale(N, vector3d_dot(N, T))));
+      Vector3D B = vector3d_scale(vector3d_cross(N, T), isect.tangent.w);
+
+      Vector4D c = sample(pt->textures[normal_idx], isect.uv);
+      Vector3D n_tangent = Vector3D{c.x * 2.0f - 1.0f,
+                                    c.y * 2.0f - 1.0f,
+                                    c.z * 2.0f - 1.0f};
+      Vector3D perturbed = vector3d_unit(vector3d_add(vector3d_scale(T, n_tangent.x), vector3d_add(vector3d_scale(B, n_tangent.y), vector3d_scale(N, n_tangent.z))));
+
+      Vector3D diff = vector3d_sub(perturbed, N);
+      float diff_len = vector3d_norm(diff);
+      // use original if diff small to prevent flickering. TODO: better fix
+      if (diff_len < 0.4) {
+        isect.n = N;
+      } else {
+        isect.n = perturbed;
+      }
+    }
+    Vector3D L = at_least_one_bounce_radiance(pt, r, isect);
+    Sample sp = pt->initialSampleBuffer[idx];
+    sp.emittance = vector3d_add(sp.emittance, pt->bsdfs[isect.bsdf_idx].emission);
+    sp.L = L;
+    pt->initialSampleBuffer[idx] = sp;
   }
 }
 
 // Computes jacobian from s1->s2 as defined in Equation 11 of the ReSTIR-GI paper
-DEVICE __inline__ float jacobian(const Sample& s1, const Sample& s2) {
+DEVICE static inline float jacobian(const Sample s1, const Sample s2) {
   Vector3D xq1 = s1.x_v;
   Vector3D xq2 = s1.x_s;
   Vector3D xr1 = s2.x_v;
-
   Vector3D nq2 = s1.n_s;
+  Vector3D xq1mxq2 = vector3d_sub(xq1, xq2);
+  Vector3D xr1mxq2 = vector3d_sub(xr1, xq2);
 
-  float cos_phi_q2 = fabs(dot(nq2, (xq1 - xq2).unit())); 
-  float cos_phi_r2 = fabs(dot(nq2, (xr1 - xq2).unit()));
+  float cos_phi_q2 = fabs(vector3d_dot(nq2, vector3d_unit(xq1mxq2))); 
+  float cos_phi_r2 = fabs(vector3d_dot(nq2, vector3d_unit(xr1mxq2)));
 
-  float distance_q = (xq1 - xq2).norm2();
-  float distance_r = (xr1 - xq2).norm2();
+  float distance_q = vector3d_norm(xq1mxq2);
+  float distance_r = vector3d_norm(xr1mxq2);
 
   return (cos_phi_r2 / cos_phi_q2) * (distance_q / distance_r);
 }
 
-DEVICE void PathTracer::temporal_resampling(uint16_t x, uint16_t y) {
-  int idx = x + y * sampleBuffer.w;
-  Sample S = initialSampleBuffer[idx];
-  Reservoir R = Reservoir();
+DEVICE static inline void temporal_resampling(PathTracer *pt, uint16_t x, uint16_t y) {
+  int idx = x + y * pt->sampleBuffer.w;
+  Sample S = pt->initialSampleBuffer[idx];
+  Reservoir R{};
 
   float w = p_hat(S);
-  R.update(S, w, rand_states[idx]);
+  update(&R, S, w, &pt->rand_states[idx]);
   R.W = R.w / (R.M * p_hat(R.z));
 
-  temporalReservoirBuffer[idx] = R;
+  pt->temporalReservoirBuffer[idx] = R;
 }
 
-DEVICE void PathTracer::spatial_resampling(uint16_t x, uint16_t y) {
+DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_t y) {
 
-  const uint16_t neighbouring_pixel_radius = floor(0.2 * min(sampleBuffer.w, sampleBuffer.h));
+  const uint16_t neighbouring_pixel_radius = floor(0.2 * min(pt->sampleBuffer.w, pt->sampleBuffer.h));
 
-  int idx = x + y * sampleBuffer.w;
-  Reservoir Rs = temporalReservoirBuffer[idx];
-  Sample q = initialSampleBuffer[idx];
-  RNGState rand_state = rand_states[idx];
+  int idx = x + y * pt->sampleBuffer.w;
+  Reservoir Rs = pt->temporalReservoirBuffer[idx];
+  Sample q = pt->initialSampleBuffer[idx];
+  RNGState *rand_state = &pt->rand_states[idx];
   const uint8_t max_neighbouring_samples = 9; // ReSTIR GI paper value without temporal sampling
   for (uint8_t s = 0; s < max_neighbouring_samples; s++) {
     // Randomly choose a neighbor pixel qn
@@ -464,12 +482,12 @@ DEVICE void PathTracer::spatial_resampling(uint16_t x, uint16_t y) {
     uint16_t sample_y = y + static_cast<int>(next_float(rand_state) * window) - neighbouring_pixel_radius;
 
     // Ensure the sample is within the frame buffer bounds
-    if (sample_x >= sampleBuffer.w || sample_y >= sampleBuffer.h) continue;
+    if (sample_x >= pt->sampleBuffer.w || sample_y >= pt->sampleBuffer.h) continue;
 
     // Retrieve the reservoir from the neighboring pixel
-    Reservoir Rn = temporalReservoirBuffer[sample_x + sample_y * sampleBuffer.w];
+    Reservoir Rn = pt->temporalReservoirBuffer[sample_x + sample_y * pt->sampleBuffer.w];
     // Calculate geometric similarity between q and qn
-    if (!are_geometrically_similar(q, Rn.z) || Rn.z.L == Vector3D(0, 0, 0)) continue;
+    if (!are_geometrically_similar(q, Rn.z) || (Rn.z.L.x == 0 && Rn.z.L.y == 0 && Rn.z.L.z == 0)) continue;
 
     // Calculate |Jqn→q| (Jacobian determinant)
     float Jqn_to_q = jacobian(Rn.z, q); // Placeholder for actual Jacobian calculation
@@ -479,26 +497,28 @@ DEVICE void PathTracer::spatial_resampling(uint16_t x, uint16_t y) {
 
     // visibility test
     // if neighbour's path's point is invisible from the current path's point, p_prime_q = 0
-    Ray shadow_ray(q.x_v, (Rn.z.x_s - q.x_v).unit());
+    Ray shadow_ray;
+    Vector3D xsmxv = vector3d_sub(Rn.z.x_s, q.x_v);
+    shadow_ray.o = q.x_v; shadow_ray.d = vector3d_unit(xsmxv); shadow_ray.depth = 0; shadow_ray.inv_d = vector3d_rcp(shadow_ray.d);
     shadow_ray.min_t = EPS_F;
-    shadow_ray.max_t = (Rn.z.x_s - q.x_v).norm() - EPS_F;
-    if (bvh->has_intersect(shadow_ray)) p_prime_q = 0;
+    shadow_ray.max_t = vector3d_norm(xsmxv) - EPS_F;
+    if (has_intersect(pt->bvh, &shadow_ray)) p_prime_q = 0;
 
     // Merge Rn into the current reservoir
-    Rs.merge(Rn, p_prime_q, rand_state);
+    merge(&Rs, Rn, p_prime_q, rand_state);
   }
 
   float phat = p_hat(Rs.z);
   Rs.W = Rs.M * phat > 0 ? Rs.w / (Rs.M * phat) : 0;
-  rand_states[idx] = rand_state;
-  spatialReservoirBuffer[idx] = Rs;
+  pt->rand_states[idx] = *rand_state;
+  pt->spatialReservoirBuffer[idx] = Rs;
 }
 
-DEVICE void PathTracer::render_final_sample(uint16_t x, uint16_t y) {
-  Reservoir R = spatialReservoirBuffer[x + y * sampleBuffer.w];
+DEVICE static inline void render_final_sample(PathTracer *pt, uint16_t x, uint16_t y) {
+  Reservoir R = pt->spatialReservoirBuffer[x + y * pt->sampleBuffer.w];
   Sample S = R.z;
-  Sample initial = initialSampleBuffer[x + y *  sampleBuffer.w];
-  Vector3D L = initial.emittance + S.fcos * S.L * R.W;
+  Sample initial = pt->initialSampleBuffer[x + y *  pt->sampleBuffer.w];
+  Vector3D L = vector3d_add(initial.emittance, vector3d_mul(S.fcos, vector3d_scale(S.L, R.W)));
 
-  sampleBuffer.update_pixel(L, x, y);
+  pt->sampleBuffer.data[x + y * pt->sampleBuffer.w] = L;
 }

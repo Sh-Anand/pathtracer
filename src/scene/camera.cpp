@@ -4,8 +4,7 @@
 #include <sstream>
 #include <fstream>
 
-#include "util/vector2D.h"
-#include "util/vector3D.h"
+#include "util/vector.h"
 
 using std::cout;
 using std::endl;
@@ -91,18 +90,9 @@ void Camera::set_screen_size(const size_t screenW, const size_t screenH) {
 void Camera::move_by(const float dx, const float dy, const float d) {
   const float scaleFactor = d / screenDist;
   const Vector3D displacement =
-    c2w[0] * (dx * scaleFactor) + c2w[1] * (dy * scaleFactor);
-  pos += displacement;
-  targetPos += displacement;
-}
-
-/**
- * This function translates the camera position (in forward direction)
- */
-void Camera::move_forward(const float dist) {
-  float newR = min(max(r - dist, minR), maxR);
-  pos = targetPos + ((pos - targetPos) * (newR / r));
-  r = newR;
+    vector3d_add(vector3d_scale(c2w.c[0], (dx * scaleFactor)), vector3d_scale(c2w.c[1], (dy * scaleFactor)));
+  pos = vector3d_add(pos, displacement);
+  targetPos = vector3d_add(targetPos, displacement);
 }
 
 /**
@@ -123,60 +113,15 @@ void Camera::compute_position() {
     phi += EPS_F;
     sinPhi = sin(phi);
   }
-  const Vector3D dirToCamera(r * sinPhi * sin(theta),
-                             r * cos(phi),
-                             r * sinPhi * cos(theta));
-  pos = targetPos + dirToCamera;
-  Vector3D upVec(0, sinPhi > 0 ? 1 : -1, 0);
-  Vector3D screenXDir = cross(upVec, dirToCamera);
-  screenXDir.normalize();
-  Vector3D screenYDir = cross(dirToCamera, screenXDir);
-  screenYDir.normalize();
+  const Vector3D dirToCamera{r * sinPhi * sinf(theta),
+                             r * cosf(phi),
+                             r * sinPhi * cosf(theta)};
+  pos = vector3d_add(targetPos, dirToCamera);
+  Vector3D upVec{0, sinPhi > 0 ? 1.0f : -1.0f, 0.f};
+  Vector3D screenXDir = vector3d_unit(vector3d_cross(upVec, dirToCamera));
+  Vector3D screenYDir = vector3d_unit(vector3d_cross(dirToCamera, screenXDir));
 
-  c2w[0] = screenXDir;
-  c2w[1] = screenYDir;
-  c2w[2] = dirToCamera.unit();   // camera's view direction is the
-                                 // opposite of of dirToCamera, so
-                                 // directly using dirToCamera as
-                                 // column 2 of the matrix takes [0 0 -1]
-                                 // to the world space view direction
-}
-
-/**
- * This function stores the camera settings into a file
- */
-void Camera::dump_settings(std::string filename) {
-  ofstream file(filename);
-  file << hFov << " " << vFov << " " << ar << " " << nClip << " " << fClip << endl;
-  for (int i = 0; i < 3; ++i)
-    file << pos[i] << " ";
-  for (int i = 0; i < 3; ++i)
-    file << targetPos[i] << " ";
-  file << endl;
-  file << phi << " " << theta << " " << r << " " << minR << " " << maxR << endl;
-  for (int i = 0; i < 9; ++i)
-    file << c2w(i/3, i%3) << " ";
-  file << endl;
-  file << screenW << " " << screenH << " " << screenDist << endl;
-  file << focalDistance << " " << lensRadius << endl;
-  cout << "[Camera] Dumped settings to " << filename << endl;
-}
-
-/**
- * This function loads the camera settings from a file
- */
-void Camera::load_settings(std::string filename) {
-  ifstream file(filename);
-
-  file >> hFov >> vFov >> ar >> nClip >> fClip;
-  for (int i = 0; i < 3; ++i)
-    file >> pos[i];
-  for (int i = 0; i < 3; ++i)
-    file >> targetPos[i];
-  file >> phi >> theta >> r >> minR >> maxR;
-  for (int i = 0; i < 9; ++i)
-    file >> c2w(i/3, i%3);
-  file >> screenW >> screenH >> screenDist;
-  file >> focalDistance >> lensRadius;
-  cout << "[Camera] Loaded settings from " << filename << endl;
+  c2w.c[0] = screenXDir;
+  c2w.c[1] = screenYDir;
+  c2w.c[2] = vector3d_unit(dirToCamera);
 }

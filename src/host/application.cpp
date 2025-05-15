@@ -1,14 +1,9 @@
 #include "application.h"
 
-#include "scene/bsdf.h"
-#include "scene/texture.h"
-#include "scene/primitive.h"
-#include "util/matrix3x3.h"
-#include "util/matrix4x4.h"
-#include "util/quaternion.h"
+#include "scene/material.h"
+#include "scene/geometry.h"
+#include "util/matrix.h"
 #include "util/transforms.h"
-#include "util/vector3D.h"
-#include "util/vector4D.h"
 
 #include <cmath>
 #include <iostream>
@@ -42,8 +37,8 @@ Application::Application(AppConfig config) {
   lights.clear();
   textures.clear();
   
-  texcoords.push_back(Vector2D(0, 0)); // dummy texcoord for all non-textured materials
-  tangents.push_back(Vector4D(0)); // dummy tangent for all non-bump mapped materials
+  texcoords.push_back(Vector2D{0, 0}); // dummy texcoord for all non-textured materials
+  tangents.push_back(Vector4D{0,0,0,0}); // dummy tangent for all non-bump mapped materials
 }
 
 Application::~Application() {
@@ -62,6 +57,8 @@ void Application::init() {
   cameraInfo.vFov = 35;
   cameraInfo.nClip = 0.01;
   cameraInfo.fClip = 100;
+  cameraInfo.view_dir = Vector3D{0, 0, -1};
+  cameraInfo.up_dir = Vector3D{0, 1, 0};
   camera.configure(cameraInfo, screenW, screenH);
 }
 
@@ -73,29 +70,32 @@ void Application::resize(size_t w, size_t h) {
 }
 
 Matrix4x4 GetNodeTransform(const tinygltf::Node &node) {
-  Matrix4x4 T(1.0f);
+  Matrix4x4 T = matrix4x4_identity();
 
   if (!node.matrix.empty()) {
     // tinygltf stores matrix in column‐major order
     Matrix4x4 M;
     for (int i = 0; i < 16; i+=4) {
-      M[i%4] = Vector4D(node.matrix[i], node.matrix[i+1], node.matrix[i+2], node.matrix[i+3]);
+      M.c[i%4] = Vector4D{float(node.matrix[i]), float(node.matrix[i+1]), float(node.matrix[i+2]), float(node.matrix[i+3])};
     }
     return M;
   }
-  Vector3D translation(0.0f), _scale(1.0f);
+  Vector3D translation{0.0f, 0.0f, 0.0f}, _scale{1.0f, 1.0f, 1.0f};
   Quaternion rotation = Quaternion(0, 0, 0, 1);
 
   if (!node.translation.empty())
-      translation = Vector3D(node.translation[0], node.translation[1], node.translation[2]);
+      translation = Vector3D{float(node.translation[0]), float(node.translation[1]), float(node.translation[2])};
   if (!node.rotation.empty())
       rotation = Quaternion(node.rotation[0], node.rotation[1], node.rotation[2], node.rotation[3]);
   if (!node.scale.empty())
-      _scale = Vector3D(node.scale[0], node.scale[1], node.scale[2]);
+      _scale = Vector3D{float(node.scale[0]), float(node.scale[1]), float(node.scale[2])};
 
-  T = translate(translation.x, translation.y, translation.z)
-    * rotation.rotationMatrix().to4x4()
-    * scale(_scale.x, _scale.y, _scale.z);
+  Matrix4x4 S = scale(_scale.x, _scale.y, _scale.z);
+  Matrix3x3 R3 = rotation.rotationMatrix();
+  Matrix4x4 R = matrix3x3_to4x4(&R3);
+  Matrix4x4 RS = matrix4x4_multiply(&R, &S);
+  Matrix4x4 tranl = translate(translation.x, translation.y, translation.z);
+  T = matrix4x4_multiply(&tranl, &RS);
 
   return T;
 }
@@ -104,12 +104,16 @@ CameraInfo cam;
 
 void Application::ParseNode(const tinygltf::Model &model, int nodeIdx, const Matrix4x4 &parentTransform){
   const auto &node = model.nodes[nodeIdx];
-  Matrix4x4 worldTransform = parentTransform * GetNodeTransform(node);
-  Matrix3x3 normalMatrix = Matrix3x3(worldTransform).inv().T();
+  Matrix4x4 nodeTransform = GetNodeTransform(node);
+  Matrix4x4 worldTransform = matrix4x4_multiply(&parentTransform,  &nodeTransform);
+  Matrix3x3 normalMatrix = matrix3x3_from_matrix4x4(&worldTransform);
+  // Invert the normal matrix
+  normalMatrix = matrix3x3_inverse(&normalMatrix);
+  normalMatrix = matrix3x3_transpose(&normalMatrix);
 
-if (worldTransform.det() < 0.0f) {
+if (matrix4x4_determinant(&worldTransform) < 0.0f) {
   // flip the handedness
-  normalMatrix = normalMatrix * (-1.0f);
+  normalMatrix = matrix3x3_scale(&normalMatrix, -1.0f);
 }
   
   if (node.mesh >= 0) {
@@ -167,24 +171,28 @@ if (worldTransform.det() < 0.0f) {
             uint32_t i1 = getIndex(i + 1);
             uint32_t i2 = getIndex(i + 2);
 
-            Vector3D p1 = Vector3D(posData[i0 * 3 + 0], posData[i0 * 3 + 1], posData[i0 * 3 + 2]);
-            Vector3D p2 = Vector3D(posData[i1 * 3 + 0], posData[i1 * 3 + 1], posData[i1 * 3 + 2]);
-            Vector3D p3 = Vector3D(posData[i2 * 3 + 0], posData[i2 * 3 + 1], posData[i2 * 3 + 2]);
+            Vector3D p1 = Vector3D{posData[i0 * 3 + 0],posData[i0 * 3 + 1],posData[i0 * 3 + 2]};
+            Vector3D p2 = Vector3D{posData[i1 * 3 + 0],posData[i1 * 3 + 1],posData[i1 * 3 + 2]};
+            Vector3D p3 = Vector3D{posData[i2 * 3 + 0],posData[i2 * 3 + 1],posData[i2 * 3 + 2]};
 
-            Vector3D n1 = Vector3D(normData[i0 * 3 + 0], normData[i0 * 3 + 1], normData[i0 * 3 + 2]);
-            Vector3D n2 = Vector3D(normData[i1 * 3 + 0], normData[i1 * 3 + 1], normData[i1 * 3 + 2]);
-            Vector3D n3 = Vector3D(normData[i2 * 3 + 0], normData[i2 * 3 + 1], normData[i2 * 3 + 2]);
+            Vector3D n1 = Vector3D{normData[i0 * 3 + 0],normData[i0 * 3 + 1],normData[i0 * 3 + 2]};
+            Vector3D n2 = Vector3D{normData[i1 * 3 + 0],normData[i1 * 3 + 1],normData[i1 * 3 + 2]};
+            Vector3D n3 = Vector3D{normData[i2 * 3 + 0],normData[i2 * 3 + 1],normData[i2 * 3 + 2]};
 
             // Transform to world space
-            p1 = (worldTransform * Vector4D(p1, 1.0f)).to3D();
-            p2 = (worldTransform * Vector4D(p2, 1.0f)).to3D();
-            p3 = (worldTransform * Vector4D(p3, 1.0f)).to3D();
+            Vector4D p1t = Vector4D{p1.x, p1.y, p1.z, 1.0f}, 
+                     p2t = Vector4D{p2.x, p2.y, p2.z, 1.0f}, 
+                     p3t = Vector4D{p3.x, p3.y, p3.z, 1.0f};
+            p1t = matrix4x4_vector_multiply(&worldTransform, &p1t);
+            p2t = matrix4x4_vector_multiply(&worldTransform, &p2t);
+            p3t = matrix4x4_vector_multiply(&worldTransform, &p3t);
+            p1 = vector4d_to3d(p1t);
+            p2 = vector4d_to3d(p2t);
+            p3 = vector4d_to3d(p3t);
 
-            n1 = (normalMatrix * n1);
-            n2 = (normalMatrix * n2);
-            n3 = (normalMatrix * n3);
-
-            n1.normalize(); n2.normalize(); n3.normalize();
+            n1 = vector3d_unit(matrix3x3_vector_multiply(&normalMatrix, &n1));
+            n2 = vector3d_unit(matrix3x3_vector_multiply(&normalMatrix, &n2));
+            n3 = vector3d_unit(matrix3x3_vector_multiply(&normalMatrix, &n3));
 
             vertices.push_back(p1);
             vertices.push_back(p2);
@@ -194,20 +202,20 @@ if (worldTransform.det() < 0.0f) {
             normals.push_back(n3);
 
             if (uvIt != primitive.attributes.end()) {
-              Vector2D uv1( uvData[i0*2+0], uvData[i0*2 + 1] );
-              Vector2D uv2( uvData[i1*2+0], uvData[i1*2 + 1] );
-              Vector2D uv3( uvData[i2*2+0], uvData[i2*2 + 1] );
+              Vector2D uv1{uvData[i0*2+0], uvData[i0*2 + 1]};
+              Vector2D uv2{uvData[i1*2+0], uvData[i1*2 + 1]};
+              Vector2D uv3{uvData[i2*2+0], uvData[i2*2 + 1]};
               texcoords.push_back(uv1);
               texcoords.push_back(uv2);
               texcoords.push_back(uv3);
               if (tangentIt != primitive.attributes.end()) {
-                Vector3D t1(tangentData[i0*4+0], tangentData[i0*4+1], tangentData[i0*4+2]);
-                Vector3D t2(tangentData[i1*4+0], tangentData[i1*4+1], tangentData[i1*4+2]);
-                Vector3D t3(tangentData[i2*4+0], tangentData[i2*4+1], tangentData[i2*4+2]);
-                t1.normalize(); t2.normalize(); t3.normalize(); 
-                tangents.push_back(Vector4D(t1, tangentData[i0*4+3]));
-                tangents.push_back(Vector4D(t2, tangentData[i1*4+3]));
-                tangents.push_back(Vector4D(t3, tangentData[i2*4+3]));
+                Vector3D t1{tangentData[i0*4+0], tangentData[i0*4+1], tangentData[i0*4+2]};
+                Vector3D t2{tangentData[i1*4+0], tangentData[i1*4+1], tangentData[i1*4+2]};
+                Vector3D t3{tangentData[i2*4+0], tangentData[i2*4+1], tangentData[i2*4+2]};
+                t1 = vector3d_unit(t1); t2 = vector3d_unit(t2), t3 = vector3d_unit(t3); 
+                tangents.push_back(Vector4D{t1.x, t1.y, t1.z, tangentData[i0*4+3]});
+                tangents.push_back(Vector4D{t2.x, t2.y, t2.z, tangentData[i1*4+3]});
+                tangents.push_back(Vector4D{t3.x, t3.y, t3.z, tangentData[i2*4+3]});
               }
             }
 
@@ -228,7 +236,11 @@ if (worldTransform.det() < 0.0f) {
             if(bsdfs[cprimitive.bsdf_idx].emission.x > 0.0f || 
                bsdfs[cprimitive.bsdf_idx].emission.y > 0.0f ||
                bsdfs[cprimitive.bsdf_idx].emission.z > 0.0f) {
-              CudaLight clight(bsdfs[cprimitive.bsdf_idx].emission * 0.7, cprimitive, vertices);
+              CudaLight clight;
+              clight.radiance = vector3d_scale(bsdfs[cprimitive.bsdf_idx].emission, 0.7);
+              clight.triangle = cprimitive;
+              clight.area = vector3d_norm(vector3d_cross(vector3d_sub(p2, p1), vector3d_sub(p3, p1))) / 2.0f;
+              clight.is_cone_light = false;
               lights.push_back(clight);
             }
         }
@@ -244,11 +256,11 @@ if (worldTransform.det() < 0.0f) {
 
     // Get transform from camera node
     Matrix4x4 camTransform = worldTransform;
+    Vector4D forward{0.0f, 0.0f, -1.0f, 0.0f};
+    Vector4D worldF = matrix4x4_vector_multiply(&camTransform, &forward);
+    Vector3D view   = vector3d_unit(vector4d_to3d(worldF));
 
-    Vector3D view = camTransform[2].to3D(); // -Z
-    view.normalize();
-    Vector3D up   = camTransform[1].to3D();  // +Y
-    up.normalize();
+    Vector3D up   = vector3d_unit(vector4d_to3d(camTransform.c[1]));
 
     cam.view_dir = view;
     cam.up_dir   = up;
@@ -276,9 +288,25 @@ if (worldTransform.det() < 0.0f) {
           float innerConeAngle = (float)light.spot.innerConeAngle;
           float outerConeAngle = (float)light.spot.outerConeAngle - PI/16;
           // Position is from the node's transform
-          Vector3D position = (worldTransform * Vector4D(0, 0, 0, 1)).to3D();
-          Vector3D direction = (worldTransform * Vector4D(0,0,-1,1)).to3D().unit();
-          lights.push_back(CudaLight(color * intensity/1000, position, direction, innerConeAngle, outerConeAngle));
+          Vector4D posv{
+            0.0f, 0.0f, 0.0f, 1.0f
+          };
+          Vector4D dirv{
+            0.0f, 0.0f, -1.0f, 0.0f
+          };
+
+          posv = matrix4x4_vector_multiply(&worldTransform, &posv);
+          dirv = matrix4x4_vector_multiply(&worldTransform, &dirv);
+          Vector3D position = vector4d_to3d(posv);
+          Vector3D direction = vector4d_to3d(dirv);
+          CudaLight clight;
+          clight.radiance = vector3d_scale(color, (intensity/1000));
+          clight.position = position;
+          clight.direction = direction;
+          clight.inner_cone_angle = innerConeAngle;
+          clight.outer_cone_angle = outerConeAngle;
+          clight.is_cone_light = true;
+          lights.push_back(clight);
         }
     }
   }
@@ -291,15 +319,15 @@ if (worldTransform.det() < 0.0f) {
 void Application::ParseMaterial(const tinygltf::Model &model) {
   for(const auto &material: model.materials) {
     CudaBSDF bsdf;
-    bsdf.baseColor = Vector4D(material.pbrMetallicRoughness.baseColorFactor[0],
-                              material.pbrMetallicRoughness.baseColorFactor[1],
-                              material.pbrMetallicRoughness.baseColorFactor[2],
-                              material.pbrMetallicRoughness.baseColorFactor[3])/PI;
+    bsdf.baseColor = Vector4D{float(material.pbrMetallicRoughness.baseColorFactor[0])/PI,
+                              float(material.pbrMetallicRoughness.baseColorFactor[1])/PI,
+                              float(material.pbrMetallicRoughness.baseColorFactor[2])/PI,
+                              float(material.pbrMetallicRoughness.baseColorFactor[3])};
     bsdf.metallic = material.pbrMetallicRoughness.metallicFactor;
     bsdf.roughness = material.pbrMetallicRoughness.roughnessFactor;
-    bsdf.emission = Vector3D(material.emissiveFactor[0], material.emissiveFactor[1], material.emissiveFactor[2]);
-    bsdf.emission  *= material.extensions.count("KHR_materials_emissive_strength") ?
-        material.extensions.at("KHR_materials_emissive_strength").Get("emissiveStrength").Get<double>()/2 : 0.0f;
+    bsdf.emission = Vector3D{float(material.emissiveFactor[0]),float(material.emissiveFactor[1]),float(material.emissiveFactor[2])};
+    bsdf.emission  = vector3d_scale(bsdf.emission, (material.extensions.count("KHR_materials_emissive_strength") ?
+        material.extensions.at("KHR_materials_emissive_strength").Get("emissiveStrength").Get<double>()/2 : 0.0f));
     bsdf.transmissionFactor = material.extensions.count("KHR_materials_transmission") ?
         material.extensions.at("KHR_materials_transmission").Get("tranmissionFactor").Get<double>() : 0.0f;
     bsdf.thicknessFactor = material.extensions.count("KHR_materials_volume") ?
@@ -339,7 +367,7 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
 
   const auto &scene = model.scenes[model.defaultScene > -1 ? model.defaultScene : 0];
   for (int rootNode : scene.nodes) {
-    ParseNode(model, rootNode, Matrix4x4(1.0f));
+    ParseNode(model, rootNode, matrix4x4_identity());
   }
 
   BBox bbox;
@@ -350,30 +378,27 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
     bbox.expand(b);
   }
 
+  // assumes non empty bbox, dont be stupid and load an empty scene
+  Vector3D target = bbox.centroid();
+  canonical_view_distance = vector3d_norm(bbox.extent) / 2 * 1.5;
 
-  if (!bbox.empty()) {
+  double view_distance = canonical_view_distance;
+  double min_view_distance = canonical_view_distance / 10.0;
+  double max_view_distance = canonical_view_distance * 20.0;
 
-    Vector3D target = bbox.centroid();
-    canonical_view_distance = bbox.extent.norm() / 2 * 1.5;
+  canonicalCamera.place(target,
+                        acos(cam.view_dir.y) - M_PI / 8,
+                        atan2(cam.view_dir.x, cam.view_dir.z) - M_PI / 8,
+                        view_distance,
+                        min_view_distance,
+                        max_view_distance);
 
-    double view_distance = canonical_view_distance;
-    double min_view_distance = canonical_view_distance / 10.0;
-    double max_view_distance = canonical_view_distance * 20.0;
-
-    canonicalCamera.place(target,
-                          acos(cam.view_dir.y) - M_PI / 8,
-                          atan2(cam.view_dir.x, cam.view_dir.z) - M_PI / 8,
-                          view_distance,
-                          min_view_distance,
-                          max_view_distance);
-
-    camera.place(target,
-                        acos(cam.view_dir.y),
-                        atan2(cam.view_dir.x, cam.view_dir.z),
-                view_distance,
-                min_view_distance,
-                max_view_distance);
-  }
+  camera.place(target,
+                      acos(cam.view_dir.y),
+                      atan2(cam.view_dir.x, cam.view_dir.z) - M_PI / 4,
+              view_distance,
+              min_view_distance,
+              max_view_distance);
 }
 
 void Application::init_camera(CameraInfo& cameraInfo) {
@@ -523,9 +548,6 @@ int main(int argc, char **argv) {
   if (w && h) {
     app->resize(w, h);
   }
-
-  if (cam_settings != "")
-    app->load_camera(cam_settings);
 
 
   if(config.total_image_generated == 1){

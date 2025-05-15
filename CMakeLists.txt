@@ -22,57 +22,29 @@ set(APPLICATION_SOURCE
     # Scene Object & Structure
     src/scene/bvh.cpp
     src/scene/bvh.cu
-    src/scene/primitive.cu
 
     # Pathtracer
     src/scene/camera.cpp
-    src/scene/camera.cu
-    src/scene/bsdf.cu
-    src/target/pathtracer.cu
-
-    # MeshEdit
-    src/util/matrix3x3.cpp
-    src/util/matrix3x3.cu
-    src/util/matrix4x4.cpp
-    src/util/reservoir.cu
-    src/util/vector2D.cpp
-    src/util/vector4D.cpp
-    src/util/quaternion.cpp
 
     src/host/raytraced_renderer.cpp
     src/host/raytraced_renderer.cu
-    src/scene/ray.cu
-    src/scene/texture.cu
 
     # Application
     src/host/application.cpp
-
-    src/scene/light.cu
 )
 
 set(APPLICATION_HEADERS
-    # Scene Object & Structure
-    src/scene/bbox.h
     src/scene/bvh.h
     src/scene/light.h
-    src/scene/primitive.h
-    # MeshEdit
+    src/scene/geometry.h
     src/util/gpu_rand.h
-    src/util/image.h
-    src/util/matrix3x3.h
-    src/util/matrix4x4.h
+    src/util/matrix.h
     src/util/reservoir.h
-    src/util/vector2D.h
-    src/util/vector3D.h
-    src/util/vector4D.h
-    # Pathtracer
-    src/scene/bsdf.h
+    src/util/vector.h
     src/scene/camera.h
-    src/target/intersection.h
+    src/scene/material.h
     src/target/pathtracer.h
-    src/scene/ray.h
     src/host/raytraced_renderer.h
-    src/scene/texture.h 
 )
 
 add_executable(pathtracer ${APPLICATION_SOURCE} ${APPLICATION_HEADERS})
