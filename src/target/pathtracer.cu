@@ -321,7 +321,8 @@ DEVICE __inline__ Vector3D PathTracer::at_least_one_bounce_radiance(Ray& r, cons
   // constant index since x,y don’t change across bounces
   int idx = current_ray.x + current_ray.y * sampleBuffer.w;
   rays_traced[idx] = 0;
-  while (true) {
+  uint8_t level = 1;
+  while (level++ <= max_ray_depth) {
     rays_traced[idx]++;
     // build shading frame
     Matrix3x3 o2w;

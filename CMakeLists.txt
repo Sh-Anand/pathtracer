@@ -44,9 +44,6 @@ set(APPLICATION_SOURCE
     src/scene/ray.cu
     src/scene/texture.cu
 
-    # misc
-    src/util/lodepng.cpp
-
     # Application
     src/host/application.cpp
 
@@ -75,9 +72,7 @@ set(APPLICATION_HEADERS
     src/target/pathtracer.h
     src/scene/ray.h
     src/host/raytraced_renderer.h
-    src/scene/texture.h
-    # misc
-    src/util/lodepng.h 
+    src/scene/texture.h 
 )
 
 add_executable(pathtracer ${APPLICATION_SOURCE} ${APPLICATION_HEADERS})

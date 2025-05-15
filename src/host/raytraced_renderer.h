@@ -105,7 +105,7 @@ public:
   // Components //
 
   BVHCuda* bvh;             ///< BVH accelerator aggregate for cuda
-  ImageBuffer frameBuffer;       ///< frame buffer
+  HDRImageBuffer frameBuffer;       ///< frame buffer
 
   std::string filename;
 

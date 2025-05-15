@@ -228,7 +228,7 @@ if (worldTransform.det() < 0.0f) {
             if(bsdfs[cprimitive.bsdf_idx].emission.x > 0.0f || 
                bsdfs[cprimitive.bsdf_idx].emission.y > 0.0f ||
                bsdfs[cprimitive.bsdf_idx].emission.z > 0.0f) {
-              CudaLight clight(bsdfs[cprimitive.bsdf_idx].emission/2, cprimitive, vertices);
+              CudaLight clight(bsdfs[cprimitive.bsdf_idx].emission * 0.7, cprimitive, vertices);
               lights.push_back(clight);
             }
         }

@@ -78,7 +78,7 @@ void RaytracedRenderer::gpu_raytrace() {
     CUDA_ERR(cudaMemcpy(pt_host->sampleBuffer.data, data_tmp, width * height * sizeof(Vector3D), cudaMemcpyDeviceToHost));
     
     // write_to_framebuffer
-    pt_host->sampleBuffer.toColor(frameBuffer, 0, 0, frameBuffer.w, frameBuffer.h);
+    frameBuffer = pt_host->sampleBuffer;
     free (pt_host->sampleBuffer.data);
 
     // restore back
