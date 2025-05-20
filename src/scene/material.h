@@ -65,7 +65,7 @@ typedef struct {
     uint8_t * data;
 } CudaTexture;
 
-DEVICE static inline Vector4D sample(const CudaTexture tex, const Vector2D uv) {
+DEVICE static inline Vector4D sample_texture(const CudaTexture tex, const Vector2D uv) {
     // wrap or clamp your UVs as needed
     float u_f = uv.x - floorf(uv.x);
     float v_f = uv.y - floorf(uv.y);

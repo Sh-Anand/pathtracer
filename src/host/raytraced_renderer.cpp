@@ -17,8 +17,6 @@ using std::max;
 RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
                        size_t max_ray_depth, size_t ns_area_light,
                        std::string filename,
-                       float lensRadius,
-                       float focalDistance,
                        bool debug) {
   pt_host = (PathTracer*) malloc(sizeof(PathTracer));
 
@@ -83,7 +81,7 @@ static inline float aces_film(float x) {
 
 void RaytracedRenderer::save_image(const std::string filename) {
     // Tonemapping parameters (good defaults for a 4K laptop display)
-    const float gamma    = 2.2f;    // display gamma
+    const float gamma    = 2.2f;    // display gammaz
     const float level    = 1.0f;    // exposure stops: final exposure = 2^level
     const float key      = 0.18f;   // middle gray
     const float wht      = 5.0f;    // white point (scene brightness clamp)
@@ -100,7 +98,10 @@ void RaytracedRenderer::save_image(const std::string filename) {
 
     // PFM header: "PF" = color, width height, scale (neg = little‐endian)
     ofs << "PF\n" << w << " " << h << "\n" << "-1.0\n";
-
+    DEBUG(debug,
+    cout << "Writing " << filename << "...\n";
+    cout << "Image size " << w << " " << h << "\n";
+    )
     // Write pixels bottom→top
     for (int y = 0; y < h; ++y) {
       for (int x = 0; x < w; ++x) {

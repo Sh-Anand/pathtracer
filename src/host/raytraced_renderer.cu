@@ -72,6 +72,7 @@ void RaytracedRenderer::gpu_raytrace() {
     DEBUG(debug,
     std::cout << "Total rays traced: " << tot_rays_traced << std::endl;
     std::cout << "Rays per second: " << (tot_rays_traced / duration) << std::endl;
+    std::cout << "Copying target SampleBuffer to host, width: " << width << ", height: " << height << std::endl;
     )
     auto data_tmp = pt_host->sampleBuffer.data;
     pt_host->sampleBuffer.data = (Vector3D*) malloc(width * height * sizeof(Vector3D));
@@ -79,7 +80,6 @@ void RaytracedRenderer::gpu_raytrace() {
     
     // write_to_framebuffer
     frameBuffer = pt_host->sampleBuffer;
-    free (pt_host->sampleBuffer.data);
 
     // restore back
     pt_host->sampleBuffer.data = data_tmp;
@@ -120,15 +120,15 @@ void RaytracedRenderer::copy_host_device_pt(std::vector<CudaLight> &lights, std:
 
     //lights
     CudaLight *lights_cuda;
-    cudaMalloc(&lights_cuda, lights.size() * sizeof(CudaLight));
-    cudaMemcpy(lights_cuda, lights.data(), lights.size() * sizeof(CudaLight), cudaMemcpyHostToDevice);
+    CUDA_ERR(cudaMalloc(&lights_cuda, lights.size() * sizeof(CudaLight)));
+    CUDA_ERR(cudaMemcpy(lights_cuda, lights.data(), lights.size() * sizeof(CudaLight), cudaMemcpyHostToDevice));
     pt_host->num_lights = lights.size();
     pt_host->lights = lights_cuda;
 
     //bsdfs
     CudaBSDF *bsdfs_cuda;
-    cudaMalloc(&bsdfs_cuda, bsdfs.size() * sizeof(CudaBSDF));
-    cudaMemcpy(bsdfs_cuda, bsdfs.data(), bsdfs.size() * sizeof(CudaBSDF), cudaMemcpyHostToDevice);
+    CUDA_ERR(cudaMalloc(&bsdfs_cuda, bsdfs.size() * sizeof(CudaBSDF)));
+    CUDA_ERR(cudaMemcpy(bsdfs_cuda, bsdfs.data(), bsdfs.size() * sizeof(CudaBSDF), cudaMemcpyHostToDevice));
     pt_host->bsdfs = bsdfs_cuda;
 
     //textures
@@ -138,34 +138,34 @@ void RaytracedRenderer::copy_host_device_pt(std::vector<CudaLight> &lights, std:
         textures_host[i].width = textures[i].width;
         textures_host[i].height = textures[i].height;
         int channels = textures[i].has_alpha ? 4 : 3;
-        cudaMalloc(&textures_host[i].data, textures[i].width * textures[i].height * channels);
-        cudaMemcpy(textures_host[i].data, textures[i].data, textures[i].width * textures[i].height * channels, cudaMemcpyHostToDevice);
+        CUDA_ERR(cudaMalloc(&textures_host[i].data, textures[i].width * textures[i].height * channels));
+        CUDA_ERR(cudaMemcpy(textures_host[i].data, textures[i].data, textures[i].width * textures[i].height * channels, cudaMemcpyHostToDevice));
     }
 
     CudaTexture *textures_cuda;
-    cudaMalloc(&textures_cuda, textures.size() * sizeof(CudaTexture));
-    cudaMemcpy(textures_cuda, textures_host, textures.size() * sizeof(CudaTexture), cudaMemcpyHostToDevice);
+    CUDA_ERR(cudaMalloc(&textures_cuda, textures.size() * sizeof(CudaTexture)));
+    CUDA_ERR(cudaMemcpy(textures_cuda, textures_host, textures.size() * sizeof(CudaTexture), cudaMemcpyHostToDevice));
     pt_host->textures = textures_cuda;
     free(textures_host);
 
     //bvh
     BVHCuda *bvh_cuda;
-    cudaMalloc(&bvh_cuda, sizeof(BVHCuda));
-    cudaMemcpy(bvh_cuda, bvh, sizeof(BVHCuda), cudaMemcpyHostToDevice);
+    CUDA_ERR(cudaMalloc(&bvh_cuda, sizeof(BVHCuda)));
+    CUDA_ERR(cudaMemcpy(bvh_cuda, bvh, sizeof(BVHCuda), cudaMemcpyHostToDevice));
     pt_host->bvh = bvh_cuda;
 
-    cudaMalloc(&pt_host->sampleBuffer.data, frameBuffer.w * frameBuffer.h * sizeof(Vector3D));
+    CUDA_ERR(cudaMalloc(&pt_host->sampleBuffer.data, frameBuffer.w * frameBuffer.h * sizeof(Vector3D)));
     
-    cudaMalloc(&pt_host->initialSampleBuffer, sizeof(Sample) * frameBuffer.w * frameBuffer.h);
-    cudaMalloc(&pt_host->temporalReservoirBuffer, sizeof(Reservoir) * frameBuffer.w * frameBuffer.h);
-    cudaMalloc(&pt_host->spatialReservoirBuffer, sizeof(Reservoir) * frameBuffer.w * frameBuffer.h);
-    cudaMalloc(&pt_host->rays_traced, sizeof(uint8_t) * frameBuffer.w * frameBuffer.h);
+    CUDA_ERR(cudaMalloc(&pt_host->initialSampleBuffer, sizeof(Sample) * frameBuffer.w * frameBuffer.h));
+    CUDA_ERR(cudaMalloc(&pt_host->temporalReservoirBuffer, sizeof(Reservoir) * frameBuffer.w * frameBuffer.h));
+    CUDA_ERR(cudaMalloc(&pt_host->spatialReservoirBuffer, sizeof(Reservoir) * frameBuffer.w * frameBuffer.h));
+    CUDA_ERR(cudaMalloc(&pt_host->rays_traced, sizeof(uint8_t) * frameBuffer.w * frameBuffer.h));
 
-    cudaMalloc(&pt_host->rand_states, sizeof(RNGState) * frameBuffer.w * frameBuffer.h);
+    CUDA_ERR(cudaMalloc(&pt_host->rand_states, sizeof(RNGState) * frameBuffer.w * frameBuffer.h));
 
     PathTracer *pt_target;
-    cudaMalloc(&pt_target, sizeof(PathTracer));
-    cudaMemcpy(pt_target, pt_host, sizeof(PathTracer), cudaMemcpyHostToDevice);
+    CUDA_ERR(cudaMalloc(&pt_target, sizeof(PathTracer)));
+    CUDA_ERR(cudaMemcpy(pt_target, pt_host, sizeof(PathTracer), cudaMemcpyHostToDevice));
 
 
     this->pt_target = pt_target;    

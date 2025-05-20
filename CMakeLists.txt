@@ -7,18 +7,25 @@ set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 # Build options
 #-------------------------------------------------------------------------------
 option(BUILD_DEBUG     "Build with debug settings"    OFF)
-
 set(BUILD_DEBUG ${BUILD_DEBUG} CACHE BOOL "Build debug" FORCE)
 
 if (BUILD_DEBUG)
-  set(CMAKE_BUILD_TYPE Debug)
+  # switch to Debug build
+  set(CMAKE_BUILD_TYPE Debug CACHE STRING "" FORCE)
+
+  # C++ debug flags: symbols, no opt, extra warnings
+  set(CMAKE_CXX_FLAGS_DEBUG
+      "${CMAKE_CXX_FLAGS_DEBUG} -g -O0 -Wall -Wextra -Wpedantic")
+
+  # CUDA debug flags: device debug info, line info
+  set(CMAKE_CUDA_FLAGS_DEBUG
+      "${CMAKE_CUDA_FLAGS_DEBUG} -G -lineinfo")
 endif()
 
 #-------------------------------------------------------------------------------
 # Set target
 #-------------------------------------------------------------------------------
 set(APPLICATION_SOURCE
-
     # Scene Object & Structure
     src/scene/bvh.cpp
     src/scene/bvh.cu

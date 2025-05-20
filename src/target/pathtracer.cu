@@ -19,6 +19,22 @@ DEVICE static inline void make_coord_space(Matrix3x3 *o2w, const Vector3D n) {
   (*o2w).c[1] = y;
   (*o2w).c[2] = z;
 }
+
+DEVICE static inline Vector3D get_emission(const CudaBSDF *bsdfs,
+                                           const CudaTexture *textures,
+                                           const CudaIntersection isect) {
+  CudaBSDF bsdf = bsdfs[isect.bsdf_idx];
+  Vector2D uv = isect.uv;
+  Vector3D emission = bsdf.emission;
+  if (bsdf.emission_idx >= 0) {
+    Vector4D tc = sample_texture(textures[bsdf.emission_idx], uv);
+    emission.x *= tc.x;
+    emission.y *= tc.y;
+    emission.z *= tc.z;
+  }
+  return emission;
+}
+
 // following code adapted from https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#appendix-b-brdf-implementation
 // wo = V, wi = L
 DEVICE static inline Vector3D f( const CudaBSDF *bsdfs,
@@ -51,7 +67,7 @@ DEVICE static inline Vector3D f( const CudaBSDF *bsdfs,
                  bsdf.baseColor.y,
                  bsdf.baseColor.z };
   if (bsdf.tex_idx >= 0) {
-    Vector4D t = sample(textures[bsdf.tex_idx], uv);
+    Vector4D t = sample_texture(textures[bsdf.tex_idx], uv);
     base       = Vector3D{base.x * t.x, base.y * t.y, base.z * t.z};   // component‑wise
   }
 
@@ -59,7 +75,7 @@ DEVICE static inline Vector3D f( const CudaBSDF *bsdfs,
   float metal     = bsdf.metallic;
   float roughness = bsdf.roughness;
   if (bsdf.orm_idx >= 0) {
-    Vector4D orm = sample(textures[bsdf.orm_idx], uv);
+    Vector4D orm = sample_texture(textures[bsdf.orm_idx], uv);
     metal        = orm.z;
     roughness    = orm.y;
     *occlusion   = orm.x;
@@ -107,7 +123,7 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
   // 2) Base color
   Vector3D base = Vector3D{bsdf.baseColor.x, bsdf.baseColor.y, bsdf.baseColor.z};
   if (bsdf.tex_idx >= 0) {
-    Vector4D t = sample(textures[bsdf.tex_idx], uv);
+    Vector4D t = sample_texture(textures[bsdf.tex_idx], uv);
     base = Vector3D{base.x * t.x, base.y * t.y, base.z * t.z};
   }
 
@@ -115,7 +131,7 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
   float metal     = clampd(bsdf.metallic,  0.0, 1.0);
   float roughness = clampd(bsdf.roughness, 0.02,1.0);
   if (bsdf.orm_idx >= 0) {
-    Vector4D orm = sample(textures[bsdf.orm_idx], uv);
+    Vector4D orm = sample_texture(textures[bsdf.orm_idx], uv);
     *occlusion   = orm.x;
     roughness    = orm.y;
     metal        = orm.z;
@@ -212,11 +228,20 @@ DEVICE static inline float bsdf_pdf(const CudaBSDF* bsdfs,
   if (NoL == 0) return 0.0;
 
   // fetch metallic & roughness
-  CudaBSDF b = bsdfs[isect.bsdf_idx];
-  float metal    = clampd(b.metallic,  0.0, 1.0);
-  float roughness= clampd(b.roughness, 0.02,1.0);
+  CudaBSDF bsdf = bsdfs[isect.bsdf_idx];
+  float metal    = clampd(bsdf.metallic,  0.0, 1.0);
+  float roughness= clampd(bsdf.roughness, 0.02,1.0);
   float onem     = 1.0 - metal;
   float alpha    = roughness * roughness;
+
+  Vector3D base = Vector3D{bsdf.baseColor.x, bsdf.baseColor.y, bsdf.baseColor.z};
+  // with—compute luminance of F₀:
+  Vector3D F0  = Vector3D{0.04f * onem + base.x * metal, 0.04f * onem + base.y * metal, 0.04f * onem + base.z * metal};
+  float   F0_avg = (F0.x + F0.y + F0.z) / 3.0;  
+  F0_avg         = clampd(F0_avg, 0.0, 1.0);
+
+  float P_s = F0_avg;   // sample specular lobe with Fresnel weight
+  float P_d = 1.0 - P_s;
 
   // 1) diffuse pdf = (cosθ/π)
   float pdf_diff = onem * (NoL / M_PI);
@@ -285,15 +310,12 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
     shadow.min_t = EPS_F;
     shadow.max_t = INFINITY;
 
-    // bad, checking every light, assumes few lights
-    CudaBSDF bsdf = pt->bsdfs[isect.bsdf_idx];
-
     for (int i = 0; i < pt->num_lights; ++i) {
       CudaLight L = pt->lights[i];
       float pdfL;
       if (light_has_intersect(&L, &shadow, &hit_p, &isect.n, pt->bvh->vertices, &pdfL)) {
         // get the light and compute its PDF for this direction
-        Vector3D Li = bsdf.emission;
+        Vector3D Li = get_emission(pt->bsdfs, pt->textures, isect);
         float w    = mis_weight(pdfB, pdfL);
         L_out = vector3d_add(L_out, vector3d_mul(f_bsdf, vector3d_scale(Li, (cosNL * w / pdfB))));
       }
@@ -413,7 +435,7 @@ DEVICE static inline void raytrace_pixel(PathTracer *pt, uint16_t x, uint16_t y)
       T = vector3d_unit(vector3d_sub(T, vector3d_scale(N, vector3d_dot(N, T))));
       Vector3D B = vector3d_scale(vector3d_cross(N, T), isect.tangent.w);
 
-      Vector4D c = sample(pt->textures[normal_idx], isect.uv);
+      Vector4D c = sample_texture(pt->textures[normal_idx], isect.uv);
       Vector3D n_tangent = Vector3D{c.x * 2.0f - 1.0f,
                                     c.y * 2.0f - 1.0f,
                                     c.z * 2.0f - 1.0f};
@@ -430,7 +452,7 @@ DEVICE static inline void raytrace_pixel(PathTracer *pt, uint16_t x, uint16_t y)
     }
     Vector3D L = at_least_one_bounce_radiance(pt, r, isect);
     Sample sp = pt->initialSampleBuffer[idx];
-    sp.emittance = vector3d_add(sp.emittance, pt->bsdfs[isect.bsdf_idx].emission);
+    sp.emittance = vector3d_add(sp.emittance, get_emission(pt->bsdfs, pt->textures, isect));
     sp.L = L;
     pt->initialSampleBuffer[idx] = sp;
   }

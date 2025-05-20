@@ -33,20 +33,7 @@ struct AppConfig {
     pathtracer_accumulate_bounces = true;
     pathtracer_ns_area_light = 1;
 
-    pathtracer_ns_diff = 1;
-    pathtracer_ns_glsy = 1;
-    pathtracer_ns_refr = 1;
-
-    pathtracer_num_threads = 1;
-    pathtracer_envmap = NULL;
-
-    pathtracer_samples_per_patch = 32;
-    pathtracer_max_tolerance = 0.05f;
-    pathtracer_direct_hemisphere_sample = false;
-
     pathtracer_filename = "";
-    pathtracer_lensRadius = 0.0;
-    pathtracer_focalDistance = 4.7;
 
     total_image_generated = 1;
 
@@ -58,22 +45,7 @@ struct AppConfig {
   bool pathtracer_accumulate_bounces; // whether we accumulate light bounce or only sample from the last bounce
   size_t pathtracer_ns_area_light;
 
-  size_t pathtracer_ns_diff;
-  size_t pathtracer_ns_glsy;
-  size_t pathtracer_ns_refr;
-
-  size_t pathtracer_num_threads;
-  HDRImageBuffer* pathtracer_envmap;
-
-  float pathtracer_max_tolerance;
-  size_t pathtracer_samples_per_patch;
-
-  bool pathtracer_direct_hemisphere_sample;
-
   string pathtracer_filename;
-
-  double pathtracer_lensRadius;
-  double pathtracer_focalDistance;
 
   size_t total_image_generated;
 

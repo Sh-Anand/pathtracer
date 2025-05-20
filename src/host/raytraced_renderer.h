@@ -18,8 +18,6 @@ public:
   RaytracedRenderer(size_t ns_aa = 1, 
              size_t max_ray_depth = 4, size_t ns_area_light = 1,
              std::string filename = "",
-             float lensRadius = 0.25,
-             float focalDistance = 4.7,
              bool debug = false);
 
   void set_camera(Camera* camera);

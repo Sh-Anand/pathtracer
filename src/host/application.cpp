@@ -23,8 +23,6 @@ Application::Application(AppConfig config) {
     config.pathtracer_max_ray_depth,
     config.pathtracer_ns_area_light,
     config.pathtracer_filename,
-    config.pathtracer_lensRadius,
-    config.pathtracer_focalDistance,
     config.debug
   );
   filename = config.pathtracer_filename;
@@ -240,7 +238,7 @@ if (matrix4x4_determinant(&worldTransform) < 0.0f) {
               clight.radiance = vector3d_scale(bsdfs[cprimitive.bsdf_idx].emission, 0.7);
               clight.triangle = cprimitive;
               clight.area = vector3d_norm(vector3d_cross(vector3d_sub(p2, p1), vector3d_sub(p3, p1))) / 2.0f;
-              clight.is_cone_light = false;
+              clight.is_point_light = false;
               lights.push_back(clight);
             }
         }
@@ -303,11 +301,37 @@ if (matrix4x4_determinant(&worldTransform) < 0.0f) {
           clight.radiance = vector3d_scale(color, (intensity/1000));
           clight.position = position;
           clight.direction = direction;
-          clight.inner_cone_angle = innerConeAngle;
-          clight.outer_cone_angle = outerConeAngle;
-          clight.is_cone_light = true;
+          clight.is_point_light = true;
           lights.push_back(clight);
-        }
+        } else if (light.type == "point") {
+          // default white if no color provided
+          Vector3D color = {1.0f, 1.0f, 1.0f};
+          if (!light.color.empty()) {
+              color = {
+                  (float)light.color[0],
+                  (float)light.color[1],
+                  (float)light.color[2]
+              };
+          }
+
+          // intensity in lux → convert to radiance scale (divide or adjust as needed)
+          float intensity = (float)light.intensity; 
+          // position from the node's world transform
+          Vector4D posv{ 0.0f, 0.0f, 0.0f, 1.0f };
+          posv = matrix4x4_vector_multiply(&worldTransform, &posv);
+          Vector3D position = vector4d_to3d(posv);
+
+          CudaLight clight;
+          // scale color by intensity (and any unit conversion)
+          clight.radiance      = vector3d_scale(color, intensity / 1000.0f);
+          clight.position      = position;
+          // direction unused for true point lights, but zero it for safety
+          clight.direction     = {0.0f, 0.0f, 0.0f};
+          clight.is_point_light = true;
+          // leave triangle & area unset (ignored for point lights)
+
+          lights.push_back(clight);
+      }
     }
   }
 
@@ -445,7 +469,7 @@ int main(int argc, char **argv) {
   size_t w = 0, h = 0, x = -1, y = 0, dx = 0, dy = 0;
   string output_file_name, cam_settings = "";
   string sceneFilePath;
-  while ((opt = getopt(argc, argv, "s:l:t:m:o:e:h:H:f:r:c:b:d:a:p:g:")) !=
+  while ((opt = getopt(argc, argv, "s:l:t:m:o:e:h:f:r:c:d:p:g:")) !=
           -1) { // for each option...
     switch (opt) {
     case 'f':
@@ -489,20 +513,8 @@ int main(int argc, char **argv) {
     case 'c':
       cam_settings = string(optarg);
       break;
-    case 'b':
-      config.pathtracer_lensRadius = atof(optarg);
-      break;
     case 'd':
       config.debug = true;
-      break;
-    case 'a':
-      config.pathtracer_samples_per_patch = atoi(argv[optind - 1]);
-      config.pathtracer_max_tolerance = atof(argv[optind]);
-      optind++;
-      break;
-    case 'H':
-      config.pathtracer_direct_hemisphere_sample = true;
-      optind--;
       break;
     default:
       usage(argv[0]);
