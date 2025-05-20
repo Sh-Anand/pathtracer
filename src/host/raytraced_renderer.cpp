@@ -17,7 +17,8 @@ using std::max;
 RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
                        size_t max_ray_depth, size_t ns_area_light,
                        std::string filename,
-                       bool debug) {
+                       bool debug,
+                       bool restir) {
   pt_host = (PathTracer*) malloc(sizeof(PathTracer));
 
   pt_host->ns_aa = ns_aa;                                        // Number of samples per pixel
@@ -28,6 +29,7 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
   this->filename = filename;
 
   this->debug = debug;
+  this->restir = restir;
 
   camera = NULL;
 }

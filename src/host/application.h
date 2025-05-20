@@ -38,6 +38,7 @@ struct AppConfig {
     total_image_generated = 1;
 
     debug = false;
+    restir = false;
   }
 
   size_t pathtracer_ns_aa;
@@ -50,6 +51,7 @@ struct AppConfig {
   size_t total_image_generated;
 
   bool debug;
+  bool restir;
 };
 
 class Application {

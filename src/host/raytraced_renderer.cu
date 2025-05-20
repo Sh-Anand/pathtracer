@@ -9,12 +9,12 @@
 
 #include "target/pathtracer.cu"
 
-__global__ void kernel_raytrace_temporal(PathTracer* pt) {
+__global__ void kernel_raytrace_temporal(PathTracer* pt, bool restir) {
     uint16_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
     uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
     
     raytrace_pixel(pt, x,y);
-    temporal_resampling(pt, x,y);
+    temporal_resampling(pt, restir, x,y);
 }
 
 __global__ void kernel_spatial_sample(PathTracer* pt) {
@@ -47,12 +47,15 @@ void RaytracedRenderer::gpu_raytrace() {
     std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now();
 
 
-    kernel_raytrace_temporal<<<gridDim, blockDim>>>(pt_target);
+    kernel_raytrace_temporal<<<gridDim, blockDim>>>(pt_target, restir);
     CUDA_ERR(cudaGetLastError());
     CUDA_ERR(cudaDeviceSynchronize());
-    kernel_spatial_sample<<<gridDim, blockDim>>>(pt_target);
-    CUDA_ERR(cudaGetLastError());
-    CUDA_ERR(cudaDeviceSynchronize());
+
+    if (restir) {
+        kernel_spatial_sample<<<gridDim, blockDim>>>(pt_target);
+        CUDA_ERR(cudaGetLastError());
+        CUDA_ERR(cudaDeviceSynchronize());
+    }
 
     std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
     float duration = (std::chrono::duration<float>(t1 - t0)).count();

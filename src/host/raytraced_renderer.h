@@ -18,7 +18,8 @@ public:
   RaytracedRenderer(size_t ns_aa = 1, 
              size_t max_ray_depth = 4, size_t ns_area_light = 1,
              std::string filename = "",
-             bool debug = false);
+             bool debug = false,
+             bool restir = false);
 
   void set_camera(Camera* camera);
 
@@ -58,6 +59,7 @@ public:
   std::string filename;
 
   bool debug;
+  bool restir;
 };
 
 #endif  // CGL_RAYTRACER_H

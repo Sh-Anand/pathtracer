@@ -244,14 +244,14 @@ DEVICE static inline float bsdf_pdf(const CudaBSDF* bsdfs,
   float P_d = 1.0 - P_s;
 
   // 1) diffuse pdf = (cosθ/π)
-  float pdf_diff = onem * (NoL / M_PI);
+  float pdf_diff = P_d * (NoL / M_PI);
 
   // 2) specular pdf = D(α,NoH)·NoH / (4·VoH)
   Vector3D H   = vector3d_unit(vector3d_add(wo, wi));
   float NoH   = fmaxf(vector3d_dot(N, H), 0.0);
   float VoH   = fmaxf(vector3d_dot(wo, H), 0.0);
   float D     = D_compute(alpha, NoH);
-  float pdf_spec = metal * (D * NoH / (4.0 * VoH));
+  float pdf_spec = P_s * (D * NoH / (4.0 * VoH));
 
   return pdf_diff + pdf_spec;
 }
@@ -412,21 +412,19 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
 DEVICE static inline void raytrace_pixel(PathTracer *pt, uint16_t x, uint16_t y) {
   CudaIntersection isect; isect.t = INFINITY;
   
-  uint16_t num_samples = pt->ns_aa;
   Ray r;
-  uint16_t i = 1;
   uint32_t idx = x + y * pt->sampleBuffer.w;
   pt->initialSampleBuffer[idx] = Sample{};
   init_gpu_rng(&pt->rand_states[idx], 1234 + idx);
-  do {
-    Vector2D origin = Vector2D{float(x), float(y)};
-    Vector2D sample;
-    sample.x = origin.x + next_float(&pt->rand_states[idx]);
-    sample.y = origin.y + next_float(&pt->rand_states[idx]);
-    r = generate_ray(&pt->camera, sample.x / pt->sampleBuffer.w, sample.y / pt->sampleBuffer.h);
-    r.depth = 1, r.x = x, r.y = y;
-  } while (i++ != num_samples && !intersect(pt->bvh, &r, &isect));
-  if (i <= num_samples) {
+
+  Vector2D origin = Vector2D{float(x), float(y)};
+  Vector2D sample;
+  sample.x = origin.x + next_float(&pt->rand_states[idx]);
+  sample.y = origin.y + next_float(&pt->rand_states[idx]);
+  r = generate_ray(&pt->camera, sample.x / pt->sampleBuffer.w, sample.y / pt->sampleBuffer.h);
+  r.depth = 1, r.x = x, r.y = y;
+
+  if (intersect(pt->bvh, &r, &isect)) {
     // perturb normal
     int normal_idx = pt->bsdfs[isect.bsdf_idx].normal_idx;
     if (normal_idx >= 0) {
@@ -476,16 +474,22 @@ DEVICE static inline float jacobian(const Sample s1, const Sample s2) {
   return (cos_phi_r2 / cos_phi_q2) * (distance_q / distance_r);
 }
 
-DEVICE static inline void temporal_resampling(PathTracer *pt, uint16_t x, uint16_t y) {
+DEVICE static inline void temporal_resampling(PathTracer *pt, bool restir, uint16_t x, uint16_t y) {
   int idx = x + y * pt->sampleBuffer.w;
   Sample S = pt->initialSampleBuffer[idx];
-  Reservoir R{};
 
-  float w = p_hat(S);
-  update(&R, S, w, &pt->rand_states[idx]);
-  R.W = R.w / (R.M * p_hat(R.z));
+  if (restir) {
+    Reservoir R{};
 
-  pt->temporalReservoirBuffer[idx] = R;
+    float w = p_hat(S);
+    update(&R, S, w, &pt->rand_states[idx]);
+    R.W = R.w / (R.M * p_hat(R.z));
+
+    pt->temporalReservoirBuffer[idx] = R;
+  } else {
+    Vector3D L = vector3d_add(S.emittance, vector3d_mul(S.fcos, S.L));
+    pt->sampleBuffer.data[idx] = L;
+  }
 }
 
 DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_t y) {

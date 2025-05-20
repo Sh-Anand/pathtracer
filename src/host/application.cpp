@@ -23,7 +23,8 @@ Application::Application(AppConfig config) {
     config.pathtracer_max_ray_depth,
     config.pathtracer_ns_area_light,
     config.pathtracer_filename,
-    config.debug
+    config.debug,
+    config.restir
   );
   filename = config.pathtracer_filename;
 
@@ -443,12 +444,10 @@ void usage(const char *binaryName) {
   printf("  -s  <INT>        Number of camera rays per pixel\n");
   printf("  -l  <INT>        Number of samples per area light\n");
   printf("  -g  <INT>        Number of total image generated\n");
-  printf("  -t  <INT>        Number of render threads\n");
+  printf("  -R  <INT>        Enable ReSTIR-GI\n");
+  printf("  -d  <INT>        Enable debug mode\n");
   printf("  -m  <INT>        Maximum ray depth\n");
   printf("  -o  <INT>        Accumulate Bounces of Light \n");
-  printf("  -e  <PATH>       Path to environment map\n");
-  printf("  -b  <FLOAT>      The size of the aperture\n");
-  printf("  -d  <FLOAT>      The focal distance\n");
   printf("  -f  <FILENAME>   Image (.png) file to save output to in windowless "
          "mode\n");
   printf(
@@ -469,7 +468,7 @@ int main(int argc, char **argv) {
   size_t w = 0, h = 0, x = -1, y = 0, dx = 0, dy = 0;
   string output_file_name, cam_settings = "";
   string sceneFilePath;
-  while ((opt = getopt(argc, argv, "s:l:t:m:o:e:h:f:r:c:d:p:g:")) !=
+  while ((opt = getopt(argc, argv, "s:l:m:o:h:f:r:d:R:g:")) !=
           -1) { // for each option...
     switch (opt) {
     case 'f':
@@ -479,13 +478,6 @@ int main(int argc, char **argv) {
       w = atoi(argv[optind - 1]);
       h = atoi(argv[optind]);
       optind++;
-      break;
-    case 'p':
-      x = atoi(argv[optind - 1]);
-      y = atoi(argv[optind - 0]);
-      dx = atoi(argv[optind + 1]);
-      dy = atoi(argv[optind + 2]);
-      optind += 3;
       break;
     case 's':
       config.pathtracer_ns_aa = atoi(optarg);
@@ -504,17 +496,11 @@ int main(int argc, char **argv) {
     case 'o':
       config.pathtracer_accumulate_bounces = atoi(optarg) > 0;
       break;
-    case 'e':
-      std::cout << "[PathTracer] Loading environment map " << optarg
-                << std::endl;
-      std::cout << "Environment map not implemented" << std::endl;
-      std::abort();
-      break;
-    case 'c':
-      cam_settings = string(optarg);
-      break;
     case 'd':
       config.debug = true;
+      break;
+    case 'R':
+      config.restir = true;
       break;
     default:
       usage(argv[0]);

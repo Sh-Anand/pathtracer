@@ -11,7 +11,7 @@ typedef struct {
 } CudaPrimitive;
 
 typedef struct {
-  uint16_t depth;  ///< depth of the Ray
+  uint8_t depth;  ///< depth of the Ray
   uint16_t x,y; ///< pixel coordinates
   Vector3D o;  ///< origin
   Vector3D d;  ///< direction
