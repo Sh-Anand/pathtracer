@@ -60,6 +60,7 @@ public:
 
   bool debug;
   bool restir;
+  size_t ns_aa;
 };
 
 #endif  // CGL_RAYTRACER_H

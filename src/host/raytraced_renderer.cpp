@@ -30,6 +30,7 @@ RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
 
   this->debug = debug;
   this->restir = restir;
+  this->ns_aa = ns_aa;
 
   camera = NULL;
 }
@@ -84,7 +85,7 @@ static inline float aces_film(float x) {
 void RaytracedRenderer::save_image(const std::string filename) {
     // Tonemapping parameters (good defaults for a 4K laptop display)
     const float gamma    = 2.2f;    // display gammaz
-    const float level    = 1.0f;    // exposure stops: final exposure = 2^level
+    const float level    = fmaxf(4.0f * ns_aa / 256, 1.0f);    // exposure stops: final exposure = 2^level
     const float key      = 0.18f;   // middle gray
     const float wht      = 5.0f;    // white point (scene brightness clamp)
 

@@ -9,21 +9,13 @@
 
 #include "target/pathtracer.cu"
 
-__global__ void kernel_raytrace_temporal(PathTracer* pt, bool restir) {
+__global__ void kernel_raytrace(PathTracer* pt, bool restir) {
     uint16_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
     uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
     
     raytrace_pixel(pt, x,y);
-    temporal_resampling(pt, restir, x,y);
 }
 
-__global__ void kernel_spatial_sample(PathTracer* pt) {
-    uint16_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
-    uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
-    
-    spatial_resampling(pt, x,y);
-    render_final_sample(pt, x,y);
-}
 
 void RaytracedRenderer::gpu_raytrace() {
     uint16_t width = frameBuffer.w;
@@ -47,15 +39,9 @@ void RaytracedRenderer::gpu_raytrace() {
     std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now();
 
 
-    kernel_raytrace_temporal<<<gridDim, blockDim>>>(pt_target, restir);
+    kernel_raytrace<<<gridDim, blockDim>>>(pt_target, restir);
     CUDA_ERR(cudaGetLastError());
     CUDA_ERR(cudaDeviceSynchronize());
-
-    if (restir) {
-        kernel_spatial_sample<<<gridDim, blockDim>>>(pt_target);
-        CUDA_ERR(cudaGetLastError());
-        CUDA_ERR(cudaDeviceSynchronize());
-    }
 
     std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
     float duration = (std::chrono::duration<float>(t1 - t0)).count();
@@ -159,9 +145,6 @@ void RaytracedRenderer::copy_host_device_pt(std::vector<CudaLight> &lights, std:
 
     CUDA_ERR(cudaMalloc(&pt_host->sampleBuffer.data, frameBuffer.w * frameBuffer.h * sizeof(Vector3D)));
     
-    CUDA_ERR(cudaMalloc(&pt_host->initialSampleBuffer, sizeof(Sample) * frameBuffer.w * frameBuffer.h));
-    CUDA_ERR(cudaMalloc(&pt_host->temporalReservoirBuffer, sizeof(Reservoir) * frameBuffer.w * frameBuffer.h));
-    CUDA_ERR(cudaMalloc(&pt_host->spatialReservoirBuffer, sizeof(Reservoir) * frameBuffer.w * frameBuffer.h));
     CUDA_ERR(cudaMalloc(&pt_host->rays_traced, sizeof(uint8_t) * frameBuffer.w * frameBuffer.h));
 
     CUDA_ERR(cudaMalloc(&pt_host->rand_states, sizeof(RNGState) * frameBuffer.w * frameBuffer.h));

@@ -70,7 +70,13 @@ DEVICE static inline Vector3D sample_L(
 
     // 4) Convert area‐pdf to solid‐angle pdf:
     //    pdf_ω = (distance²) / (area * cosθ)
-    float cosTheta = fmaxf(vector3d_dot(N, vector3d_neg(dir)), 0.0f);
+    float cosTheta = vector3d_dot(N, vector3d_neg(dir));
+    if (cosTheta < 0.0f) {
+      // if cosθ < 0, the light is behind the surface
+      *pdf = 0.0f;
+      return Vector3D{0.0f, 0.0f, 0.0f};
+    }
+
     *pdf = (dist * dist) / (light->area * cosTheta);
 
     // 5) Return the emitted radiance
@@ -79,22 +85,22 @@ DEVICE static inline Vector3D sample_L(
 }
 
 DEVICE static inline bool light_has_intersect(
-    const CudaLight *light,
+    const CudaLight light,
     Ray*             r,
-    const Vector3D*  p,
-    const Vector3D*  N,
+    const Vector3D  p,
+    const Vector3D  N,
     const Vector3D*  vertices,
     float*           pdf) {
-  if (light->is_point_light) {
+  if (light.is_point_light) {
     // cast a “delta” intersection: does the ray exactly pass through the point?
-    Vector3D toLight = vector3d_sub(light->position, r->o);
+    Vector3D toLight = vector3d_sub(light.position, r->o);
     // project onto ray direction
     float t = vector3d_dot(toLight, r->d);
     if (t < r->min_t || t > r->max_t) 
       return false;
     // reconstruct hit point and ensure it's within epsilon of the light position
     Vector3D hitP = vector3d_add(r->o, vector3d_scale(r->d, t));
-    if (vector3d_norm(vector3d_sub(hitP, light->position)) > EPS_F) 
+    if (vector3d_norm(vector3d_sub(hitP, light.position)) > EPS_F) 
       return false;
     // delta‐light ⇒ unit pdf
     *pdf = 1.0f;
@@ -102,14 +108,14 @@ DEVICE static inline bool light_has_intersect(
 
   } else {
     float t;
-    bool hit = primitive_has_intersect(&light->triangle, r, vertices, t);
+    bool hit = primitive_has_intersect(&light.triangle, r, vertices, t);
     if (hit) {
       Vector3D samplePos = vector3d_add(r->o, vector3d_scale(r->d, t));
-      Vector3D d         = vector3d_sub(samplePos, *p);
+      Vector3D d         = vector3d_sub(samplePos, p);
       float    dist      = vector3d_norm(d);
       Vector3D dir       = vector3d_scale(d, 1.0f / dist);
-      float cosTheta     = fmaxf(vector3d_dot(*N, vector3d_neg(dir)), 0.0f);
-      *pdf = (dist * dist) / (light->area * cosTheta);
+      float cosTheta     = fmaxf(vector3d_dot(N, vector3d_neg(dir)), 0.0f);
+      *pdf = (dist * dist) / (light.area * cosTheta);
     }
     return hit;
   }

@@ -105,110 +105,146 @@ DEVICE static inline Vector3D f( const CudaBSDF *bsdfs,
 }
 
 
-// Importance‑sample both diffuse (Lambert) and GGX specular lobes of the metallic‑roughness BRDF.
-// Returns f(wo, *wi), writes out *wi, *pdf, and *occlusion.
 DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
                                 const CudaTexture* textures,
-                                const CudaIntersection isect,
-                                const Vector3D       wo,
-                                Vector3D             *wi,
-                                float               *pdf,
-                                float               *occlusion,
-                                RNGState             *rand_state) {
-  // 1) Material & normal
-  const CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
-  Vector3D N    = isect.n;
-  Vector2D uv   = isect.uv;
+                                const CudaIntersection isect, // isect.n is the world-space shading normal
+                                const Vector3D wo_local,   // Outgoing view vector in local shading frame of isect.n
+                                Vector3D       *wi_local,  // Output: Incoming light vector in local shading frame of isect.n
+                                float         *pdf,        // Output: PDF of sampling wi_local
+                                float         *occlusion,
+                                RNGState       *rand_state) {
+    // Material properties fetched using isect.bsdf_idx and isect.uv
+    const CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
+    Vector2D uv = isect.uv;
 
-  // 2) Base color
-  Vector3D base = Vector3D{bsdf.baseColor.x, bsdf.baseColor.y, bsdf.baseColor.z};
-  if (bsdf.tex_idx >= 0) {
-    Vector4D t = sample_texture(textures[bsdf.tex_idx], uv);
-    base = Vector3D{base.x * t.x, base.y * t.y, base.z * t.z};
-  }
+    Vector3D base_color = Vector3D{bsdf.baseColor.x, bsdf.baseColor.y, bsdf.baseColor.z};
+    if (bsdf.tex_idx >= 0) {
+        Vector4D t = sample_texture(textures[bsdf.tex_idx], uv);
+        base_color = Vector3D{base_color.x * t.x, base_color.y * t.y, base_color.z * t.z};
+    }
 
-  // 3) Metallic, roughness, occlusion from ORM
-  float metal     = clampd(bsdf.metallic,  0.0, 1.0);
-  float roughness = clampd(bsdf.roughness, 0.02,1.0);
-  if (bsdf.orm_idx >= 0) {
-    Vector4D orm = sample_texture(textures[bsdf.orm_idx], uv);
-    *occlusion   = orm.x;
-    roughness    = orm.y;
-    metal        = orm.z;
-  }
-  float onem = 1.0 - metal;
+    float metallic = clampd(bsdf.metallic, 0.0f, 1.0f);
+    float roughness = clampd(bsdf.roughness, 0.04f, 1.0f); // Clamping roughness here
+    *occlusion = 1.0f; // Default occlusion
 
-  // // 4) Visibility check
-  float NoV = fabs(vector3d_dot(N, wo));
-  if (NoV == 0.0) {
-    *pdf = 0.0;
-    return Vector3D{};
-  }
+    if (bsdf.orm_idx >= 0) {
+        Vector4D orm = sample_texture(textures[bsdf.orm_idx], uv);
+        *occlusion = orm.x;
+        roughness = clampd(orm.y, 0.04f, 1.0f); // Clamp roughness from ORM
+        metallic = clampd(orm.z, 0.0f, 1.0f);  // Clamp metallic from ORM
+    }
+    float one_minus_metallic = 1.0f - metallic;
+    float alpha = roughness * roughness;
 
-  // 5) Precompute F₀ and mixture weights
-  float alpha = roughness * roughness;
-  Vector3D F0  = Vector3D{0.04f * onem + base.x * metal, 0.04f * onem + base.y * metal, 0.04f * onem + base.z * metal};
+    // wo_local is in local shading space, where N_shading is (0,0,1)
+    // N_dot_V_local is simply the z-component of wo_local
+    float N_dot_V_local = fabsf(wo_local.z);
+    if (N_dot_V_local == 0.0f) {
+        *pdf = 0.0f;
+        return Vector3D{};
+    }
 
-  // with—compute luminance of F₀:
-  float   F0_avg = (F0.x + F0.y + F0.z) / 3.0;  
-  F0_avg         = clampd(F0_avg, 0.0, 1.0);
+    Vector3D F0 = Vector3D{
+        0.04f * one_minus_metallic + base_color.x * metallic,
+        0.04f * one_minus_metallic + base_color.y * metallic,
+        0.04f * one_minus_metallic + base_color.z * metallic
+    };
 
-  float P_s = F0_avg;   // sample specular lobe with Fresnel weight
-  float P_d = 1.0 - P_s;
+    float F0_luminance = (F0.x + F0.y + F0.z) / 3.0f;
+    float P_specular = clampd(F0_luminance, 0.0f, 1.0f); // Probability of choosing specular lobe
+    float P_diffuse = 1.0f - P_specular;
 
-  // 6) Randomly choose lobe
-  float u = next_float(rand_state);
-  if (u < P_d) {
-    // ── DIFFUSE ──
-    // sample cosine‑weighted hemisphere
-    float Xi1 = next_float(rand_state);
-    float Xi2 = next_float(rand_state);
+    float lobe_choice_rand = next_float(rand_state);
 
-    float r = sqrt(Xi1);
-    float theta = 2. * PI * Xi2;
-    *pdf = sqrt(1-Xi1) / PI;
-    Vector3D wit = Vector3D{r*cos(theta),r*sin(theta),sqrt(1-Xi1)};
-    *wi = wit;
-    *pdf *= P_d;
-    // evaluate BRDF
-    Vector3D H     = vector3d_unit(vector3d_add(wo, wit));
-    float VoH     = max(vector3d_dot(wo, H), 0.0f);
-    Vector3D F_geo = vector3d_add(F0, vector3d_scale((Vector3D{1.0f - F0.x,1.0f - F0.y,1.0f - F0.z}), pow(1.0 - VoH, 5.0)));
-    Vector3D c_diff = vector3d_scale(base, onem);
-    return Vector3D{c_diff.x * (1.0f - F_geo.x * PI_R), c_diff.y * (1.0f - F_geo.y * PI_R), c_diff.z * (1.0f - F_geo.z * PI_R)};
-  } else {
-    // ── SPECULAR (GGX) ──
-    // (a) sample microfacet normal H via GGX NDF
-    float r1 = next_float(rand_state);
-    float r2 = next_float(rand_state);
-    float phi      = 2.0 * M_PI * r1;
-    float cosTheta = sqrt((1.0 - r2) / (1.0 + (alpha*alpha - 1.0) * r2));
-    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta*cosTheta));
+    if (lobe_choice_rand < P_diffuse) {
+        // --- DIFFUSE LOBE ---
+        float r1 = next_float(rand_state); // for sqrt(ksi1) for r
+        float r2 = next_float(rand_state); // for 2*pi*ksi2 for phi
 
-    Matrix3x3 o2w;
-    make_coord_space(&o2w, N);
-    Vector3D localH = Vector3D{sinTheta * cos(phi),
-                               sinTheta * sin(phi),
-                               cosTheta};
-    Vector3D H = vector3d_unit(matrix3x3_vector_multiply(&o2w, &localH));
+        float cos_theta_sample = sqrtf(max(0.0f, 1.0f - r1)); // Cosine of inclination angle
+        float sin_theta_sample = sqrtf(r1);                   // Sine of inclination angle (sqrt(1-cos^2))
+        float phi_sample = 2.0f * M_PI * r2;                  // Azimuthal angle
 
-    // (b) reflect view vector about H
-    Vector3D wit = vector3d_reflect(vector3d_neg(wo), H);
-    *wi = wit;
-    // (c) compute PDF
-    float NoH   = max(vector3d_dot(N, H), 0.0f);
-    float VoH   = max(vector3d_dot(wo, H), 0.0f);
-    float D     = D_compute(alpha, NoH);
-    float pdf_H = D * NoH;
-    float pdf_w = pdf_H / (4.0 * VoH);
-    *pdf = pdf_w * P_s;
+        Vector3D sampled_wi_local;
+        sampled_wi_local.x = sin_theta_sample * cosf(phi_sample);
+        sampled_wi_local.y = sin_theta_sample * sinf(phi_sample);
+        sampled_wi_local.z = cos_theta_sample; // Always positive as it's in upper hemisphere
 
-    // (d) evaluate microfacet BRDF
-    float NoL = max(vector3d_dot(N, wit), 0.0f);
-    float G   = G_compute(alpha, NoV, NoL, VoH, max(vector3d_dot(*wi, H), 0.0f));
-    Vector3D F_geo = vector3d_add(F0, vector3d_scale(Vector3D{1.0f - F0.x , 1.0f - F0.y, 1.0f - F0.z}, pow(1.0 - VoH, 5.0)));
-    return vector3d_scale(F_geo, (D * G / (4.0 * NoV * NoL)));
-  }
+        *wi_local = sampled_wi_local;
+
+        if (sampled_wi_local.z <= 1e-6f) { // PDF would be zero or near-zero
+            *pdf = 0.0f;
+            return Vector3D{};
+        }
+        *pdf = (sampled_wi_local.z / M_PI) * P_diffuse; // pdf_diffuse = (cos_theta / PI) * P_diffuse
+
+        // Calculate BRDF value f_r(wo_local, sampled_wi_local) for diffuse
+        Vector3D H_local = vector3d_unit(vector3d_add(wo_local, sampled_wi_local));
+        float V_dot_H_local = max(0.0f, vector3d_dot(wo_local, H_local));
+
+        Vector3D F_schlick = vector3d_add(F0, vector3d_scale(Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z}, powf(1.0f - V_dot_H_local, 5.0f)));
+        Vector3D c_diff = vector3d_scale(base_color, one_minus_metallic);
+
+        Vector3D one_minus_F_schlick = Vector3D{1.0f - F_schlick.x, 1.0f - F_schlick.y, 1.0f - F_schlick.z};
+        Vector3D brdf_numerator = vector3d_mul(c_diff, one_minus_F_schlick);
+        return vector3d_scale(brdf_numerator, (1.0f / M_PI)); // c_diff * (1 - F) / PI
+
+    } else {
+        // --- SPECULAR LOBE (GGX) ---
+        // Sample microfacet normal H_local in local shading space
+        float r1 = next_float(rand_state); // For phi_h
+        float r2 = next_float(rand_state); // For cos_theta_h
+
+        float phi_h = 2.0f * M_PI * r1;
+        float cos_theta_h = sqrtf((1.0f - r2) / (1.0f + (alpha * alpha - 1.0f) * r2));
+        float sin_theta_h = sqrtf(max(0.0f, 1.0f - cos_theta_h * cos_theta_h));
+
+        Vector3D H_local; // Sampled microfacet normal in local shading space
+        H_local.x = sin_theta_h * cosf(phi_h);
+        H_local.y = sin_theta_h * sinf(phi_h);
+        H_local.z = cos_theta_h; // Always positive
+
+        // Reflect wo_local around H_local to get wi_local
+        *wi_local = vector3d_reflect(vector3d_neg(wo_local), H_local);
+
+        if (wi_local->z <= 1e-6f) { // Reflection goes below surface horizon
+            *pdf = 0.0f;
+            return Vector3D{};
+        }
+
+        // Calculate PDF of sampling wi_local
+        float N_dot_H_local = H_local.z; // Since H_local is in shading space, N_shading is (0,0,1)
+        float V_dot_H_local = max(0.0f, vector3d_dot(wo_local, H_local));
+
+        if (V_dot_H_local == 0.0f) {
+            *pdf = 0.0f;
+            return Vector3D{};
+        }
+        float D_ggx = D_compute(alpha, N_dot_H_local); // D_compute needs N.H
+        float pdf_H = D_ggx * N_dot_H_local;           // PDF_GGX(H) = D(H) * (N.H)
+        *pdf = (pdf_H / (4.0f * V_dot_H_local)) * P_specular;
+
+        // Calculate BRDF value f_r(wo_local, *wi_local) for specular
+        float N_dot_L_local = wi_local->z; // Since *wi_local is in shading space
+        // V_dot_H_local already computed
+        // L_dot_H_local is also V_dot_H_local because wi is a perfect reflection of -wo around H
+
+        Vector3D F_schlick = vector3d_add(F0, vector3d_scale(Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z}, powf(1.0f - V_dot_H_local, 5.0f)));
+        float G_smith = G_compute(alpha, N_dot_V_local, N_dot_L_local, V_dot_H_local, V_dot_H_local); // G_compute must be Smith G term
+
+        // Specular BRDF = F * D * G / (4 * (N.V) * (N.L))
+        // N_dot_V_local = fabsf(wo_local.z)
+        // N_dot_L_local = fabsf(wi_local->z) (or just wi_local.z if always positive)
+        // The G_compute in f() was divided by (4*NoV*NoL), so f_specular = F*D*G_term_from_f
+        // So, here: F_schlick * D_ggx * G_smith / (4 * N_dot_V_local * N_dot_L_local)
+        float denominator = 4.0f * N_dot_V_local * N_dot_L_local;
+        if (denominator == 0.0f) {
+             // Already handled by N_dot_V_local == 0 or wi_local->z <= 0 checks
+            return Vector3D{};
+        }
+        Vector3D specular_term_numerator = vector3d_scale(F_schlick, D_ggx * G_smith);
+        return vector3d_scale(specular_term_numerator, 1.0f / denominator);
+    }
 }
 
 // power­-heuristic MIS weight, β=2
@@ -313,9 +349,9 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
     for (int i = 0; i < pt->num_lights; ++i) {
       CudaLight L = pt->lights[i];
       float pdfL;
-      if (light_has_intersect(&L, &shadow, &hit_p, &isect.n, pt->bvh->vertices, &pdfL)) {
+      if (light_has_intersect(L, &shadow, hit_p, isect.n, pt->bvh->vertices, &pdfL)) {
         // get the light and compute its PDF for this direction
-        Vector3D Li = get_emission(pt->bsdfs, pt->textures, isect);
+        Vector3D Li = L.radiance;
         float w    = mis_weight(pdfB, pdfL);
         L_out = vector3d_add(L_out, vector3d_mul(f_bsdf, vector3d_scale(Li, (cosNL * w / pdfB))));
       }
@@ -334,7 +370,6 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
   Vector3D throughput{1.0, 1.0, 1.0};
   Ray current_ray = r;
   CudaIntersection isect = isect_init;
-  bool first_bounce = true;
 
   // constant index since x,y don’t change across bounces
   int idx = current_ray.x + current_ray.y * pt->sampleBuffer.w;
@@ -354,9 +389,7 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
 
     // direct lighting
     Vector3D L_out = estimate_direct_lighting_importance(pt, current_ray, isect);
-    if (first_bounce) {
-        pt->initialSampleBuffer[idx].emittance = L_out;
-    }
+
     L_out_total = vector3d_add(L_out_total, vector3d_mul(throughput, L_out));
 
     // russian-roulette survival
@@ -375,7 +408,7 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
         break;
 
     // update throughput
-    throughput = first_bounce ? throughput: vector3d_mul(throughput, fcos);
+    throughput = vector3d_mul(throughput, fcos);
     throughput = vector3d_scale(throughput, 1 / (pdf * p_survive));
 
     // spawn next ray
@@ -389,24 +422,12 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     if (!intersect(pt->bvh, &bounce_ray, &bounce_isect))
         break;
 
-    if (first_bounce) {
-        Vector3D bounce_p = ray_at(bounce_ray, bounce_isect.t);
-        Sample* s = &pt->initialSampleBuffer[idx];
-        s->x_v   = hit_p;
-        s->n_v   = isect.n;
-        s->x_s   = bounce_p;
-        s->n_s   = bounce_isect.n;
-        s->pdf   = pdf;
-        s->fcos  = fcos;
-    }
-
     // prepare for next iteration
     current_ray = bounce_ray;
     isect       = bounce_isect;
-    first_bounce = false;
   }
 
-  return vector3d_sub(L_out_total, pt->initialSampleBuffer[idx].emittance);
+  return L_out_total;
 }
 
 DEVICE static inline void raytrace_pixel(PathTracer *pt, uint16_t x, uint16_t y) {
@@ -414,137 +435,55 @@ DEVICE static inline void raytrace_pixel(PathTracer *pt, uint16_t x, uint16_t y)
   
   Ray r;
   uint32_t idx = x + y * pt->sampleBuffer.w;
-  pt->initialSampleBuffer[idx] = Sample{};
+  // if (x <= 350 || y <= 350 || x >= 360 || y >= 360) {
+  //   pt->sampleBuffer.data[idx] = Vector3D{0.0f, 0.0f, 0.0f};
+  //   return;
+  // }
+  // if (x != 351 || y != 353) {
+  //   pt->sampleBuffer.data[idx] = Vector3D{0.0f, 0.0f, 0.0f};
+  //   return;
+  // }
   init_gpu_rng(&pt->rand_states[idx], 1234 + idx);
+  size_t spp = pt->ns_aa;
+  Vector3D rad = {0.0f, 0.0f, 0.0f};
+  float r_spp = 1.0f / spp;
+  for (int sap = 0; sap < spp; sap++) {
+    Vector2D origin = Vector2D{float(x), float(y)};
+    Vector2D sample;
+    sample.x = origin.x + next_float(&pt->rand_states[idx]);
+    sample.y = origin.y + next_float(&pt->rand_states[idx]);
+    r = generate_ray(&pt->camera, sample.x / pt->sampleBuffer.w, sample.y / pt->sampleBuffer.h);
+    r.depth = 1, r.x = x, r.y = y;
 
-  Vector2D origin = Vector2D{float(x), float(y)};
-  Vector2D sample;
-  sample.x = origin.x + next_float(&pt->rand_states[idx]);
-  sample.y = origin.y + next_float(&pt->rand_states[idx]);
-  r = generate_ray(&pt->camera, sample.x / pt->sampleBuffer.w, sample.y / pt->sampleBuffer.h);
-  r.depth = 1, r.x = x, r.y = y;
+    if (intersect(pt->bvh, &r, &isect)) {
+      // perturb normal
+      int normal_idx = pt->bsdfs[isect.bsdf_idx].normal_idx;
+      if (normal_idx >= 0) {
+        Vector3D N = isect.n;
+        Vector3D T = Vector3D{isect.tangent.x, isect.tangent.y, isect.tangent.z};
+        T = vector3d_unit(vector3d_sub(T, vector3d_scale(N, vector3d_dot(N, T))));
+        Vector3D B = vector3d_scale(vector3d_cross(N, T), isect.tangent.w);
 
-  if (intersect(pt->bvh, &r, &isect)) {
-    // perturb normal
-    int normal_idx = pt->bsdfs[isect.bsdf_idx].normal_idx;
-    if (normal_idx >= 0) {
-      Vector3D N = isect.n;
-      Vector3D T = Vector3D{isect.tangent.x, isect.tangent.y, isect.tangent.z};
-      T = vector3d_unit(vector3d_sub(T, vector3d_scale(N, vector3d_dot(N, T))));
-      Vector3D B = vector3d_scale(vector3d_cross(N, T), isect.tangent.w);
+        Vector4D c = sample_texture(pt->textures[normal_idx], isect.uv);
+        Vector3D n_tangent = Vector3D{c.x * 2.0f - 1.0f,
+                                      c.y * 2.0f - 1.0f,
+                                      c.z * 2.0f - 1.0f};
+        Vector3D perturbed = vector3d_unit(vector3d_add(vector3d_scale(T, n_tangent.x), vector3d_add(vector3d_scale(B, n_tangent.y), vector3d_scale(N, n_tangent.z))));
 
-      Vector4D c = sample_texture(pt->textures[normal_idx], isect.uv);
-      Vector3D n_tangent = Vector3D{c.x * 2.0f - 1.0f,
-                                    c.y * 2.0f - 1.0f,
-                                    c.z * 2.0f - 1.0f};
-      Vector3D perturbed = vector3d_unit(vector3d_add(vector3d_scale(T, n_tangent.x), vector3d_add(vector3d_scale(B, n_tangent.y), vector3d_scale(N, n_tangent.z))));
-
-      Vector3D diff = vector3d_sub(perturbed, N);
-      float diff_len = vector3d_norm(diff);
-      // use original if diff small to prevent flickering. TODO: better fix
-      if (diff_len < 0.4) {
-        isect.n = N;
-      } else {
-        isect.n = perturbed;
+        Vector3D diff = vector3d_sub(perturbed, N);
+        float diff_len = vector3d_norm(diff);
+        // use original if diff small to prevent flickering. TODO: better fix
+        if (diff_len < 0.4) {
+          isect.n = N;
+        } else {
+          isect.n = perturbed;
+        }
       }
+      Vector3D zero_bounce = get_emission(pt->bsdfs, pt->textures, isect);
+      Vector3D L = vector3d_add(zero_bounce, at_least_one_bounce_radiance(pt, r, isect));
+      rad = vector3d_add(rad, L);
     }
-    Vector3D L = at_least_one_bounce_radiance(pt, r, isect);
-    Sample sp = pt->initialSampleBuffer[idx];
-    sp.emittance = vector3d_add(sp.emittance, get_emission(pt->bsdfs, pt->textures, isect));
-    sp.L = L;
-    pt->initialSampleBuffer[idx] = sp;
   }
-}
-
-// Computes jacobian from s1->s2 as defined in Equation 11 of the ReSTIR-GI paper
-DEVICE static inline float jacobian(const Sample s1, const Sample s2) {
-  Vector3D xq1 = s1.x_v;
-  Vector3D xq2 = s1.x_s;
-  Vector3D xr1 = s2.x_v;
-  Vector3D nq2 = s1.n_s;
-  Vector3D xq1mxq2 = vector3d_sub(xq1, xq2);
-  Vector3D xr1mxq2 = vector3d_sub(xr1, xq2);
-
-  float cos_phi_q2 = fabs(vector3d_dot(nq2, vector3d_unit(xq1mxq2))); 
-  float cos_phi_r2 = fabs(vector3d_dot(nq2, vector3d_unit(xr1mxq2)));
-
-  float distance_q = vector3d_norm(xq1mxq2);
-  float distance_r = vector3d_norm(xr1mxq2);
-
-  return (cos_phi_r2 / cos_phi_q2) * (distance_q / distance_r);
-}
-
-DEVICE static inline void temporal_resampling(PathTracer *pt, bool restir, uint16_t x, uint16_t y) {
-  int idx = x + y * pt->sampleBuffer.w;
-  Sample S = pt->initialSampleBuffer[idx];
-
-  if (restir) {
-    Reservoir R{};
-
-    float w = p_hat(S);
-    update(&R, S, w, &pt->rand_states[idx]);
-    R.W = R.w / (R.M * p_hat(R.z));
-
-    pt->temporalReservoirBuffer[idx] = R;
-  } else {
-    Vector3D L = vector3d_add(S.emittance, vector3d_mul(S.fcos, S.L));
-    pt->sampleBuffer.data[idx] = L;
-  }
-}
-
-DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_t y) {
-
-  const uint16_t neighbouring_pixel_radius = floor(0.2 * min(pt->sampleBuffer.w, pt->sampleBuffer.h));
-
-  int idx = x + y * pt->sampleBuffer.w;
-  Reservoir Rs = pt->temporalReservoirBuffer[idx];
-  Sample q = pt->initialSampleBuffer[idx];
-  RNGState *rand_state = &pt->rand_states[idx];
-  const uint8_t max_neighbouring_samples = 9; // ReSTIR GI paper value without temporal sampling
-  for (uint8_t s = 0; s < max_neighbouring_samples; s++) {
-    // Randomly choose a neighbor pixel qn
-    int window = 2 * neighbouring_pixel_radius + 1;
-    uint16_t sample_x = x + static_cast<int>(next_float(rand_state) * window) - neighbouring_pixel_radius;
-    uint16_t sample_y = y + static_cast<int>(next_float(rand_state) * window) - neighbouring_pixel_radius;
-
-    // Ensure the sample is within the frame buffer bounds
-    if (sample_x >= pt->sampleBuffer.w || sample_y >= pt->sampleBuffer.h) continue;
-
-    // Retrieve the reservoir from the neighboring pixel
-    Reservoir Rn = pt->temporalReservoirBuffer[sample_x + sample_y * pt->sampleBuffer.w];
-    // Calculate geometric similarity between q and qn
-    if (!are_geometrically_similar(q, Rn.z) || (Rn.z.L.x == 0 && Rn.z.L.y == 0 && Rn.z.L.z == 0)) continue;
-
-    // Calculate |Jqn→q| (Jacobian determinant)
-    float Jqn_to_q = jacobian(Rn.z, q); // Placeholder for actual Jacobian calculation
-
-    // Calculate ˆp′q
-    float p_prime_q = (p_hat(Rn.z)) / Jqn_to_q;
-
-    // visibility test
-    // if neighbour's path's point is invisible from the current path's point, p_prime_q = 0
-    Ray shadow_ray;
-    Vector3D xsmxv = vector3d_sub(Rn.z.x_s, q.x_v);
-    shadow_ray.o = q.x_v; shadow_ray.d = vector3d_unit(xsmxv); shadow_ray.depth = 0; shadow_ray.inv_d = vector3d_rcp(shadow_ray.d);
-    shadow_ray.min_t = EPS_F;
-    shadow_ray.max_t = vector3d_norm(xsmxv) - EPS_F;
-    if (has_intersect(pt->bvh, &shadow_ray)) p_prime_q = 0;
-
-    // Merge Rn into the current reservoir
-    merge(&Rs, Rn, p_prime_q, rand_state);
-  }
-
-  float phat = p_hat(Rs.z);
-  Rs.W = Rs.M * phat > 0 ? Rs.w / (Rs.M * phat) : 0;
-  pt->rand_states[idx] = *rand_state;
-  pt->spatialReservoirBuffer[idx] = Rs;
-}
-
-DEVICE static inline void render_final_sample(PathTracer *pt, uint16_t x, uint16_t y) {
-  Reservoir R = pt->spatialReservoirBuffer[x + y * pt->sampleBuffer.w];
-  Sample S = R.z;
-  Sample initial = pt->initialSampleBuffer[x + y *  pt->sampleBuffer.w];
-  Vector3D L = vector3d_add(initial.emittance, vector3d_mul(S.fcos, vector3d_scale(S.L, R.W)));
-
-  pt->sampleBuffer.data[x + y * pt->sampleBuffer.w] = L;
+  rad = vector3d_scale(rad, r_spp);
+  pt->sampleBuffer.data[idx] = rad;
 }

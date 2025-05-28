@@ -29,9 +29,6 @@ typedef struct {
     const CudaBSDF *bsdfs;
     const CudaTexture *textures;
 
-    Sample* initialSampleBuffer;
-    Reservoir* temporalReservoirBuffer;
-    Reservoir* spatialReservoirBuffer;
     uint8_t* rays_traced;
     HDRImageBuffer sampleBuffer;
 } PathTracer;
