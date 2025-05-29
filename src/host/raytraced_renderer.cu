@@ -12,9 +12,9 @@
 __global__ void kernel_raytrace_temporal(PathTracer* pt, bool restir) {
     uint16_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
     uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
-    
+    int idx = y * pt->sampleBuffer.w + x;
     raytrace_pixel(pt, x,y);
-    temporal_resampling(pt, restir, x,y);
+    temporal_resampling(pt->initialSampleBuffer[idx], restir, pt->rand_states[idx], &pt->temporalReservoirBuffer[idx], &pt->sampleBuffer.data[idx]);
 }
 
 __global__ void kernel_spatial_sample(PathTracer* pt) {

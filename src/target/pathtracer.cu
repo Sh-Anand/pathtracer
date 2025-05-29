@@ -329,7 +329,7 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
 
 #define RRT 0.7f
 
-DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r, const CudaIntersection isect_init) {
+DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r, const CudaIntersection isect_init, uint32_t idx) {
   Vector3D L_out_total{0.0, 0.0, 0.0};
   Vector3D throughput{1.0, 1.0, 1.0};
   Ray current_ray = r;
@@ -337,7 +337,6 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
   bool first_bounce = true;
 
   // constant index since x,y don’t change across bounces
-  int idx = current_ray.x + current_ray.y * pt->sampleBuffer.w;
   pt->rays_traced[idx] = 0;
   uint8_t level = 1;
   while (level++ <= pt->max_ray_depth) {
@@ -382,8 +381,6 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     Ray bounce_ray; bounce_ray.o = hit_p; bounce_ray.d = matrix3x3_vector_multiply(&o2w, &wi); bounce_ray.max_t = INFINITY; bounce_ray.inv_d = vector3d_rcp(bounce_ray.d);
     bounce_ray.min_t = EPS_F;
     bounce_ray.depth = current_ray.depth + 1;
-    bounce_ray.x = current_ray.x;
-    bounce_ray.y = current_ray.y;
 
     CudaIntersection bounce_isect; bounce_isect.t = INFINITY;
     if (!intersect(pt->bvh, &bounce_ray, &bounce_isect))
@@ -422,7 +419,7 @@ DEVICE static inline void raytrace_pixel(PathTracer *pt, uint16_t x, uint16_t y)
   sample.x = origin.x + next_float(&pt->rand_states[idx]);
   sample.y = origin.y + next_float(&pt->rand_states[idx]);
   r = generate_ray(&pt->camera, sample.x / pt->sampleBuffer.w, sample.y / pt->sampleBuffer.h);
-  r.depth = 1, r.x = x, r.y = y;
+  r.depth = 1;
 
   if (intersect(pt->bvh, &r, &isect)) {
     // perturb normal
@@ -448,7 +445,7 @@ DEVICE static inline void raytrace_pixel(PathTracer *pt, uint16_t x, uint16_t y)
         isect.n = perturbed;
       }
     }
-    Vector3D L = at_least_one_bounce_radiance(pt, r, isect);
+    Vector3D L = at_least_one_bounce_radiance(pt, r, isect, idx);
     Sample sp = pt->initialSampleBuffer[idx];
     sp.emittance = vector3d_add(sp.emittance, get_emission(pt->bsdfs, pt->textures, isect));
     sp.L = L;
@@ -457,11 +454,7 @@ DEVICE static inline void raytrace_pixel(PathTracer *pt, uint16_t x, uint16_t y)
 }
 
 // Computes jacobian from s1->s2 as defined in Equation 11 of the ReSTIR-GI paper
-DEVICE static inline float jacobian(const Sample s1, const Sample s2) {
-  Vector3D xq1 = s1.x_v;
-  Vector3D xq2 = s1.x_s;
-  Vector3D xr1 = s2.x_v;
-  Vector3D nq2 = s1.n_s;
+DEVICE static inline float jacobian(const Vector3D xq1, const Vector3D xq2, const Vector3D xr1, const Vector3D nq2) {
   Vector3D xq1mxq2 = vector3d_sub(xq1, xq2);
   Vector3D xr1mxq2 = vector3d_sub(xr1, xq2);
 
@@ -474,21 +467,18 @@ DEVICE static inline float jacobian(const Sample s1, const Sample s2) {
   return (cos_phi_r2 / cos_phi_q2) * (distance_q / distance_r);
 }
 
-DEVICE static inline void temporal_resampling(PathTracer *pt, bool restir, uint16_t x, uint16_t y) {
-  int idx = x + y * pt->sampleBuffer.w;
-  Sample S = pt->initialSampleBuffer[idx];
-
+DEVICE static inline void temporal_resampling(Sample S, bool restir, RNGState rand_state, Reservoir *temporal, Vector3D *sbuffer_data) {
   if (restir) {
     Reservoir R{};
 
     float w = p_hat(S);
-    update(&R, S, w, &pt->rand_states[idx]);
+    update(&R, S, w, &rand_state);
     R.W = R.w / (R.M * p_hat(R.z));
 
-    pt->temporalReservoirBuffer[idx] = R;
+    *temporal = R;
   } else {
     Vector3D L = vector3d_add(S.emittance, vector3d_mul(S.fcos, S.L));
-    pt->sampleBuffer.data[idx] = L;
+    *sbuffer_data = L;
   }
 }
 
@@ -516,7 +506,7 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
     if (!are_geometrically_similar(q, Rn.z) || (Rn.z.L.x == 0 && Rn.z.L.y == 0 && Rn.z.L.z == 0)) continue;
 
     // Calculate |Jqn→q| (Jacobian determinant)
-    float Jqn_to_q = jacobian(Rn.z, q); // Placeholder for actual Jacobian calculation
+    float Jqn_to_q = jacobian(Rn.z.x_v, Rn.z.x_s, q.x_v, Rn.z.n_s);
 
     // Calculate ˆp′q
     float p_prime_q = (p_hat(Rn.z)) / Jqn_to_q;
