@@ -315,7 +315,7 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
       float pdfL;
       if (light_has_intersect(&L, &shadow, &hit_p, &isect.n, pt->bvh->vertices, &pdfL)) {
         // get the light and compute its PDF for this direction
-        Vector3D Li = get_emission(pt->bsdfs, pt->textures, isect);
+        Vector3D Li = L.radiance;
         float w    = mis_weight(pdfB, pdfL);
         L_out = vector3d_add(L_out, vector3d_mul(f_bsdf, vector3d_scale(Li, (cosNL * w / pdfB))));
       }

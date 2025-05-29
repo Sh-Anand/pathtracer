@@ -70,9 +70,14 @@ DEVICE static inline Vector3D sample_L(
 
     // 4) Convert area‐pdf to solid‐angle pdf:
     //    pdf_ω = (distance²) / (area * cosθ)
-    float cosTheta = fmaxf(vector3d_dot(N, vector3d_neg(dir)), 0.0f);
-    *pdf = (dist * dist) / (light->area * cosTheta);
+    float cosTheta = vector3d_dot(N, vector3d_neg(dir));
+    if (cosTheta < EPS_F) {
+      // if cosθ is too small, return zero pdf
+      *pdf = 0.0f;
+      return Vector3D{0.0f, 0.0f, 0.0f};
+    }
 
+    *pdf = (dist * dist) / (light->area * cosTheta);
     // 5) Return the emitted radiance
     return light->radiance;
   }
