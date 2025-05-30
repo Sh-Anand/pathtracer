@@ -33,7 +33,7 @@ static constexpr float COS_ANGLE_THRESH = 0.9f;              // cos(25°)
 static constexpr float DIST_THRESH      = 0.1f;              // distance threshold
 static constexpr float ANGLE_THRESH_RAD = 25.0f * (3.14159265f/180.0f);
 
-FORCE_INLINE bool are_geometrically_similar(const Sample &s1, const Sample &s2) {
+FORCE_INLINE bool are_geometrically_similar(const Sample s1, const Sample s2) {
     // normals already assumed unit-length
     float dn = vector3d_dot(s1.n_v, s2.n_v);
     if (dn < -1.0f) dn = -1.0f; else if (dn > 1.0f) dn = 1.0f;
@@ -44,7 +44,7 @@ FORCE_INLINE bool are_geometrically_similar(const Sample &s1, const Sample &s2) 
     return vector3d_norm(dx) <= DIST_THRESH;
 }
 
-FORCE_INLINE float p_hat(const Sample &s) {
+FORCE_INLINE float p_hat(const Sample s) {
     // ITU‑Rec. BT.709 luminance
     float illum = 0.2126f * s.L.x
                 + 0.7152f * s.L.y
@@ -53,7 +53,7 @@ FORCE_INLINE float p_hat(const Sample &s) {
 }
 
 FORCE_INLINE void update(Reservoir *r,
-                         const Sample &s_new,
+                         const Sample s_new,
                          float w_new,
                          RNGState *rand_state) {
     float w_total = r->w + w_new;
@@ -67,7 +67,7 @@ FORCE_INLINE void update(Reservoir *r,
 
 // merge reservoir r2 into r1, using weight multiplier p_hat2
 FORCE_INLINE void merge(Reservoir *r1,
-                        const Reservoir &r2,
+                        const Reservoir r2,
                         float              p_hat2,
                         RNGState          *rand_state) {
     float M0 = r1->M;
