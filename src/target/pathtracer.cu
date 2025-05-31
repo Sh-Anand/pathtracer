@@ -1,5 +1,7 @@
 #include "pathtracer.h"
 
+#include <cassert>
+
 DEVICE static inline void make_coord_space(Matrix3x3 *o2w, const Vector3D n) {
 
   Vector3D z = Vector3D{n.x,n.y,n.z};
@@ -140,7 +142,7 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
 
   // // 4) Visibility check
   float NoV = fabs(vector3d_dot(N, wo));
-  if (NoV == 0.0) {
+  if (NoV < EPS_F) {
     *pdf = 0.0;
     return Vector3D{};
   }
@@ -175,6 +177,7 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
     float VoH     = max(vector3d_dot(wo, H), 0.0f);
     Vector3D F_geo = vector3d_add(F0, vector3d_scale((Vector3D{1.0f - F0.x,1.0f - F0.y,1.0f - F0.z}), pow(1.0 - VoH, 5.0)));
     Vector3D c_diff = vector3d_scale(base, onem);
+
     return Vector3D{c_diff.x * (1.0f - F_geo.x * PI_R), c_diff.y * (1.0f - F_geo.y * PI_R), c_diff.z * (1.0f - F_geo.z * PI_R)};
   } else {
     // ── SPECULAR (GGX) ──
@@ -198,6 +201,10 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
     // (c) compute PDF
     float NoH   = max(vector3d_dot(N, H), 0.0f);
     float VoH   = max(vector3d_dot(wo, H), 0.0f);
+    if (VoH < EPS_F) {
+      *pdf = 0.0f;
+      return Vector3D{};
+    }
     float D     = D_compute(alpha, NoH);
     float pdf_H = D * NoH;
     float pdf_w = pdf_H / (4.0 * VoH);
@@ -205,9 +212,14 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
 
     // (d) evaluate microfacet BRDF
     float NoL = max(vector3d_dot(N, wit), 0.0f);
+    if (NoL < EPS_F) {
+      *pdf = 0.0f;
+      return Vector3D{};
+    }
     float G   = G_compute(alpha, NoV, NoL, VoH, max(vector3d_dot(*wi, H), 0.0f));
     Vector3D F_geo = vector3d_add(F0, vector3d_scale(Vector3D{1.0f - F0.x , 1.0f - F0.y, 1.0f - F0.z}, pow(1.0 - VoH, 5.0)));
-    return vector3d_scale(F_geo, (D * G / (4.0 * NoV * NoL)));
+    Vector3D res = vector3d_scale(F_geo, (D * G / (4.0 * NoV * NoL)));
+    return res;
   }
 }
 
@@ -215,7 +227,8 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
 DEVICE static inline float mis_weight(float pA, float pB) {
   float wA = pA*pA;
   float wB = pB*pB;
-  return wA / (wA + wB);
+  float mis =  wA / (wA + wB);
+  return mis;
 }
 
 // mixture PDF of your metallic‑roughness lobes
@@ -309,7 +322,6 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
     Ray shadow; shadow.o = hit_p; shadow.d = wi_bsdf; shadow.inv_d = vector3d_rcp(wi_bsdf); shadow.depth = 0;
     shadow.min_t = EPS_F;
     shadow.max_t = INFINITY;
-
     for (int i = 0; i < pt->num_lights; ++i) {
       CudaLight L = pt->lights[i];
       float pdfL;
@@ -320,9 +332,7 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
         L_out = vector3d_add(L_out, vector3d_mul(f_bsdf, vector3d_scale(Li, (cosNL * w / pdfB))));
       }
     }
-    
   }
-
   return L_out;
 }
 
@@ -450,6 +460,9 @@ DEVICE static inline void raytrace_pixel(PathTracer *pt, uint16_t x, uint16_t y)
     sp.emittance = vector3d_add(sp.emittance, get_emission(pt->bsdfs, pt->textures, isect));
     sp.L = L;
     pt->initialSampleBuffer[idx] = sp;
+
+    // assert not NaN
+    assert (L.x == L.x && L.y == L.y && L.z == L.z);
   }
 }
 
@@ -478,6 +491,8 @@ DEVICE static inline void temporal_resampling(Sample S, bool restir, RNGState ra
     *temporal = R;
   } else {
     Vector3D L = vector3d_add(S.emittance, vector3d_mul(S.fcos, S.L));
+    // assert not NaN
+    assert (L.x == L.x && L.y == L.y && L.z == L.z);
     *sbuffer_data = L;
   }
 }
@@ -507,6 +522,7 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
 
     // Calculate |Jqn→q| (Jacobian determinant)
     float Jqn_to_q = jacobian(Rn.z.x_v, Rn.z.x_s, q.x_v, Rn.z.n_s);
+    if (Jqn_to_q < EPS_F) continue; 
 
     // Calculate ˆp′q
     float p_prime_q = (p_hat(Rn.z)) / Jqn_to_q;
@@ -535,6 +551,9 @@ DEVICE static inline void render_final_sample(PathTracer *pt, uint16_t x, uint16
   Sample S = R.z;
   Sample initial = pt->initialSampleBuffer[x + y *  pt->sampleBuffer.w];
   Vector3D L = vector3d_add(initial.emittance, vector3d_mul(S.fcos, vector3d_scale(S.L, R.W)));
+
+  // assert not NaN
+  assert (L.x == L.x && L.y == L.y && L.z == L.z);
 
   pt->sampleBuffer.data[x + y * pt->sampleBuffer.w] = L;
 }

@@ -46,7 +46,6 @@ void RaytracedRenderer::gpu_raytrace() {
 
     std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now();
 
-
     kernel_raytrace_temporal<<<gridDim, blockDim>>>(pt_target, restir);
     CUDA_ERR(cudaGetLastError());
     CUDA_ERR(cudaDeviceSynchronize());
