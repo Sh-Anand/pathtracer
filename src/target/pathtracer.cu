@@ -416,7 +416,7 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
   return vector3d_sub(L_out_total, pt->initialSampleBuffer[idx].emittance);
 }
 
-DEVICE static inline void raytrace_pixel(PathTracer *pt, uint16_t x, uint16_t y) {
+DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_t x, uint16_t y, bool restir) {
   CudaIntersection isect; isect.t = INFINITY;
   
   Ray r;
@@ -430,6 +430,8 @@ DEVICE static inline void raytrace_pixel(PathTracer *pt, uint16_t x, uint16_t y)
   sample.y = origin.y + next_float(&pt->rand_states[idx]);
   r = generate_ray(&pt->camera, sample.x / pt->sampleBuffer.w, sample.y / pt->sampleBuffer.h);
   r.depth = 1;
+
+  Sample S = {};
 
   if (intersect(pt->bvh, &r, &isect)) {
     // perturb normal
@@ -456,53 +458,54 @@ DEVICE static inline void raytrace_pixel(PathTracer *pt, uint16_t x, uint16_t y)
       }
     }
     Vector3D L = at_least_one_bounce_radiance(pt, r, isect, idx);
-    Sample sp = pt->initialSampleBuffer[idx];
-    sp.emittance = vector3d_add(sp.emittance, get_emission(pt->bsdfs, pt->textures, isect));
-    sp.L = L;
-    pt->initialSampleBuffer[idx] = sp;
-
+    S = pt->initialSampleBuffer[idx];
+    S.emittance = vector3d_add(S.emittance, get_emission(pt->bsdfs, pt->textures, isect));
+    S.L = L;
     // assert not NaN
     assert (L.x == L.x && L.y == L.y && L.z == L.z);
   }
-}
 
-// Computes jacobian from s1->s2 as defined in Equation 11 of the ReSTIR-GI paper
-DEVICE static inline float jacobian(const Vector3D xq1, const Vector3D xq2, const Vector3D xr1, const Vector3D nq2) {
-  Vector3D xq1mxq2 = vector3d_sub(xq1, xq2);
-  Vector3D xr1mxq2 = vector3d_sub(xr1, xq2);
-
-  float cos_phi_q2 = fabs(vector3d_dot(nq2, vector3d_unit(xq1mxq2))); 
-  float cos_phi_r2 = fabs(vector3d_dot(nq2, vector3d_unit(xr1mxq2)));
-
-  float distance_q = vector3d_norm(xq1mxq2);
-  float distance_r = vector3d_norm(xr1mxq2);
-
-  return (cos_phi_r2 / cos_phi_q2) * (distance_q / distance_r);
-}
-
-DEVICE static inline void temporal_resampling(Sample S, bool restir, RNGState rand_state, Reservoir *temporal, Vector3D *sbuffer_data) {
   if (restir) {
     Reservoir R{};
-
     float w = p_hat(S);
-    update(&R, S, w, &rand_state);
+    update(&R, S, w, &pt->rand_states[idx]);
     R.W = R.w / (R.M * p_hat(R.z));
 
-    *temporal = R;
+    pt->temporalReservoirBufferGI[idx] = R;
   } else {
     Vector3D L = vector3d_add(S.emittance, vector3d_mul(S.fcos, S.L));
     // assert not NaN
     assert (L.x == L.x && L.y == L.y && L.z == L.z);
-    *sbuffer_data = L;
+    pt->sampleBuffer.data[idx] = L;
   }
+
+  pt->initialSampleBuffer[idx] = S;
 }
 
+// Computes jacobian from s1->s2 as defined in Equation 11 of the ReSTIR-GI paper
+DEVICE inline float jacobian(
+    const Vector3D xq1, const Vector3D xq2,
+    const Vector3D xr1, const Vector3D nq2)
+{
+    Vector3D q1q2 = vector3d_sub(xq1, xq2);
+    Vector3D r1q2 = vector3d_sub(xr1, xq2);
+
+    float dist_q  = vector3d_norm(q1q2);
+    float dist_r  = vector3d_norm(r1q2);
+    if (dist_q < EPS_F || dist_r < EPS_F) return 0.f;
+
+    float cos_q = fabsf(vector3d_dot(nq2, vector3d_scale(q1q2, 1.f/dist_q)));
+    float cos_r = fabsf(vector3d_dot(nq2, vector3d_scale(r1q2, 1.f/dist_r)));
+    if (cos_q < EPS_F) return 0.f;
+
+    return (cos_r / cos_q) * (dist_q / dist_r);
+}
 DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_t y) {
 
   const uint16_t neighbouring_pixel_radius = floor(0.2 * min(pt->sampleBuffer.w, pt->sampleBuffer.h));
 
   int idx = x + y * pt->sampleBuffer.w;
-  Reservoir Rs = pt->temporalReservoirBuffer[idx];
+  Reservoir Rs = pt->temporalReservoirBufferGI[idx];
   Sample q = pt->initialSampleBuffer[idx];
   RNGState *rand_state = &pt->rand_states[idx];
   const uint8_t max_neighbouring_samples = 9; // ReSTIR GI paper value without temporal sampling
@@ -516,7 +519,7 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
     if (sample_x >= pt->sampleBuffer.w || sample_y >= pt->sampleBuffer.h) continue;
 
     // Retrieve the reservoir from the neighboring pixel
-    Reservoir Rn = pt->temporalReservoirBuffer[sample_x + sample_y * pt->sampleBuffer.w];
+    Reservoir Rn = pt->temporalReservoirBufferGI[sample_x + sample_y * pt->sampleBuffer.w];
     // Calculate geometric similarity between q and qn
     if (!are_geometrically_similar(q, Rn.z) || (Rn.z.L.x == 0 && Rn.z.L.y == 0 && Rn.z.L.z == 0)) continue;
 
@@ -543,17 +546,12 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
   float phat = p_hat(Rs.z);
   Rs.W = Rs.M * phat > 0 ? Rs.w / (Rs.M * phat) : 0;
   pt->rand_states[idx] = *rand_state;
-  pt->spatialReservoirBuffer[idx] = Rs;
-}
 
-DEVICE static inline void render_final_sample(PathTracer *pt, uint16_t x, uint16_t y) {
-  Reservoir R = pt->spatialReservoirBuffer[x + y * pt->sampleBuffer.w];
-  Sample S = R.z;
-  Sample initial = pt->initialSampleBuffer[x + y *  pt->sampleBuffer.w];
-  Vector3D L = vector3d_add(initial.emittance, vector3d_mul(S.fcos, vector3d_scale(S.L, R.W)));
+  Sample S = Rs.z;
+  Vector3D L = vector3d_add(q.emittance, vector3d_mul(S.fcos, vector3d_scale(S.L, Rs.W)));
 
   // assert not NaN
   assert (L.x == L.x && L.y == L.y && L.z == L.z);
 
-  pt->sampleBuffer.data[x + y * pt->sampleBuffer.w] = L;
+  pt->sampleBuffer.data[idx] = L;
 }
