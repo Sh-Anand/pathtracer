@@ -329,7 +329,7 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     // direct lighting
     Vector3D L_out = estimate_direct_lighting_importance(pt, current_ray, isect);
     if (first_bounce) {
-        pt->initialSampleBuffer[idx].emittance = L_out;
+        pt->initialSampleBuffer[idx].emittance = {};
     }
     L_out_total = vector3d_add(L_out_total, vector3d_mul(throughput, L_out));
 
@@ -367,7 +367,8 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
         Vector3D bounce_p = ray_at(bounce_ray, bounce_isect.t);
         Sample* s = &pt->initialSampleBuffer[idx];
         s->x_v   = hit_p;
-        s->n_v   = isect.n;
+        s->n_v   = isect_init.n;
+        s->z_v   = vector3d_norm2(vector3d_sub(hit_p, r.o));
         s->x_s   = bounce_p;
         s->n_s   = bounce_isect.n;
         s->pdf   = pdf;
@@ -385,6 +386,8 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
 }
 
 DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_t x, uint16_t y, bool restir) {
+  if (x < 544 || y < 345 || x > 545 || y > 350)
+    return;
   CudaIntersection isect; isect.t = INFINITY;
   
   Ray r;
@@ -431,7 +434,9 @@ DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_
   }
 
   if (restir) {
-    Reservoir R{};
+    printf("Pixel (%d, %d): Sample value: (%f, %f, %f)\n",
+           x, y, S.L.x, S.L.y, S.L.z);
+    Reservoir R = pt->temporalReservoirBufferGI[idx];
     float w = p_hat(S);
     update(&R, S, w, &pt->rand_states[idx]);
     R.W = R.w / (R.M * p_hat(R.z));
@@ -439,6 +444,9 @@ DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_
     pt->temporalReservoirBufferGI[idx] = R;
   } else {
     Vector3D L = vector3d_add(S.emittance, vector3d_mul(S.fcos, S.L));
+    printf ("Pixel (%d, %d): L = (%f, %f, %f), fcos = (%f, %f, %f)\n",
+            x, y, S.L.x, S.L.y, S.L.z, S.fcos.x, S.fcos.y, S.fcos.z);
+    
     pt->sampleBuffer.data[idx] = L;
   }
 
@@ -453,23 +461,31 @@ DEVICE inline float jacobian(
     Vector3D q1q2 = vector3d_sub(xq1, xq2);
     Vector3D r1q2 = vector3d_sub(xr1, xq2);
 
-    float dist_q  = vector3d_norm(q1q2);
-    float dist_r  = vector3d_norm(r1q2);
-    if (dist_q < EPS_F || dist_r < EPS_F) return 0.f;
+    float dist_q  = vector3d_norm2(q1q2);
+    float dist_r  = vector3d_norm2(r1q2);
+    if (dist_r < EPS_F) return 0.f;
 
-    float cos_q = fabsf(vector3d_dot(nq2, vector3d_scale(q1q2, 1.f/dist_q)));
-    float cos_r = fabsf(vector3d_dot(nq2, vector3d_scale(r1q2, 1.f/dist_r)));
-    if (cos_q < EPS_F) return 0.f;
+    float abs_cos_q = fabsf(vector3d_dot(nq2, vector3d_scale(q1q2, 1.f/dist_q)));
+    float abs_cos_r = fabsf(vector3d_dot(nq2, vector3d_scale(r1q2, 1.f/dist_r)));
+    if (abs_cos_q < EPS_F) return 0.f;
 
-    return (cos_r / cos_q) * (dist_q / dist_r);
+    return (abs_cos_r / abs_cos_q) * (dist_q / dist_r);
 }
+
 DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_t y) {
 
-  const uint16_t neighbouring_pixel_radius = floor(0.2 * min(pt->sampleBuffer.w, pt->sampleBuffer.h));
+  if (x < 544 || y < 345 || x > 545 || y > 350)
+    return;
 
-  int idx = x + y * pt->sampleBuffer.w;
+  const uint16_t neighbouring_pixel_radius = floor(0.05 * min(pt->sampleBuffer.w, pt->sampleBuffer.h));
+
+  uint32_t idx = x + y * pt->sampleBuffer.w;
   Reservoir Rs = pt->temporalReservoirBufferGI[idx];
+  printf ("Pixel (%d, %d): Initial Reservoir M: %f, w: %f, W: %f\n",
+          x, y, Rs.M, Rs.w, Rs.W);
   Sample q = pt->initialSampleBuffer[idx];
+  printf ("Pixel (%d, %d): Initial Sample L value: (%f, %f, %f)\n",
+          x, y, q.L.x, q.L.y, q.L.z);
   RNGState *rand_state = &pt->rand_states[idx];
   const uint8_t max_neighbouring_samples = 9; // ReSTIR GI paper value without temporal sampling
   for (uint8_t s = 0; s < max_neighbouring_samples; s++) {
@@ -484,14 +500,15 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
     // Retrieve the reservoir from the neighboring pixel
     Reservoir Rn = pt->temporalReservoirBufferGI[sample_x + sample_y * pt->sampleBuffer.w];
     // Calculate geometric similarity between q and qn
-    if (!are_geometrically_similar(q, Rn.z) || (Rn.z.L.x == 0 && Rn.z.L.y == 0 && Rn.z.L.z == 0)) continue;
+    if (!are_geometrically_similar(&q, &Rn.z)) continue;
 
     // Calculate |Jqn→q| (Jacobian determinant)
-    float Jqn_to_q = jacobian(Rn.z.x_v, Rn.z.x_s, q.x_v, Rn.z.n_s);
+    float Jqn_to_q = fabsf(jacobian(Rn.z.x_v, Rn.z.x_s, q.x_v, Rn.z.n_s));
     if (Jqn_to_q < EPS_F) continue; 
+    printf ("Really? This is never happening?\n");
 
     // Calculate ˆp′q
-    float p_prime_q = (p_hat(Rn.z)) / Jqn_to_q;
+    float p_prime_q = p_hat(Rn.z) / Jqn_to_q;
 
     // visibility test
     // if neighbour's path's point is invisible from the current path's point, p_prime_q = 0
@@ -503,14 +520,18 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
     if (has_intersect(pt->bvh, &shadow_ray)) p_prime_q = 0;
 
     // Merge Rn into the current reservoir
+    printf ("Pixel (%d, %d): Merging Reservoirs with p' = %f\n", x, y, p_prime_q);
     merge(&Rs, Rn, p_prime_q, rand_state);
   }
 
   float phat = p_hat(Rs.z);
   Rs.W = Rs.M * phat > 0 ? Rs.w / (Rs.M * phat) : 0;
-  pt->rand_states[idx] = *rand_state;
 
+  printf ("Pixel (%d, %d): Final Reservoir M: %f, w: %f, W: %f\n",
+          x, y, Rs.M, Rs.w, Rs.W);
   Sample S = Rs.z;
-  Vector3D L = vector3d_add(q.emittance, vector3d_mul(S.fcos, vector3d_scale(S.L, Rs.W)));
+  Vector3D L = vector3d_add(q.emittance, vector3d_mul(q.fcos, vector3d_scale(S.L, Rs.W)));
+  printf ("Pixel (%d, %d): L = (%f, %f, %f), fcos = (%f, %f, %f), W = %f\n",
+          x, y, S.L.x, S.L.y, S.L.z, S.fcos.x, S.fcos.y, S.fcos.z, Rs.W);
   pt->sampleBuffer.data[idx] = L;
 }

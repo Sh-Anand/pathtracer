@@ -13,7 +13,8 @@
 #endif
 
 struct Sample {
-    Vector3D x_v, n_v;       // visible point & normal (normalized)
+    Vector3D x_v, n_v;       // visible point, normal (normalized)
+    float z_v;               // depth
     Vector3D x_s, n_s;       // sample point & normal (normalized)
     Vector3D L;              // outgoing radiance at x_s
     float    pdf;            // pdf of the sample
@@ -29,19 +30,22 @@ struct Reservoir {
 };
 
 // precompute thresholds
-static constexpr float COS_ANGLE_THRESH = 0.9f;              // cos(25°)
-static constexpr float DIST_THRESH      = 0.1f;              // distance threshold
-static constexpr float ANGLE_THRESH_RAD = 25.0f * (3.14159265f/180.0f);
+static constexpr float COS_ANGLE_THRESH = 0.906307f; // cos(25°)
+static constexpr float DEPTH_THRESH    = 0.05f;      // 5%
 
-FORCE_INLINE bool are_geometrically_similar(const Sample s1, const Sample s2) {
-    // normals already assumed unit-length
-    float dn = vector3d_dot(s1.n_v, s2.n_v);
-    if (dn < -1.0f) dn = -1.0f; else if (dn > 1.0f) dn = 1.0f;
-    // compare angles
-    if (acosf(dn) > ANGLE_THRESH_RAD) return false;
-    // compare distances
-    Vector3D dx = vector3d_sub(s1.x_v, s2.x_v);
-    return vector3d_norm(dx) <= DIST_THRESH;
+FORCE_INLINE bool are_geometrically_similar(const Sample *s1, const Sample *s2) {
+    // 1) Angle test: normals within 25°
+    float dn = vector3d_dot(vector3d_unit(s1->n_v), vector3d_unit(s2->n_v));
+    if (dn < COS_ANGLE_THRESH) 
+        return false;
+
+    // 2) Depth test: normalized depth difference ≤ 0.05
+    //    (Assuming s1.z_v and s2.z_v are camera‑space depths)
+    float depthRatio = s1->z_v / s2->z_v;
+    if (depthRatio < 1.0f - DEPTH_THRESH || depthRatio > 1.0f + DEPTH_THRESH)
+        return false;
+
+    return true;
 }
 
 FORCE_INLINE float p_hat(const Sample s) {
@@ -49,7 +53,7 @@ FORCE_INLINE float p_hat(const Sample s) {
     float illum = 0.2126f * s.L.x
                 + 0.7152f * s.L.y
                 + 0.0722f * s.L.z;
-    return (s.pdf > 0.0f) ? (illum / s.pdf) : 0.0f;
+    return illum;
 }
 
 FORCE_INLINE void update(Reservoir *r,
@@ -71,7 +75,6 @@ FORCE_INLINE void merge(Reservoir *r1,
                         float              p_hat2,
                         RNGState          *rand_state) {
     float M0 = r1->M;
-    // w_new = p_hat2 * r2.W * r2.M
     float w_new = p_hat2 * r2.W * r2.M;
     update(r1, r2.z, w_new, rand_state);
     r1->M = M0 + r2.M;

@@ -31,7 +31,10 @@ FORCE_INLINE Vector3D vector3d_cross(Vector3D a, Vector3D b) {
   };
 }
 
-FORCE_INLINE float    vector3d_norm (Vector3D v)          { return sqrtf(v.x*v.x + v.y*v.y + v.z*v.z); }
+FORCE_INLINE float    vector3d_norm2(Vector3D v)          { return (v.x*v.x + v.y*v.y + v.z*v.z); }
+FORCE_INLINE float    vector3d_norm (Vector3D v)          { return sqrtf(vector3d_norm2(v)); }
+
+
 FORCE_INLINE Vector3D vector3d_unit (Vector3D v)          {
   float inv = 1.f / vector3d_norm(v);
   return {v.x*inv, v.y*inv, v.z*inv};
