@@ -1,25 +1,5 @@
 #include "pathtracer.h"
 
-DEVICE static inline void make_coord_space(Matrix3x3 *o2w, const Vector3D n) {
-
-  Vector3D z = Vector3D{n.x,n.y,n.z};
-  Vector3D h = z;
-  if (fabs(h.x) <= fabs(h.y) && fabs(h.x) <= fabs(h.z))
-    h.x = 1.0;
-  else if (fabs(h.y) <= fabs(h.x) && fabs(h.y) <= fabs(h.z))
-    h.y = 1.0;
-  else
-    h.z = 1.0;
-
-  z = vector3d_unit(z);
-  Vector3D y = vector3d_unit(vector3d_cross(h, z));
-  Vector3D x = vector3d_unit(vector3d_cross(z, y));
-
-  (*o2w).c[0] = x;
-  (*o2w).c[1] = y;
-  (*o2w).c[2] = z;
-}
-
 DEVICE static inline Vector3D get_emission(const CudaBSDF *bsdfs,
                                            const CudaTexture *textures,
                                            const CudaIntersection isect) {
@@ -186,12 +166,10 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
     float cosTheta = sqrt((1.0 - r2) / (1.0 + (alpha*alpha - 1.0) * r2));
     float sinTheta = sqrt(max(0.0, 1.0 - cosTheta*cosTheta));
 
-    Matrix3x3 o2w;
-    make_coord_space(&o2w, N);
     Vector3D localH = Vector3D{sinTheta * cos(phi),
                                sinTheta * sin(phi),
                                cosTheta};
-    Vector3D H = vector3d_unit(matrix3x3_vector_multiply(&o2w, &localH));
+    Vector3D H = vector3d_unit(localH);
 
     // (b) reflect view vector about H
     Vector3D wit = vector3d_reflect(vector3d_neg(wo), H);
@@ -269,16 +247,10 @@ DEVICE static inline float bsdf_pdf(const CudaBSDF* bsdfs,
 
 
 DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt, Ray r, const CudaIntersection isect) {
-  Matrix3x3 o2w;
-
-  make_coord_space(&o2w, isect.n);
-  Matrix3x3 w2o = matrix3x3_transpose(&o2w);
-
   // w_out points towards the source of the ray (e.g.,
   // toward the camera if this is a primary ray)
   const Vector3D hit_p = ray_at(r, isect.t);
-  const Vector3D minus_out_dir = vector3d_neg(r.d);
-  const Vector3D w_out =  matrix3x3_vector_multiply(&w2o, &minus_out_dir);
+  const Vector3D w_out = vector3d_neg(r.d);
   Vector3D L_out = Vector3D{};
   //NOTE: wi here is in worldpsace,
 
@@ -349,15 +321,10 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
   uint8_t rays_traced = 0;
   while (level <= pt->max_ray_depth) {
     rays_traced++;
-    // build shading frame
-    Matrix3x3 o2w;
-    make_coord_space(&o2w, isect.n);
-    Matrix3x3 w2o = matrix3x3_transpose(&o2w);
 
-    // hit point & outgoing dir in local space
+    // hit point & outgoing dir in world space
     Vector3D hit_p  = ray_at(current_ray, isect.t);
-    Vector3D minus_out_dir = vector3d_neg(current_ray.d);
-    Vector3D w_out  = matrix3x3_vector_multiply(&w2o, &minus_out_dir);
+    Vector3D w_out = vector3d_neg(current_ray.d);
 
     // direct lighting
     Vector3D L_out = estimate_direct_lighting_importance(pt, current_ray, isect);
@@ -377,6 +344,7 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     float pdf;
     float occlusion = 1.0;
     Vector3D fcos = sample_f(pt->bsdfs, pt->textures, isect, w_out, &wi, &pdf, &occlusion, &pt->rand_states[idx]);
+    wi = vector3d_unit(wi); // ensure wi is normalized
     fcos = vector3d_scale(fcos, abs_cos_theta(wi) * occlusion);
     if (pdf <= 0.0)
         break;
@@ -386,7 +354,7 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     throughput = vector3d_scale(throughput, 1 / (pdf * p_survive));
 
     // spawn next ray
-    Ray bounce_ray; bounce_ray.o = hit_p; bounce_ray.d = matrix3x3_vector_multiply(&o2w, &wi); bounce_ray.max_t = INFINITY; bounce_ray.inv_d = vector3d_rcp(bounce_ray.d);
+    Ray bounce_ray; bounce_ray.o = hit_p; bounce_ray.d = wi; bounce_ray.max_t = INFINITY; bounce_ray.inv_d = vector3d_rcp(bounce_ray.d);
     bounce_ray.min_t = EPS_F;
       level = level + 1;
 

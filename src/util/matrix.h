@@ -5,19 +5,13 @@
 #include "vector.h"
 #include <cmath>
 
-#ifdef __CUDACC__
-  #define FORCE_INLINE __host__ __device__ __forceinline__
-#else
-  #define FORCE_INLINE inline __attribute__((always_inline))
-#endif
-
 // 3×3 and 4×4 matrix types
 typedef struct { Vector3D c[3]; } Matrix3x3;
 typedef struct { Vector4D c[4]; } Matrix4x4;
 
 // ————————————————
 // Extract upper‑left 3×3 from 4×4
-FORCE_INLINE Matrix3x3 matrix3x3_from_matrix4x4(const Matrix4x4 *A) {
+static inline Matrix3x3 matrix3x3_from_matrix4x4(const Matrix4x4 *A) {
   return {{
     { A->c[0].x, A->c[0].y, A->c[0].z },
     { A->c[1].x, A->c[1].y, A->c[1].z },
@@ -26,7 +20,7 @@ FORCE_INLINE Matrix3x3 matrix3x3_from_matrix4x4(const Matrix4x4 *A) {
 }
 
 // Transpose
-FORCE_INLINE Matrix3x3 matrix3x3_transpose(const Matrix3x3 *A) {
+static inline Matrix3x3 matrix3x3_transpose(const Matrix3x3 *A) {
   return {{
     { A->c[0].x, A->c[1].x, A->c[2].x },
     { A->c[0].y, A->c[1].y, A->c[2].y },
@@ -34,19 +28,8 @@ FORCE_INLINE Matrix3x3 matrix3x3_transpose(const Matrix3x3 *A) {
   }};
 }
 
-// Determinant
-FORCE_INLINE float matrix3x3_determinant(const Matrix3x3 *A) {
-  float a00=A->c[0].x, a01=A->c[1].x, a02=A->c[2].x;
-  float a10=A->c[0].y, a11=A->c[1].y, a12=A->c[2].y;
-  float a20=A->c[0].z, a21=A->c[1].z, a22=A->c[2].z;
-  return
-    a00*(a11*a22 - a12*a21)
-   -a01*(a10*a22 - a12*a20)
-   +a02*(a10*a21 - a11*a20);
-}
-
 // Inverse (undefined if det=0)
-FORCE_INLINE Matrix3x3 matrix3x3_inverse(const Matrix3x3 *A) {
+static inline Matrix3x3 matrix3x3_inverse(const Matrix3x3 *A) {
   float a00=A->c[0].x, a01=A->c[1].x, a02=A->c[2].x;
   float a10=A->c[0].y, a11=A->c[1].y, a12=A->c[2].y;
   float a20=A->c[0].z, a21=A->c[1].z, a22=A->c[2].z;
@@ -62,7 +45,7 @@ FORCE_INLINE Matrix3x3 matrix3x3_inverse(const Matrix3x3 *A) {
 }
 
 // Scale
-FORCE_INLINE Matrix3x3 matrix3x3_scale(const Matrix3x3 *A, float s) {
+static inline Matrix3x3 matrix3x3_scale(const Matrix3x3 *A, float s) {
   return {{
     { A->c[0].x*s, A->c[0].y*s, A->c[0].z*s },
     { A->c[1].x*s, A->c[1].y*s, A->c[1].z*s },
@@ -71,7 +54,7 @@ FORCE_INLINE Matrix3x3 matrix3x3_scale(const Matrix3x3 *A, float s) {
 }
 
 // Multiply matrix by vector (column)
-FORCE_INLINE Vector3D matrix3x3_vector_multiply(const Matrix3x3 *A, const Vector3D *v) {
+HOST_DEVICE static inline Vector3D matrix3x3_vector_multiply(const Matrix3x3 *A, const Vector3D *v) {
   return vector3d_add(
     vector3d_scale(A->c[0], v->x),
     vector3d_add(
@@ -82,7 +65,7 @@ FORCE_INLINE Vector3D matrix3x3_vector_multiply(const Matrix3x3 *A, const Vector
 }
 
 // Lift 3×3 → 4×4 homogeneous
-FORCE_INLINE Matrix4x4 matrix3x3_to4x4(const Matrix3x3 *A) {
+static inline Matrix4x4 matrix3x3_to4x4(const Matrix3x3 *A) {
   return {{
     { A->c[0].x, A->c[0].y, A->c[0].z, 0.f },
     { A->c[1].x, A->c[1].y, A->c[1].z, 0.f },
@@ -92,7 +75,7 @@ FORCE_INLINE Matrix4x4 matrix3x3_to4x4(const Matrix3x3 *A) {
 }
 
 // 4×4 Identity
-FORCE_INLINE Matrix4x4 matrix4x4_identity() {
+static inline Matrix4x4 matrix4x4_identity() {
   return {{
     {1,0,0,0},
     {0,1,0,0},
@@ -102,7 +85,7 @@ FORCE_INLINE Matrix4x4 matrix4x4_identity() {
 }
 
 // 4×4 Determinant (unrolled)
-FORCE_INLINE float matrix4x4_determinant(const Matrix4x4 *A) {
+static inline float matrix4x4_determinant(const Matrix4x4 *A) {
   #define M(i,j) ((i)==0?A->c[j].x:(i)==1?A->c[j].y:(i)==2?A->c[j].z:A->c[j].w)
   float d =
     M(0,3)*M(1,2)*M(2,1)*M(3,0) - M(0,2)*M(1,3)*M(2,1)*M(3,0)
@@ -122,7 +105,7 @@ FORCE_INLINE float matrix4x4_determinant(const Matrix4x4 *A) {
 }
 
 // 4×4 Multiply: C = A * B
-FORCE_INLINE Matrix4x4 matrix4x4_multiply(const Matrix4x4 *A, const Matrix4x4 *B) {
+static inline Matrix4x4 matrix4x4_multiply(const Matrix4x4 *A, const Matrix4x4 *B) {
   Matrix4x4 C;
   // column 0
   C.c[0].x = A->c[0].x*B->c[0].x + A->c[1].x*B->c[0].y + A->c[2].x*B->c[0].z + A->c[3].x*B->c[0].w;
@@ -148,7 +131,7 @@ FORCE_INLINE Matrix4x4 matrix4x4_multiply(const Matrix4x4 *A, const Matrix4x4 *B
 }
 
 // 4×4 Matrix × Vector
-FORCE_INLINE Vector4D matrix4x4_vector_multiply(const Matrix4x4 *A, const Vector4D *v) {
+static inline Vector4D matrix4x4_vector_multiply(const Matrix4x4 *A, const Vector4D *v) {
   return {
     A->c[0].x*v->x + A->c[1].x*v->y + A->c[2].x*v->z + A->c[3].x*v->w,
     A->c[0].y*v->x + A->c[1].y*v->y + A->c[2].y*v->z + A->c[3].y*v->w,
@@ -186,7 +169,4 @@ class Quaternion : public Vector4D {
 
 };
 
-// (You can similarly unroll your 4×4 det, multiply, etc. if needed)
-
-#undef FORCE_INLINE
 #endif // MATRIX_H
