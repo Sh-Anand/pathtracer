@@ -1,7 +1,5 @@
 #include "pathtracer.h"
 
-#include <cassert>
-
 DEVICE static inline void make_coord_space(Matrix3x3 *o2w, const Vector3D n) {
 
   Vector3D z = Vector3D{n.x,n.y,n.z};
@@ -298,7 +296,7 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
     float cosNL = fmaxf(vector3d_dot(isect.n, wi), 0.0);
     if (pdfL > 0 && cosNL > 0) {
       // shadow test
-      Ray shadow; shadow.o = hit_p; shadow.d = wi; shadow.inv_d = vector3d_rcp(wi); shadow.depth = 0;
+      Ray shadow; shadow.o = hit_p; shadow.d = wi; shadow.inv_d = vector3d_rcp(wi);
       shadow.min_t = EPS_F;
       shadow.max_t = distToL;
       if (!has_intersect(pt->bvh, &shadow)) {
@@ -319,7 +317,7 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
 
   if (pdfB > 0 && cosNL > 0) {
     // trace a ray in that direction and see if it hits *any* light
-    Ray shadow; shadow.o = hit_p; shadow.d = wi_bsdf; shadow.inv_d = vector3d_rcp(wi_bsdf); shadow.depth = 0;
+    Ray shadow; shadow.o = hit_p; shadow.d = wi_bsdf; shadow.inv_d = vector3d_rcp(wi_bsdf);
     shadow.min_t = EPS_F;
     shadow.max_t = INFINITY;
     for (int i = 0; i < pt->num_lights; ++i) {
@@ -347,10 +345,10 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
   bool first_bounce = true;
 
   // constant index since x,y don’t change across bounces
-  pt->rays_traced[idx] = 0;
   uint8_t level = 1;
-  while (level++ <= pt->max_ray_depth) {
-    pt->rays_traced[idx]++;
+  uint8_t rays_traced = 0;
+  while (level <= pt->max_ray_depth) {
+    rays_traced++;
     // build shading frame
     Matrix3x3 o2w;
     make_coord_space(&o2w, isect.n);
@@ -369,8 +367,8 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     L_out_total = vector3d_add(L_out_total, vector3d_mul(throughput, L_out));
 
     // russian-roulette survival
-    float p_survive = (current_ray.depth == 1) ? 1.0f : RRT;
-    if (current_ray.depth > 1 &&
+    float p_survive = (level == 1) ? 1.0f : RRT;
+    if (level > 1 &&
         next_float(&pt->rand_states[idx]) >= RRT)
         break;
 
@@ -390,7 +388,8 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     // spawn next ray
     Ray bounce_ray; bounce_ray.o = hit_p; bounce_ray.d = matrix3x3_vector_multiply(&o2w, &wi); bounce_ray.max_t = INFINITY; bounce_ray.inv_d = vector3d_rcp(bounce_ray.d);
     bounce_ray.min_t = EPS_F;
-    bounce_ray.depth = current_ray.depth + 1;
+      level = level + 1;
+
 
     CudaIntersection bounce_isect; bounce_isect.t = INFINITY;
     if (!intersect(pt->bvh, &bounce_ray, &bounce_isect))
@@ -413,6 +412,7 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     first_bounce = false;
   }
 
+  pt->rays_traced[idx] = rays_traced;
   return vector3d_sub(L_out_total, pt->initialSampleBuffer[idx].emittance);
 }
 
@@ -429,7 +429,6 @@ DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_
   sample.x = origin.x + next_float(&pt->rand_states[idx]);
   sample.y = origin.y + next_float(&pt->rand_states[idx]);
   r = generate_ray(&pt->camera, sample.x / pt->sampleBuffer.w, sample.y / pt->sampleBuffer.h);
-  r.depth = 1;
 
   Sample S = {};
 
@@ -461,8 +460,6 @@ DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_
     S = pt->initialSampleBuffer[idx];
     S.emittance = vector3d_add(S.emittance, get_emission(pt->bsdfs, pt->textures, isect));
     S.L = L;
-    // assert not NaN
-    assert (L.x == L.x && L.y == L.y && L.z == L.z);
   }
 
   if (restir) {
@@ -474,8 +471,6 @@ DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_
     pt->temporalReservoirBufferGI[idx] = R;
   } else {
     Vector3D L = vector3d_add(S.emittance, vector3d_mul(S.fcos, S.L));
-    // assert not NaN
-    assert (L.x == L.x && L.y == L.y && L.z == L.z);
     pt->sampleBuffer.data[idx] = L;
   }
 
@@ -534,7 +529,7 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
     // if neighbour's path's point is invisible from the current path's point, p_prime_q = 0
     Ray shadow_ray;
     Vector3D xsmxv = vector3d_sub(Rn.z.x_s, q.x_v);
-    shadow_ray.o = q.x_v; shadow_ray.d = vector3d_unit(xsmxv); shadow_ray.depth = 0; shadow_ray.inv_d = vector3d_rcp(shadow_ray.d);
+    shadow_ray.o = q.x_v; shadow_ray.d = vector3d_unit(xsmxv); shadow_ray.inv_d = vector3d_rcp(shadow_ray.d);
     shadow_ray.min_t = EPS_F;
     shadow_ray.max_t = vector3d_norm(xsmxv) - EPS_F;
     if (has_intersect(pt->bvh, &shadow_ray)) p_prime_q = 0;
@@ -549,9 +544,5 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
 
   Sample S = Rs.z;
   Vector3D L = vector3d_add(q.emittance, vector3d_mul(S.fcos, vector3d_scale(S.L, Rs.W)));
-
-  // assert not NaN
-  assert (L.x == L.x && L.y == L.y && L.z == L.z);
-
   pt->sampleBuffer.data[idx] = L;
 }

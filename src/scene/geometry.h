@@ -11,7 +11,6 @@ typedef struct {
 } CudaPrimitive;
 
 typedef struct {
-  uint8_t depth;  ///< depth of the Ray
   Vector3D o;  ///< origin
   Vector3D d;  ///< direction
   float min_t; ///< treat the ray as a segment (ray "begin" at min_t)

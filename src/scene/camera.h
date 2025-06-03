@@ -120,7 +120,7 @@ DEVICE static inline Ray generate_ray(CudaCamera *cam, float x, float y) {
   Vector3D sensor = Vector3D{(x - 0.5f) * 2 * tanf(d_radians(cam->hFov) * 0.5f), (y - 0.5f) * 2 * tanf(d_radians(cam->vFov) * 0.5f),-1};
   Vector3D dir = matrix3x3_vector_multiply(&cam->c2w, &sensor);
   Ray camera_ray;
-  camera_ray.o = cam->pos; camera_ray.d = vector3d_unit(dir); camera_ray.depth = 0; camera_ray.inv_d = vector3d_rcp(camera_ray.d);
+  camera_ray.o = cam->pos; camera_ray.d = vector3d_unit(dir); camera_ray.inv_d = vector3d_rcp(camera_ray.d);
   camera_ray.min_t = cam->nClip; camera_ray.max_t = cam->fClip;
 
   return camera_ray;
