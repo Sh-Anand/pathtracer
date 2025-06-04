@@ -18,7 +18,7 @@ struct Sample {
     Vector3D x_s, n_s;       // sample point & normal (normalized)
     Vector3D L;              // outgoing radiance at x_s
     float    pdf;            // pdf of the sample
-    Vector3D fcos;           // product of bsdf and cosine factor
+    Vector3D bsdf_f;           // bsdf_f at visible point
     Vector3D emittance;      // zero + one bounce radiance
 };
 
@@ -35,7 +35,7 @@ static constexpr float DEPTH_THRESH    = 0.05f;      // 5%
 
 FORCE_INLINE bool are_geometrically_similar(const Sample *s1, const Sample *s2) {
     // 1) Angle test: normals within 25°
-    float dn = vector3d_dot(vector3d_unit(s1->n_v), vector3d_unit(s2->n_v));
+    float dn = vector3d_dot(s1->n_v, s2->n_v);
     if (dn < COS_ANGLE_THRESH) 
         return false;
 
@@ -91,7 +91,7 @@ FORCE_INLINE void clear(Reservoir *r) {
     r->z.n_s      = {0.0f,0.0f,0.0f};
     r->z.L        = {0.0f,0.0f,0.0f};
     r->z.pdf      = 0.0f;
-    r->z.fcos     = {0.0f,0.0f,0.0f};
+    r->z.bsdf_f     = {0.0f,0.0f,0.0f};
     r->z.emittance= {0.0f,0.0f,0.0f};
 }
 

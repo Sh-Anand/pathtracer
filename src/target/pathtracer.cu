@@ -316,7 +316,6 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
   CudaIntersection isect = isect_init;
   bool first_bounce = true;
 
-  // constant index since x,y don’t change across bounces
   uint8_t level = 1;
   uint8_t rays_traced = 0;
   while (level <= pt->max_ray_depth) {
@@ -328,9 +327,6 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
 
     // direct lighting
     Vector3D L_out = estimate_direct_lighting_importance(pt, current_ray, isect);
-    if (first_bounce) {
-        pt->initialSampleBuffer[idx].emittance = {};
-    }
     L_out_total = vector3d_add(L_out_total, vector3d_mul(throughput, L_out));
 
     // russian-roulette survival
@@ -343,13 +339,27 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     Vector3D wi{0,0,0};
     float pdf;
     float occlusion = 1.0;
-    Vector3D fcos = sample_f(pt->bsdfs, pt->textures, isect, w_out, &wi, &pdf, &occlusion, &pt->rand_states[idx]);
+    Vector3D bsdf_f = sample_f(pt->bsdfs, pt->textures, isect, w_out, &wi, &pdf, &occlusion, &pt->rand_states[idx]);
     wi = vector3d_unit(wi); // ensure wi is normalized
-    fcos = vector3d_scale(fcos, abs_cos_theta(wi) * occlusion);
-    if (pdf <= 0.0)
+    float costheta = vector3d_dot(isect.n, wi);
+    Vector3D fcos = vector3d_scale(bsdf_f, costheta);
+    bsdf_f = vector3d_scale(bsdf_f, occlusion);
+
+    if (first_bounce) {
+        Sample* s = &pt->initialSampleBuffer[idx];
+        s->emittance = L_out;
+        s->x_v   = hit_p;
+        s->n_v   = isect_init.n;
+        s->z_v   = vector3d_norm2(vector3d_sub(hit_p, r.o));
+        s->pdf   = pdf;
+        s->bsdf_f  = bsdf_f;
+    }
+    if (pdf <= 0.0) {
         break;
+    }
 
     // update throughput
+
     throughput = first_bounce ? throughput: vector3d_mul(throughput, fcos);
     throughput = vector3d_scale(throughput, 1 / (pdf * p_survive));
 
@@ -366,13 +376,8 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     if (first_bounce) {
         Vector3D bounce_p = ray_at(bounce_ray, bounce_isect.t);
         Sample* s = &pt->initialSampleBuffer[idx];
-        s->x_v   = hit_p;
-        s->n_v   = isect_init.n;
-        s->z_v   = vector3d_norm2(vector3d_sub(hit_p, r.o));
         s->x_s   = bounce_p;
         s->n_s   = bounce_isect.n;
-        s->pdf   = pdf;
-        s->fcos  = fcos;
     }
 
     // prepare for next iteration
@@ -386,8 +391,6 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
 }
 
 DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_t x, uint16_t y, bool restir) {
-  if (x < 544 || y < 345 || x > 545 || y > 350)
-    return;
   CudaIntersection isect; isect.t = INFINITY;
   
   Ray r;
@@ -434,23 +437,18 @@ DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_
   }
 
   if (restir) {
-    printf("Pixel (%d, %d): Sample value: (%f, %f, %f)\n",
-           x, y, S.L.x, S.L.y, S.L.z);
     Reservoir R = pt->temporalReservoirBufferGI[idx];
     float w = p_hat(S);
     update(&R, S, w, &pt->rand_states[idx]);
     R.W = R.w / (R.M * p_hat(R.z));
 
     pt->temporalReservoirBufferGI[idx] = R;
+    pt->initialSampleBuffer[idx] = S;
   } else {
-    Vector3D L = vector3d_add(S.emittance, vector3d_mul(S.fcos, S.L));
-    printf ("Pixel (%d, %d): L = (%f, %f, %f), fcos = (%f, %f, %f)\n",
-            x, y, S.L.x, S.L.y, S.L.z, S.fcos.x, S.fcos.y, S.fcos.z);
-    
+    float costheta = vector3d_dot(S.n_v, vector3d_unit(vector3d_sub(S.x_v, S.x_s)));
+    Vector3D L = vector3d_add(S.emittance, vector3d_mul(vector3d_scale(S.bsdf_f, costheta), S.L));
     pt->sampleBuffer.data[idx] = L;
   }
-
-  pt->initialSampleBuffer[idx] = S;
 }
 
 // Computes jacobian from s1->s2 as defined in Equation 11 of the ReSTIR-GI paper
@@ -473,22 +471,17 @@ DEVICE inline float jacobian(
 }
 
 DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_t y) {
-
-  if (x < 544 || y < 345 || x > 545 || y > 350)
-    return;
-
-  const uint16_t neighbouring_pixel_radius = floor(0.05 * min(pt->sampleBuffer.w, pt->sampleBuffer.h));
+  const uint16_t neighbouring_pixel_radius = floor(0.02 * min(pt->sampleBuffer.w, pt->sampleBuffer.h));
 
   uint32_t idx = x + y * pt->sampleBuffer.w;
   Reservoir Rs = pt->temporalReservoirBufferGI[idx];
-  printf ("Pixel (%d, %d): Initial Reservoir M: %f, w: %f, W: %f\n",
-          x, y, Rs.M, Rs.w, Rs.W);
   Sample q = pt->initialSampleBuffer[idx];
-  printf ("Pixel (%d, %d): Initial Sample L value: (%f, %f, %f)\n",
-          x, y, q.L.x, q.L.y, q.L.z);
   RNGState *rand_state = &pt->rand_states[idx];
   const uint8_t max_neighbouring_samples = 9; // ReSTIR GI paper value without temporal sampling
-  for (uint8_t s = 0; s < max_neighbouring_samples; s++) {
+
+  uint8_t s = 0, retries = 0;
+  while (s < max_neighbouring_samples && retries < 20) {
+    retries++;
     // Randomly choose a neighbor pixel qn
     int window = 2 * neighbouring_pixel_radius + 1;
     uint16_t sample_x = x + static_cast<int>(next_float(rand_state) * window) - neighbouring_pixel_radius;
@@ -499,13 +492,20 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
 
     // Retrieve the reservoir from the neighboring pixel
     Reservoir Rn = pt->temporalReservoirBufferGI[sample_x + sample_y * pt->sampleBuffer.w];
+
+    // Discard sample if it failed to intersect second bounce
+    if (Rn.z.L.x == 0 && Rn.z.L.y == 0 && Rn.z.L.z == 0) continue;
+
+    // We count this as a sample
+    retries = 0;
+    s++;
+
     // Calculate geometric similarity between q and qn
     if (!are_geometrically_similar(&q, &Rn.z)) continue;
 
     // Calculate |Jqn→q| (Jacobian determinant)
     float Jqn_to_q = fabsf(jacobian(Rn.z.x_v, Rn.z.x_s, q.x_v, Rn.z.n_s));
     if (Jqn_to_q < EPS_F) continue; 
-    printf ("Really? This is never happening?\n");
 
     // Calculate ˆp′q
     float p_prime_q = p_hat(Rn.z) / Jqn_to_q;
@@ -520,18 +520,14 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
     if (has_intersect(pt->bvh, &shadow_ray)) p_prime_q = 0;
 
     // Merge Rn into the current reservoir
-    printf ("Pixel (%d, %d): Merging Reservoirs with p' = %f\n", x, y, p_prime_q);
     merge(&Rs, Rn, p_prime_q, rand_state);
   }
 
   float phat = p_hat(Rs.z);
   Rs.W = Rs.M * phat > 0 ? Rs.w / (Rs.M * phat) : 0;
 
-  printf ("Pixel (%d, %d): Final Reservoir M: %f, w: %f, W: %f\n",
-          x, y, Rs.M, Rs.w, Rs.W);
   Sample S = Rs.z;
-  Vector3D L = vector3d_add(q.emittance, vector3d_mul(q.fcos, vector3d_scale(S.L, Rs.W)));
-  printf ("Pixel (%d, %d): L = (%f, %f, %f), fcos = (%f, %f, %f), W = %f\n",
-          x, y, S.L.x, S.L.y, S.L.z, S.fcos.x, S.fcos.y, S.fcos.z, Rs.W);
+  float costheta = vector3d_dot(q.n_v, vector3d_unit(vector3d_sub(q.x_v, S.x_s)));
+  Vector3D L = vector3d_add(q.emittance, vector3d_mul(vector3d_scale(q.bsdf_f, costheta), vector3d_scale(S.L, Rs.W)));
   pt->sampleBuffer.data[idx] = L;
 }

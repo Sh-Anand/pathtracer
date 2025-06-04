@@ -20,7 +20,7 @@ inline float cos_theta(const Vector3D w) {
   return w.z;
 }
 
-HOST_DEVICE inline float abs_cos_theta(const Vector3D w) {
+inline float abs_cos_theta(const Vector3D w) {
   return fabsf(w.z);
 }
 
