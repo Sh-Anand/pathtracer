@@ -50,10 +50,7 @@ FORCE_INLINE bool are_geometrically_similar(const Sample *s1, const Sample *s2) 
 
 FORCE_INLINE float p_hat(const Sample s) {
     // ITU‑Rec. BT.709 luminance
-    float illum = 0.2126f * s.L.x
-                + 0.7152f * s.L.y
-                + 0.0722f * s.L.z;
-    return illum;
+    return illum(s.L);
 }
 
 FORCE_INLINE void update(Reservoir *r,

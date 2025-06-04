@@ -36,7 +36,9 @@ FORCE_INLINE float    vector3d_norm (Vector3D v)          { return sqrtf(vector3
 
 
 FORCE_INLINE Vector3D vector3d_unit (Vector3D v)          {
-  float inv = 1.f / vector3d_norm(v);
+  float norm = vector3d_norm(v);
+  if (norm == 0.f) return {0.f, 0.f, 0.f}; 
+  float inv = 1.f / norm;
   return {v.x*inv, v.y*inv, v.z*inv};
 }
 
@@ -51,6 +53,9 @@ FORCE_INLINE Vector4D vector4d_unit(const Vector4D v) {
 }
 FORCE_INLINE Vector3D vector4d_to3d(const Vector4D v) {
   return {v.x, v.y, v.z};
+}
+FORCE_INLINE float illum(const Vector3D v) {
+  return 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z;
 }
 
 #undef FORCE_INLINE

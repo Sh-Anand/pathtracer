@@ -1,6 +1,7 @@
 #ifndef CGL_STATICSCENE_BSDF_H
 #define CGL_STATICSCENE_BSDF_H
 
+#include "util/gpu_rand.h"
 #include "util/matrix.h"
 #include "util/vector.h"
 
@@ -112,12 +113,10 @@ DEVICE inline float D_compute(float a, float NoH_raw) {
 DEVICE inline float G_compute(
     float a,    // α = roughness²
     float NoV,  // max(0, N·V)
-    float NoL,  // max(0, N·L)
-    float VoH,  // vector3d_dot(V, H)
-    float LoH   // vector3d_dot(L, H)
+    float NoL   // max(0, N·L)
 ) {
   // 1) visibility of microfacet only if H·V>0 and H·L>0
-  if (VoH <= 0.0 || LoH <= 0.0) return 0.0;
+  // must be checked upon function entry
 
   // 2) denominator terms per glTF spec:
   //    G₁(X) = (2·X) / (X + sqrt(α² + (1−α²)·X²))
@@ -128,6 +127,269 @@ DEVICE inline float G_compute(
   float GL      = (2.0 * NoL) / denomL;
   return GV * GL;
 }
+
+// Build an orthonormal basis (T,B,N) from a unit-length normal N.
+// Result: T and B are both unit-length, mutually orthogonal, and orthogonal to N.
+//
+// Reference: Duff et al., "Building an Orthonormal Basis, Revisited", Journal of
+// Computer Graphics Techniques, 2017.  (Same math as PBRT & Cycles.)
+DEVICE inline void coordinate_system(const Vector3D N,
+                                     Vector3D *T, Vector3D *B)
+{
+  // Handle the sign of N.z to avoid precision loss when N is nearly ±Z.
+  float sign = copysignf(1.0f, N.z);
+  float a    = -1.0f / (sign + N.z);
+  float b    = N.x * N.y * a;
+
+  *T = Vector3D{
+      1.0f + sign * N.x * N.x * a,
+      sign * b,
+      -sign * N.x};
+
+  *B = Vector3D{
+      b,
+      sign + N.y * N.y * a,
+      -N.y};
+}
+
+// following code adapted from https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#appendix-b-brdf-implementation
+// wo = V, wi = L
+DEVICE static inline Vector3D f( const CudaBSDF *bsdfs,
+                          const CudaTexture *textures,
+                          const CudaIntersection isect,
+                          const Vector3D wo,
+                          const Vector3D wi,
+                          float *occlusion ) {
+  // always initialize occlusion
+  *occlusion = 1.0f;
+
+  // fetch material
+  CudaBSDF bsdf = bsdfs[isect.bsdf_idx];
+  Vector3D N    = isect.n;  
+  Vector2D uv   = isect.uv;
+
+  // 1) geometry terms
+  Vector3D H   = vector3d_unit(vector3d_add(wo, wi));
+  float NoV    = max( vector3d_dot(N, wo), 0.0f );
+  float NoL    = max( vector3d_dot(N, wi), 0.0f );
+  if (NoL == 0.0f || NoV == 0.0f)
+    return Vector3D{};                  // zero vector
+
+  float NoH    = vector3d_dot(N, H);
+  float VoH    = vector3d_dot(wo, H);
+  float LoH    = vector3d_dot(wi, H);
+
+  // 2) base color (albedo)
+  Vector3D base{ bsdf.baseColor.x,
+                 bsdf.baseColor.y,
+                 bsdf.baseColor.z };
+  if (bsdf.tex_idx >= 0) {
+    Vector4D t = sample_texture(textures[bsdf.tex_idx], uv);
+    base       = Vector3D{base.x * t.x, base.y * t.y, base.z * t.z};   // component‑wise
+  }
+
+  // 3) metallic/roughness/Occlusion
+  float metal     = bsdf.metallic;
+  float roughness = bsdf.roughness;
+  if (bsdf.orm_idx >= 0) {
+    Vector4D orm = sample_texture(textures[bsdf.orm_idx], uv);
+    metal        = orm.z;
+    roughness    = orm.y;
+    *occlusion   = orm.x;
+  }
+
+  // clamp & compute derived quantities
+  metal     = clampd(metal,     0.0f, 1.0f);
+  roughness = clampd(roughness, 0.04f,1.0f);
+  float onemmetal = 1.0f - metal;
+  float alpha     = roughness * roughness;
+
+  // 4) diffuse term
+  Vector3D c_diff  = vector3d_scale(base, onemmetal);
+  float sonemmetal = 0.04f * onemmetal;
+  Vector3D f0      = Vector3D{sonemmetal + base.x * metal, sonemmetal + base.y * metal, sonemmetal + base.z * metal};
+  Vector3D F       = vector3d_add(f0, vector3d_scale((Vector3D{1 - f0.x, 1 - f0.y, 1 - f0.z}), powf(1.0f - VoH, 5.0f)));
+  Vector3D one_mF  = Vector3D{1 - F.x, 1 - F.y, 1 - F.z};
+  Vector3D diffTerm= vector3d_scale(one_mF, PI_R);
+  Vector3D f_diffuse = vector3d_mul(diffTerm, c_diff);   // component‑wise
+
+  // 5) specular term
+  float D = D_compute(alpha, NoH);
+  float G = VoH != 0 && LoH != 0 ? G_compute(alpha, NoV, NoL) / (4.0f * NoV * NoL) : 0.0f;
+  Vector3D f_specular = vector3d_scale(F, D * G);
+
+  return vector3d_add(f_diffuse, f_specular);
+}
+
+
+// Importance‑sample both diffuse (Lambert) and GGX specular lobes of the metallic‑roughness BRDF.
+// Returns f(wo, *wi), writes out *wi, *pdf, and *occlusion.
+DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
+                                const CudaTexture* textures,
+                                const CudaIntersection isect,
+                                const Vector3D       wo,
+                                Vector3D             *wi,
+                                float               *pdf,
+                                float               *occlusion,
+                                RNGState             *rand_state) {
+  // 1) Material & normal
+  const CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
+  Vector3D N    = isect.n;
+  Vector2D uv   = isect.uv;
+
+  // 2) Base color
+  Vector3D base = Vector3D{bsdf.baseColor.x, bsdf.baseColor.y, bsdf.baseColor.z};
+  if (bsdf.tex_idx >= 0) {
+    Vector4D t = sample_texture(textures[bsdf.tex_idx], uv);
+    base = Vector3D{base.x * t.x, base.y * t.y, base.z * t.z};
+  }
+
+  // 3) Metallic, roughness, occlusion from ORM
+  float metal     = clampd(bsdf.metallic,  0.0, 1.0);
+  float roughness = clampd(bsdf.roughness, 0.02,1.0);
+  *occlusion = 1.0f;
+  if (bsdf.orm_idx >= 0) {
+    Vector4D orm = sample_texture(textures[bsdf.orm_idx], uv);
+    *occlusion   = orm.x;
+    roughness    = orm.y;
+    metal        = orm.z;
+  }
+  float onem = 1.0 - metal;
+
+  // 4) Sample specular or diffuse
+  // 4.1) Figure out energies of specular and diffuse parts
+  // a) F₀ at normal incidence (Schlick term, glTF App. B eq. B-2)
+  Vector3D F0 = Vector3D{
+      0.04f * onem + base.x * metal,
+      0.04f * onem + base.y * metal,
+      0.04f * onem + base.z * metal};
+
+  float w_spec = illum(F0);                                        // specular: illum(F0)
+  float w_diff = illum(vector3d_mul(                               // diffuse: illum((1-F0)(1-metal) ⋅ baseColor)
+                        Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z},
+                        vector3d_scale(base, onem)));
+
+  // c) Normalise to probabilities
+  float sum_w     = w_spec + w_diff + EPS_F;  // avoid division by zero
+  float pdf_spec    = w_spec  / sum_w;
+  float pdf_diff    = w_diff  / sum_w;
+
+  // 4.2) Sample specular or diffuse
+  float rng = next_float(rand_state);
+  Vector3D sample_wi;
+  Vector3D res;
+  if (rng < pdf_diff) {
+    // 4.3) Diffuse sample
+    /* --- 1. Cosine-weighted sample in local frame (0,0,1) --- */
+    float u1 = next_float(rand_state);
+    float u2 = next_float(rand_state);
+
+    float r   = sqrtf(u1);
+    float phi = 2.0f * PI * u2;
+    float x   = r * cosf(phi);
+    float y   = r * sinf(phi);
+    float z   = sqrtf(1.0f - u1);          // cosθ
+
+    /* --- 2. Build an orthonormal basis around N --- */
+    Vector3D T, B;
+    coordinate_system(N, &T, &B);          // any robust basis builder
+
+    /* --- 3. Lift to world space --- */
+    sample_wi = vector3d_unit( vector3d_add(
+                   vector3d_add(vector3d_scale(T, x),
+                                 vector3d_scale(B, y)),
+                   vector3d_scale(N, z)) );
+
+    /* --- 4. Mixture PDF:  P_diff * (cosθ / π) --- */
+    float cosTheta = max(vector3d_dot(N, sample_wi), 0.0f);
+    *pdf = pdf_diff * cosTheta * PI_R;      // PI_R = 1/π
+
+    /* --- 5. Evaluate *both* lobes at (wo, wi) --- */
+    Vector3D H  = vector3d_unit(vector3d_add(wo, sample_wi));
+    float    VoH = max(vector3d_dot(wo, H), 0.0f);
+
+    /*   5a. Diffuse BRDF */
+    Vector3D one_mF = Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z};
+    Vector3D c_diff = vector3d_scale(base, onem);
+    Vector3D f_diff = vector3d_scale(vector3d_mul(one_mF, c_diff), PI_R);
+
+    /*   5b. Specular BRDF (uses GGX D and G helpers) */
+    float alpha = roughness * roughness;
+    float NoV   = max(vector3d_dot(N, wo), 0.0f);
+    float NoL   = cosTheta;
+    float NoH   = max(vector3d_dot(N, H), 0.0f);
+    float D     = D_compute(alpha, NoH);
+    float G     = G_compute(alpha, NoV, NoL) / (4.0f * NoV * NoL + EPS_F);
+    Vector3D F  = vector3d_add(F0,
+                    vector3d_scale(Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z},
+                                   powf(1.0f - VoH, 5.0f)));
+    Vector3D f_spec = vector3d_scale(F, D * G);
+
+    res = vector3d_add(f_diff, f_spec);   // full BRDF
+  } else { 
+    // 4.4) Specular sample
+    /* --- 1. GGX half-vector sample (isotropic) -------------------- */
+    float u1 = next_float(rand_state);
+    float u2 = next_float(rand_state);
+
+    float alpha  = roughness * roughness;          // α = r²
+    float phi    = 2.0f * PI * u1;
+    float cosH   = sqrtf((1.0f - u2) / (1.0f + (alpha - 1.0f) * u2));
+    float sinH   = sqrtf(max(0.0f, 1.0f - cosH * cosH));
+
+    /* local H = (sinθ cosφ, sinθ sinφ, cosθ) */
+    Vector3D H_local = Vector3D{sinH * cosf(phi), sinH * sinf(phi), cosH};
+
+    /* --- 2. Rotate H_local into world space (same basis as before) */
+    Vector3D T, B;
+    coordinate_system(N, &T, &B);
+    Vector3D H = vector3d_unit(vector3d_add(
+                  vector3d_add(vector3d_scale(T, H_local.x),
+                                vector3d_scale(B, H_local.y)),
+                  vector3d_scale(N, H_local.z)));
+
+    /* --- 3. Reflect wo about H to get wi -------------------------- */
+    sample_wi = vector3d_reflect(vector3d_neg(wo), H);
+    float NoL = max(vector3d_dot(N, sample_wi), 0.0f);
+    float NoV = max(vector3d_dot(N,   wo      ), 0.0f);
+    float NoH = max(vector3d_dot(N,   H       ), 0.0f);
+    float VoH = max(vector3d_dot(wo,  H       ), 0.0f);
+
+    if (NoL < EPS_F || NoV < EPS_F || VoH < EPS_F) {
+        *pdf = 0.0f;
+        res  = Vector3D{};
+    }
+    else {
+        /* --- 4. PDF for the chosen lobe (mixture) ---------------- */
+        float D     = D_compute(alpha, NoH);
+        float pdf_w = (D * NoH) / (4.0f * VoH);      // GGX reflection PDF
+        *pdf = pdf_spec * pdf_w;                     // mixture weight
+
+        /* --- 5. Full BRDF evaluation ----------------------------- */
+        /* 5a. Schlick Fresnel F */
+        Vector3D F = vector3d_add(F0,
+                      vector3d_scale(Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z},
+                                     powf(1.0f - VoH, 5.0f)));
+
+        /* 5b. Geometry term */
+        float G = G_compute(alpha, NoV, NoL) / (4.0f * NoV * NoL + EPS_F);
+
+        /* 5c. Specular BRDF */
+        Vector3D f_spec = vector3d_scale(F, D * G);
+
+        /* 5d. Diffuse BRDF (same formula as diffuse branch) */
+        Vector3D one_mF = Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z};
+        Vector3D c_diff = vector3d_scale(base, onem);
+        Vector3D f_diff = vector3d_scale(vector3d_mul(one_mF, c_diff), PI_R);
+
+        res = vector3d_add(f_diff, f_spec);
+    }
+  }
+
+  *wi = sample_wi;
+  return res;  // return f(wo, wi)
+}
+
 
 
 #endif  // CGL_STATICSCENE_BSDF_H
