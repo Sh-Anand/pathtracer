@@ -316,8 +316,8 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
     retries = 0;
     s++;
 
-    // Calculate geometric similarity between q and qn
-    if (!are_geometrically_similar(&q, &Rn.z)) continue;
+    // Calculate geometric similarity between Rs.z (not q because of resampling) and qn
+    if (!are_geometrically_similar(&Rs.z, &Rn.z)) continue;
 
     // Calculate |Jqn→q| (Jacobian determinant)
     float Jqn_to_q = fabsf(jacobian(Rn.z.x_v, Rn.z.x_s, q.x_v, Rn.z.n_s));
@@ -343,7 +343,7 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
   Rs.W = Rs.M * phat > 0 ? Rs.w / (Rs.M * phat) : 0;
 
   Sample S = Rs.z;
-  float costheta = vector3d_dot(q.n_v, vector3d_unit(vector3d_sub(q.x_v, S.x_s)));
+  float costheta = fabsf(vector3d_dot(q.n_v, vector3d_unit(vector3d_sub(S.x_s, q.x_v))));
   Vector3D L = vector3d_add(q.emittance, vector3d_mul(vector3d_scale(q.bsdf_f, costheta), vector3d_scale(S.L, Rs.W)));
   pt->sampleBuffer.data[idx] = L;
 }

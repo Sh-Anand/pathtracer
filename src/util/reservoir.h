@@ -57,6 +57,7 @@ FORCE_INLINE void update(Reservoir *r,
                          const Sample s_new,
                          float w_new,
                          RNGState *rand_state) {
+    if (w_new <= 0) return;
     float w_total = r->w + w_new;
     float prob    = (w_total > 0.0f) ? (w_new / w_total) : 0.0f;
     r->w = w_total;
