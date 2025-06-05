@@ -19,8 +19,8 @@ typedef struct {
 } HDRImageBuffer;
 typedef struct {
     uint16_t max_ray_depth; ///< maximum allowed ray depth (applies to all rays)
-    uint16_t ns_aa;         ///< number of camera rays in one pixel (along one axis)
     uint16_t ns_area_light; ///< number samples per area light source
+    bool accumulate;
     const BVHCuda* bvh;                 ///< BVH accelerator aggregate
     CudaCamera camera;       ///< current camera
     RNGState* rand_states;       ///< random state for each thread

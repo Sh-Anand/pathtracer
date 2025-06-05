@@ -19,7 +19,7 @@
 
 Application::Application(AppConfig config) {
   renderer = new RaytracedRenderer (
-    config.pathtracer_ns_aa,
+    config.pathtracer_accumulate_bounces,
     config.pathtracer_max_ray_depth,
     config.pathtracer_ns_area_light,
     config.pathtracer_filename,
@@ -360,7 +360,6 @@ void Application::ParseMaterial(const tinygltf::Model &model) {
 
     bsdf.tex_idx = material.pbrMetallicRoughness.baseColorTexture.index;
     bsdf.normal_idx = material.normalTexture.index;
-    bsdf.hasOcclusionTexture = material.occlusionTexture.index >= 0;
     bsdf.orm_idx = max(material.occlusionTexture.index, material.pbrMetallicRoughness.metallicRoughnessTexture.index);
     bsdf.emission_idx = material.emissiveTexture.index;
     bsdfs.push_back(bsdf);
@@ -441,13 +440,12 @@ void Application::set_up_pathtracer() {
 void usage(const char *binaryName) {
   printf("Usage: %s [options] <scenefile>\n", binaryName);
   printf("Program Options:\n");
-  printf("  -s  <INT>        Number of camera rays per pixel\n");
   printf("  -l  <INT>        Number of samples per area light\n");
   printf("  -g  <INT>        Number of total image generated\n");
   printf("  -R  <INT>        Enable ReSTIR-GI\n");
   printf("  -d  <INT>        Enable debug mode\n");
   printf("  -m  <INT>        Maximum ray depth\n");
-  printf("  -o  <INT>        Accumulate Bounces of Light \n");
+  printf("  -o  <INT>        Include direct light in render \n");
   printf("  -f  <FILENAME>   Image (.png) file to save output to in windowless "
          "mode\n");
   printf(
@@ -468,7 +466,7 @@ int main(int argc, char **argv) {
   size_t w = 0, h = 0, x = -1, y = 0, dx = 0, dy = 0;
   string output_file_name, cam_settings = "";
   string sceneFilePath;
-  while ((opt = getopt(argc, argv, "s:l:m:o:h:f:r:d:R:g:")) !=
+  while ((opt = getopt(argc, argv, "l:m:o:h:f:r:d:R:g:")) !=
           -1) { // for each option...
     switch (opt) {
     case 'f':
@@ -478,9 +476,6 @@ int main(int argc, char **argv) {
       w = atoi(argv[optind - 1]);
       h = atoi(argv[optind]);
       optind++;
-      break;
-    case 's':
-      config.pathtracer_ns_aa = atoi(optarg);
       break;
     case 'l':
       config.pathtracer_ns_area_light = atoi(optarg);
@@ -497,10 +492,10 @@ int main(int argc, char **argv) {
       config.pathtracer_accumulate_bounces = atoi(optarg) > 0;
       break;
     case 'd':
-      config.debug = true;
+      config.debug = atoi(optarg) > 0;
       break;
     case 'R':
-      config.restir = true;
+      config.restir = atoi(optarg) > 0;
       break;
     default:
       usage(argv[0]);

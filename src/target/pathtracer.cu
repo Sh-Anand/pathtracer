@@ -26,7 +26,7 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
   float occlusion; //ignored for dir lighting
   RNGState rand_state = pt->rand_states[idx];
   uint8_t l = 0;
-  while (l++ < pt->ns_aa) {
+  while (l++ < pt->ns_area_light) {
     uint32_t i = next_u32(&rand_state) % pt->num_lights;
     CudaLight L = pt->lights[i];
     Vector3D wi;
@@ -47,6 +47,8 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
       }
     }
   }
+
+  L_out = vector3d_scale(L_out, 1.0f / pt->ns_area_light);
 
   pt->rand_states[idx] = rand_state;
   return L_out;
@@ -178,15 +180,17 @@ DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_
     }
     Vector3D L = at_least_one_bounce_radiance(pt, r, isect, idx);
     S = pt->initialSampleBuffer[idx];
-    S.emittance = vector3d_add(S.emittance, get_emission(pt->bsdfs, pt->textures, isect));
+    S.emittance = pt->accumulate ? vector3d_add(S.emittance, get_emission(pt->bsdfs, pt->textures, isect)) : Vector3D{};
     S.L = L;
   }
 
   if (restir) {
     Reservoir R = pt->temporalReservoirBufferGI[idx];
-    float w = S.pdf > 0 ? p_hat(S) / S.pdf : 0.0f;
-    update(&R, S, w, &pt->rand_states[idx]);
-    R.W = R.M > 0 && p_hat(R.z) > 0 ? R.w / (R.M * p_hat(R.z)) : R.W;
+    SampleGI S_GI;
+    to_sample_GI(&S, &S_GI);
+    float w = S.pdf > 0 ? illum(S.L) / S.pdf : 0.0f;
+    update(&R, S_GI, w, &pt->rand_states[idx]);
+    R.W = R.M > 0 && illum(R.z.L) > 0 ? R.w / (R.M * illum(R.z.L)) : R.W;
 
     pt->temporalReservoirBufferGI[idx] = R;
     pt->initialSampleBuffer[idx] = S;
@@ -254,7 +258,7 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
     if (Jqn_to_q < EPS_F) continue; 
 
     // Calculate ˆp′q
-    float p_prime_q = p_hat(Rn.z) / Jqn_to_q;
+    float p_prime_q = illum(Rn.z.L) / Jqn_to_q;
 
     // visibility test
     // if neighbour's path's point is invisible from the current path's point, p_prime_q = 0
@@ -269,10 +273,10 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
     merge(&Rs, Rn, p_prime_q, rand_state);
   }
 
-  float phat = p_hat(Rs.z);
+  float phat = illum(Rs.z.L);
   Rs.W = Rs.M * phat > 0 ? Rs.w / (Rs.M * phat) : 0;
 
-  Sample S = Rs.z;
+  SampleGI S = Rs.z;
   float costheta = fabsf(vector3d_dot(q.n_v, vector3d_unit(vector3d_sub(S.x_s, q.x_v))));
   Vector3D L = vector3d_add(q.emittance, vector3d_mul(vector3d_scale(q.bsdf_f, costheta), vector3d_scale(S.L, Rs.W)));
   pt->sampleBuffer.data[idx] = L;

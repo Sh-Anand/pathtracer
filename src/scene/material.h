@@ -52,7 +52,6 @@ typedef struct {
   Vector3D emission; // KHR_materials_emissive_strength
   float   transmissionFactor; // KHR_materials_transmission
   float   thicknessFactor; // KHR_materials_volume
-  bool     hasOcclusionTexture;
   int      tex_idx;
   int      normal_idx;
   int      orm_idx;
