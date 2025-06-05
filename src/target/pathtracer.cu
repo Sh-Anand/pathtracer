@@ -15,47 +15,6 @@ DEVICE static inline Vector3D get_emission(const CudaBSDF *bsdfs,
   return emission;
 }
 
-// power­-heuristic MIS weight, β=2
-DEVICE static inline float mis_weight(float pA, float pB) {
-  float wA = pA*pA;
-  float wB = pB*pB;
-  float mis =  wA / (wA + wB);
-  return mis;
-}
-
-DEVICE inline float bsdf_pdf(const CudaBSDF*   bsdfs,
-                             const CudaIntersection isect,
-                             const Vector3D    wo,
-                             const Vector3D    wi)
-{
-    Vector3D N  = isect.n;
-    float NoL   = fmaxf(vector3d_dot(N, wi), 0.0f);
-    if (NoL == 0.0f) return 0.0f;
-
-    const CudaBSDF& bsdf = bsdfs[isect.bsdf_idx];
-    float metal   = clampd(bsdf.metallic,  0.0, 1.0);
-    float rough   = clampd(bsdf.roughness, 0.02,1.0);
-    float alpha   = rough * rough;
-    Vector3D base = { bsdf.baseColor.x, bsdf.baseColor.y, bsdf.baseColor.z };
-
-    /* --- lobe probabilities (matches sample_f) -------------------- */
-    float P_s, P_d;
-    compute_lobe_probs(base, metal, rough, &P_s, &P_d);
-
-    /* diffuse part */
-    float pdf = P_d * (NoL * PI_R);          // PI_R = 1/π
-
-    /* specular part */
-    Vector3D  H   = vector3d_unit(vector3d_add(wo, wi));
-    float NoH     = fmaxf(vector3d_dot(N,  H), 0.0f);
-    float VoH     = fmaxf(vector3d_dot(wo, H), 1e-4f); // guard
-    float D       = D_compute(alpha, NoH);
-    pdf          += P_s * (D * NoH / (4.0f * VoH));
-
-    return pdf;
-}
-
-
 DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt, Ray r, const CudaIntersection isect, uint32_t idx) {
   // w_out points towards the source of the ray (e.g.,
   // toward the camera if this is a primary ray)
@@ -66,7 +25,9 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
 
   float occlusion; //ignored for dir lighting
   RNGState rand_state = pt->rand_states[idx];
-  for (int i = 0; i < pt->num_lights; ++i) {
+  uint8_t l = 0;
+  while (l++ < pt->ns_aa) {
+    uint32_t i = next_u32(&rand_state) % pt->num_lights;
     CudaLight L = pt->lights[i];
     Vector3D wi;
     float   distToL, pdfL;
@@ -82,32 +43,7 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
       if (!has_intersect(pt->bvh, &shadow)) {
         // BRDF eval and PDF of sampling that same wi via BSDF
         Vector3D f_val = f(pt->bsdfs, pt->textures, isect, w_out, wi, &occlusion);
-        float  pdfB   = bsdf_pdf(pt->bsdfs, isect, w_out, wi);
-        float  w      = mis_weight(pdfL, pdfB);
-        L_out = vector3d_add(L_out, vector3d_mul(f_val, vector3d_scale(Li, (cosNL * w / pdfL))));
-      }
-    }
-  }
-
-  Vector3D wi_bsdf;
-  float   pdfB;
-  Vector3D f_bsdf = sample_f(pt->bsdfs, pt->textures, isect, w_out, &wi_bsdf, &pdfB,
-                             &occlusion, &rand_state);
-  float cosNL = fmaxf(vector3d_dot(isect.n, wi_bsdf), 0.0);
-
-  if (pdfB > 0 && cosNL > 0) {
-    // trace a ray in that direction and see if it hits *any* light
-    Ray shadow; shadow.o = hit_p; shadow.d = wi_bsdf; shadow.inv_d = vector3d_rcp(wi_bsdf);
-    shadow.min_t = EPS_F;
-    shadow.max_t = INFINITY;
-    for (int i = 0; i < pt->num_lights; ++i) {
-      CudaLight L = pt->lights[i];
-      float pdfL;
-      if (light_has_intersect(&L, &shadow, &hit_p, &isect.n, pt->bvh->vertices, &pdfL)) {
-        // get the light and compute its PDF for this direction
-        Vector3D Li = L.radiance;
-        float w    = mis_weight(pdfB, pdfL);
-        L_out = vector3d_add(L_out, vector3d_mul(f_bsdf, vector3d_scale(Li, (cosNL * w / pdfB))));
+        L_out = vector3d_add(L_out, vector3d_mul(f_val, vector3d_scale(Li, (cosNL/ pdfL))));
       }
     }
   }
