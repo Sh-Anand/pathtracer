@@ -41,7 +41,7 @@ FORCE_INLINE bool are_geometrically_similar(const Sample *s1, const Sample *s2) 
 
     // 2) Depth test: normalized depth difference ≤ 0.05
     //    (Assuming s1.z_v and s2.z_v are camera‑space depths)
-    float depthRatio = s1->z_v / s2->z_v;
+    float depthRatio = s1->z_v / max(s2->z_v, 0.001f); // avoid division by zero
     if (depthRatio < 1.0f - DEPTH_THRESH || depthRatio > 1.0f + DEPTH_THRESH)
         return false;
 

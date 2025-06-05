@@ -62,7 +62,7 @@ DEVICE static inline float bsdf_pdf(const CudaBSDF* bsdfs,
 }
 
 
-DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt, Ray r, const CudaIntersection isect) {
+DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt, Ray r, const CudaIntersection isect, uint32_t idx) {
   // w_out points towards the source of the ray (e.g.,
   // toward the camera if this is a primary ray)
   const Vector3D hit_p = ray_at(r, isect.t);
@@ -70,16 +70,14 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
   Vector3D L_out = Vector3D{};
   //NOTE: wi here is in worldpsace,
 
-  uint16_t x = blockIdx.x * blockDim.x + threadIdx.x;
-  uint16_t y = blockIdx.y * blockDim.y + threadIdx.y;
-
   float occlusion; //ignored for dir lighting
+  RNGState rand_state = pt->rand_states[idx];
   for (int i = 0; i < pt->num_lights; ++i) {
     CudaLight L = pt->lights[i];
     Vector3D wi;
     float   distToL, pdfL;
     Vector3D Li = sample_L(&L, hit_p, &wi, &distToL, &pdfL,
-                           &pt->rand_states[x + y * pt->sampleBuffer.w], pt->bvh->vertices);
+                           &rand_state, pt->bvh->vertices);
 
     float cosNL = fmaxf(vector3d_dot(isect.n, wi), 0.0);
     if (pdfL > 0 && cosNL > 0) {
@@ -100,7 +98,7 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
   Vector3D wi_bsdf;
   float   pdfB;
   Vector3D f_bsdf = sample_f(pt->bsdfs, pt->textures, isect, w_out, &wi_bsdf, &pdfB,
-                             &occlusion, &pt->rand_states[x + y * pt->sampleBuffer.w]);
+                             &occlusion, &rand_state);
   float cosNL = fmaxf(vector3d_dot(isect.n, wi_bsdf), 0.0);
 
   if (pdfB > 0 && cosNL > 0) {
@@ -119,6 +117,8 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
       }
     }
   }
+
+  pt->rand_states[idx] = rand_state;
   return L_out;
 }
 
@@ -142,7 +142,7 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     Vector3D w_out = vector3d_neg(current_ray.d);
 
     // direct lighting
-    Vector3D L_out = estimate_direct_lighting_importance(pt, current_ray, isect);
+    Vector3D L_out = estimate_direct_lighting_importance(pt, current_ray, isect, idx);
     L_out_total = vector3d_add(L_out_total, vector3d_mul(throughput, L_out));
 
     // russian-roulette survival
@@ -177,7 +177,7 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     // update throughput
 
     throughput = first_bounce ? throughput: vector3d_mul(throughput, fcos);
-    throughput = vector3d_scale(throughput, 1 / (pdf * p_survive));
+    throughput = first_bounce ? vector3d_scale(throughput, 1 / p_survive) : vector3d_scale(throughput, 1 / (pdf * p_survive));
 
     // spawn next ray
     Ray bounce_ray; bounce_ray.o = hit_p; bounce_ray.d = wi; bounce_ray.max_t = INFINITY; bounce_ray.inv_d = vector3d_rcp(bounce_ray.d);
@@ -254,15 +254,15 @@ DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_
 
   if (restir) {
     Reservoir R = pt->temporalReservoirBufferGI[idx];
-    float w = p_hat(S);
+    float w = S.pdf > 0 ? p_hat(S) / S.pdf : 0.0f;
     update(&R, S, w, &pt->rand_states[idx]);
-    R.W = R.w / (R.M * p_hat(R.z));
+    R.W = R.M > 0 && p_hat(R.z) > 0 ? R.w / (R.M * p_hat(R.z)) : R.W;
 
     pt->temporalReservoirBufferGI[idx] = R;
     pt->initialSampleBuffer[idx] = S;
   } else {
-    float costheta = vector3d_dot(S.n_v, vector3d_unit(vector3d_sub(S.x_v, S.x_s)));
-    Vector3D L = vector3d_add(S.emittance, vector3d_mul(vector3d_scale(S.bsdf_f, costheta), S.L));
+    float cospdf = S.pdf > 0 ? vector3d_dot(S.n_v, vector3d_unit(vector3d_sub(S.x_v, S.x_s))) / S.pdf : 0.0f;
+    Vector3D L = vector3d_add(S.emittance, vector3d_mul(vector3d_scale(S.bsdf_f, cospdf), S.L));
     pt->sampleBuffer.data[idx] = L;
   }
 }
