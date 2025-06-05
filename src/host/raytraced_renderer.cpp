@@ -14,16 +14,14 @@
 using std::min;
 using std::max;
 
-RaytracedRenderer::RaytracedRenderer(size_t ns_aa,
-                       size_t max_ray_depth, size_t ns_area_light,
+RaytracedRenderer::RaytracedRenderer(
+                       size_t max_ray_depth, size_t ns_lights,
                        std::string filename,
                        bool debug,
                        bool restir) {
   pt_host = (PathTracer*) malloc(sizeof(PathTracer));
-
-  pt_host->ns_aa = ns_aa;                                        // Number of samples per pixel
   pt_host->max_ray_depth = max_ray_depth;                        // Maximum recursion ray depth
-  pt_host->ns_area_light = ns_area_light;                        // Number of samples for area light
+  pt_host->ns_lights = ns_lights;                        // Number of samples for area light
 
 
   this->filename = filename;

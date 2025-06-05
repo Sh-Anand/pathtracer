@@ -16,10 +16,18 @@ struct Sample {
     Vector3D x_v, n_v;       // visible point, normal (normalized)
     float z_v;               // depth
     Vector3D x_s, n_s;       // sample point & normal (normalized)
-    Vector3D L;              // outgoing radiance at x_s
+    Vector3D L_indirect;     // outgoing radiance at x_s
     float    pdf;            // pdf of the sample
     Vector3D bsdf_f;           // bsdf_f at visible point
-    Vector3D emittance;      // zero + one bounce radiance
+    Vector3D emittance;      // zero bounce radiance
+
+    Vector3D L_direct;       // direct radiance at x_v
+    Vector3D wi;
+    float dist;
+    float pdf_L;
+    int bsdf_idx;
+    Vector2D uv;
+    Vector3D w_out;
 };
 
 struct Reservoir {
@@ -48,11 +56,6 @@ FORCE_INLINE bool are_geometrically_similar(const Sample *s1, const Sample *s2) 
     return true;
 }
 
-FORCE_INLINE float p_hat(const Sample s) {
-    // ITU‑Rec. BT.709 luminance
-    return illum(s.L);
-}
-
 FORCE_INLINE void update(Reservoir *r,
                          const Sample s_new,
                          float w_new,
@@ -76,21 +79,6 @@ FORCE_INLINE void merge(Reservoir *r1,
     float w_new = p_hat2 * r2.W * r2.M;
     update(r1, r2.z, w_new, rand_state);
     r1->M = M0 + r2.M;
-}
-
-FORCE_INLINE void clear(Reservoir *r) {
-    r->w = 0.0f;
-    r->M = 0.0f;
-    r->W = 0.0f;
-    // zero out the stored sample
-    r->z.x_v      = {0.0f,0.0f,0.0f};
-    r->z.n_v      = {0.0f,0.0f,0.0f};
-    r->z.x_s      = {0.0f,0.0f,0.0f};
-    r->z.n_s      = {0.0f,0.0f,0.0f};
-    r->z.L        = {0.0f,0.0f,0.0f};
-    r->z.pdf      = 0.0f;
-    r->z.bsdf_f     = {0.0f,0.0f,0.0f};
-    r->z.emittance= {0.0f,0.0f,0.0f};
 }
 
 #undef FORCE_INLINE

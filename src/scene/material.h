@@ -156,7 +156,9 @@ DEVICE inline void coordinate_system(const Vector3D N,
 // wo = V, wi = L
 DEVICE static inline Vector3D f( const CudaBSDF *bsdfs,
                           const CudaTexture *textures,
-                          const CudaIntersection isect,
+                          const Vector3D N,
+                          const Vector2D uv,
+                          const int bsdf_idx,
                           const Vector3D wo,
                           const Vector3D wi,
                           float *occlusion ) {
@@ -164,9 +166,7 @@ DEVICE static inline Vector3D f( const CudaBSDF *bsdfs,
   *occlusion = 1.0f;
 
   // fetch material
-  CudaBSDF bsdf = bsdfs[isect.bsdf_idx];
-  Vector3D N    = isect.n;  
-  Vector2D uv   = isect.uv;
+  CudaBSDF bsdf = bsdfs[bsdf_idx];
 
   // 1) geometry terms
   Vector3D H   = vector3d_unit(vector3d_add(wo, wi));
@@ -248,16 +248,16 @@ compute_lobe_probs(const Vector3D  base,
 // Returns f(wo, *wi), writes out *wi, *pdf, and *occlusion.
 DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
                                 const CudaTexture* textures,
-                                const CudaIntersection isect,
+                                const Vector3D N,
+                                const Vector2D uv,
+                                const int bsdf_idx,
                                 const Vector3D       wo,
                                 Vector3D             *wi,
                                 float               *pdf,
                                 float               *occlusion,
                                 RNGState             *rand_state) {
   // 1) Material & normal
-  const CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
-  Vector3D N    = isect.n;
-  Vector2D uv   = isect.uv;
+  const CudaBSDF &bsdf = bsdfs[bsdf_idx];
 
   // 2) Base color
   Vector3D base = Vector3D{bsdf.baseColor.x, bsdf.baseColor.y, bsdf.baseColor.z};
@@ -289,14 +289,20 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
   float rng = next_float(rand_state);
   Vector3D sample_wi;
   Vector3D res;
+
+  // Common computations:
+  float u1 = next_float(rand_state);
+  float u2 = next_float(rand_state);
+  float alpha  = roughness * roughness;          // α = r²
+  float phi = 2.0f * PI * u2;
+  float NoV = max(vector3d_dot(N,   wo      ), 0.0f);
+
+
   if (rng < pdf_diff) {
     // 4.3) Diffuse sample
     /* --- 1. Cosine-weighted sample in local frame (0,0,1) --- */
-    float u1 = next_float(rand_state);
-    float u2 = next_float(rand_state);
 
     float r   = sqrtf(u1);
-    float phi = 2.0f * PI * u2;
     float x   = r * cosf(phi);
     float y   = r * sinf(phi);
     float z   = sqrtf(1.0f - u1);          // cosθ
@@ -325,8 +331,6 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
     Vector3D f_diff = vector3d_scale(vector3d_mul(one_mF, c_diff), PI_R);
 
     /*   5b. Specular BRDF (uses GGX D and G helpers) */
-    float alpha = roughness * roughness;
-    float NoV   = max(vector3d_dot(N, wo), 0.0f);
     float NoL   = cosTheta;
     float NoH   = max(vector3d_dot(N, H), 0.0f);
     float D     = D_compute(alpha, NoH);
@@ -340,11 +344,6 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
   } else { 
     // 4.4) Specular sample
     /* --- 1. GGX half-vector sample (isotropic) -------------------- */
-    float u1 = next_float(rand_state);
-    float u2 = next_float(rand_state);
-
-    float alpha  = roughness * roughness;          // α = r²
-    float phi    = 2.0f * PI * u1;
     float cosH   = sqrtf((1.0f - u2) / (1.0f + (alpha - 1.0f) * u2));
     float sinH   = sqrtf(max(0.0f, 1.0f - cosH * cosH));
 
@@ -362,7 +361,6 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
     /* --- 3. Reflect wo about H to get wi -------------------------- */
     sample_wi = vector3d_reflect(vector3d_neg(wo), H);
     float NoL = max(vector3d_dot(N, sample_wi), 0.0f);
-    float NoV = max(vector3d_dot(N,   wo      ), 0.0f);
     float NoH = max(vector3d_dot(N,   H       ), 0.0f);
     float VoH = max(vector3d_dot(wo,  H       ), 0.0f);
 

@@ -19,9 +19,8 @@
 
 Application::Application(AppConfig config) {
   renderer = new RaytracedRenderer (
-    config.pathtracer_ns_aa,
     config.pathtracer_max_ray_depth,
-    config.pathtracer_ns_area_light,
+    config.pathtracer_ns_lights,
     config.pathtracer_filename,
     config.debug,
     config.restir
@@ -441,13 +440,11 @@ void Application::set_up_pathtracer() {
 void usage(const char *binaryName) {
   printf("Usage: %s [options] <scenefile>\n", binaryName);
   printf("Program Options:\n");
-  printf("  -s  <INT>        Number of camera rays per pixel\n");
   printf("  -l  <INT>        Number of samples per area light\n");
   printf("  -g  <INT>        Number of total image generated\n");
   printf("  -R  <INT>        Enable ReSTIR-GI\n");
   printf("  -d  <INT>        Enable debug mode\n");
   printf("  -m  <INT>        Maximum ray depth\n");
-  printf("  -o  <INT>        Accumulate Bounces of Light \n");
   printf("  -f  <FILENAME>   Image (.png) file to save output to in windowless "
          "mode\n");
   printf(
@@ -468,7 +465,7 @@ int main(int argc, char **argv) {
   size_t w = 0, h = 0, x = -1, y = 0, dx = 0, dy = 0;
   string output_file_name, cam_settings = "";
   string sceneFilePath;
-  while ((opt = getopt(argc, argv, "s:l:m:o:h:f:r:d:R:g:")) !=
+  while ((opt = getopt(argc, argv, "l:m:o:h:f:r:d:R:g:")) !=
           -1) { // for each option...
     switch (opt) {
     case 'f':
@@ -479,11 +476,8 @@ int main(int argc, char **argv) {
       h = atoi(argv[optind]);
       optind++;
       break;
-    case 's':
-      config.pathtracer_ns_aa = atoi(optarg);
-      break;
     case 'l':
-      config.pathtracer_ns_area_light = atoi(optarg);
+      config.pathtracer_ns_lights = atoi(optarg);
       break;
     case 'g':
       config.total_image_generated = atoi(optarg);
