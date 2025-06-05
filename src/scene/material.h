@@ -221,6 +221,28 @@ DEVICE static inline Vector3D f( const CudaBSDF *bsdfs,
   return vector3d_add(f_diffuse, f_specular);
 }
 
+DEVICE inline void
+compute_lobe_probs(const Vector3D  base,
+                   float           metallic,
+                   float           roughness,
+                   float          *P_spec,   // out
+                   float          *P_diff)   // out
+{
+    float onem  = 1.0f - metallic;
+    Vector3D F0 = { 0.04f*onem + base.x*metallic,
+                    0.04f*onem + base.y*metallic,
+                    0.04f*onem + base.z*metallic };
+
+    /* energy weights:   w_spec = lum(F0)
+                         w_diff = lum((1−F0)(1−metal)·base)               */
+    float w_spec = illum(F0);
+    Vector3D one_mF0 = {1.f-F0.x, 1.f-F0.y, 1.f-F0.z};
+    float w_diff = illum(vector3d_mul(one_mF0, vector3d_scale(base, onem)));
+
+    float sum = w_spec + w_diff + 1e-6f;
+    *P_spec = w_spec / sum;
+    *P_diff = w_diff / sum;
+}
 
 // Importance‑sample both diffuse (Lambert) and GGX specular lobes of the metallic‑roughness BRDF.
 // Returns f(wo, *wi), writes out *wi, *pdf, and *occlusion.
@@ -254,25 +276,14 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
     roughness    = orm.y;
     metal        = orm.z;
   }
-  float onem = 1.0 - metal;
+  float onem  = 1.0f - metal;
+  Vector3D F0 = { 0.04f*onem + base.x*metal,
+                  0.04f*onem + base.y*metal,
+                  0.04f*onem + base.z*metal };
 
   // 4) Sample specular or diffuse
-  // 4.1) Figure out energies of specular and diffuse parts
-  // a) F₀ at normal incidence (Schlick term, glTF App. B eq. B-2)
-  Vector3D F0 = Vector3D{
-      0.04f * onem + base.x * metal,
-      0.04f * onem + base.y * metal,
-      0.04f * onem + base.z * metal};
-
-  float w_spec = illum(F0);                                        // specular: illum(F0)
-  float w_diff = illum(vector3d_mul(                               // diffuse: illum((1-F0)(1-metal) ⋅ baseColor)
-                        Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z},
-                        vector3d_scale(base, onem)));
-
-  // c) Normalise to probabilities
-  float sum_w     = w_spec + w_diff + EPS_F;  // avoid division by zero
-  float pdf_spec    = w_spec  / sum_w;
-  float pdf_diff    = w_diff  / sum_w;
+  float pdf_diff, pdf_spec;
+  compute_lobe_probs(base, metal, roughness, &pdf_spec, &pdf_diff);
 
   // 4.2) Sample specular or diffuse
   float rng = next_float(rand_state);

@@ -23,42 +23,36 @@ DEVICE static inline float mis_weight(float pA, float pB) {
   return mis;
 }
 
-// mixture PDF of your metallic‑roughness lobes
-DEVICE static inline float bsdf_pdf(const CudaBSDF* bsdfs, 
+DEVICE inline float bsdf_pdf(const CudaBSDF*   bsdfs,
                              const CudaIntersection isect,
-                             const Vector3D wo,
-                             const Vector3D wi) {
-  Vector3D N = isect.n;
-  float NoL = fabs(vector3d_dot(N, wi));
-  if (NoL == 0) return 0.0;
+                             const Vector3D    wo,
+                             const Vector3D    wi)
+{
+    Vector3D N  = isect.n;
+    float NoL   = fmaxf(vector3d_dot(N, wi), 0.0f);
+    if (NoL == 0.0f) return 0.0f;
 
-  // fetch metallic & roughness
-  CudaBSDF bsdf = bsdfs[isect.bsdf_idx];
-  float metal    = clampd(bsdf.metallic,  0.0, 1.0);
-  float roughness= clampd(bsdf.roughness, 0.02,1.0);
-  float onem     = 1.0 - metal;
-  float alpha    = roughness * roughness;
+    const CudaBSDF& bsdf = bsdfs[isect.bsdf_idx];
+    float metal   = clampd(bsdf.metallic,  0.0, 1.0);
+    float rough   = clampd(bsdf.roughness, 0.02,1.0);
+    float alpha   = rough * rough;
+    Vector3D base = { bsdf.baseColor.x, bsdf.baseColor.y, bsdf.baseColor.z };
 
-  Vector3D base = Vector3D{bsdf.baseColor.x, bsdf.baseColor.y, bsdf.baseColor.z};
-  // with—compute luminance of F₀:
-  Vector3D F0  = Vector3D{0.04f * onem + base.x * metal, 0.04f * onem + base.y * metal, 0.04f * onem + base.z * metal};
-  float   F0_avg = (F0.x + F0.y + F0.z) / 3.0;  
-  F0_avg         = clampd(F0_avg, 0.0, 1.0);
+    /* --- lobe probabilities (matches sample_f) -------------------- */
+    float P_s, P_d;
+    compute_lobe_probs(base, metal, rough, &P_s, &P_d);
 
-  float P_s = F0_avg;   // sample specular lobe with Fresnel weight
-  float P_d = 1.0 - P_s;
+    /* diffuse part */
+    float pdf = P_d * (NoL * PI_R);          // PI_R = 1/π
 
-  // 1) diffuse pdf = (cosθ/π)
-  float pdf_diff = P_d * (NoL / M_PI);
+    /* specular part */
+    Vector3D  H   = vector3d_unit(vector3d_add(wo, wi));
+    float NoH     = fmaxf(vector3d_dot(N,  H), 0.0f);
+    float VoH     = fmaxf(vector3d_dot(wo, H), 1e-4f); // guard
+    float D       = D_compute(alpha, NoH);
+    pdf          += P_s * (D * NoH / (4.0f * VoH));
 
-  // 2) specular pdf = D(α,NoH)·NoH / (4·VoH)
-  Vector3D H   = vector3d_unit(vector3d_add(wo, wi));
-  float NoH   = fmaxf(vector3d_dot(N, H), 0.0);
-  float VoH   = fmaxf(vector3d_dot(wo, H), 0.0);
-  float D     = D_compute(alpha, NoH);
-  float pdf_spec = P_s * (D * NoH / (4.0 * VoH));
-
-  return pdf_diff + pdf_spec;
+    return pdf;
 }
 
 
