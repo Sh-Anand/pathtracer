@@ -69,14 +69,6 @@ class Camera {
   */
   void rotate_by(const float dPhi, const float dTheta);
 
-  Vector3D position() const { return pos; }
-  Vector3D view_point() const { return targetPos; }
-  Vector3D up_dir() const { return c2w.c[1]; }
-  float v_fov() const { return vFov; }
-  float aspect_ratio() const { return ar; }
-  float near_clip() const { return nClip; }
-  float far_clip() const { return fClip; }
-
   Ray generate_ray_for_thin_lens(float x, float y, float rndR, float rndTheta) const;
 
   // Lens aperture and focal distance for depth of field effects.

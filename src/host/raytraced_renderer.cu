@@ -9,15 +9,17 @@
 
 #include "target/pathtracer.cu"
 
-__global__ void kernel_raytrace_temporal(PathTracer* pt, bool restir) {
+__global__ void kernel_raytrace_temporal(PathTracer* pt, uint16_t width, uint16_t height, bool restir) {
     uint16_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
     uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
+    if (x >= width || y >= height) return;
     raytrace_pixel_temporal_sample(pt, x, y, restir);
 }
 
-__global__ void kernel_spatial_sample(PathTracer* pt) {
+__global__ void kernel_spatial_sample(PathTracer* pt, uint16_t width, uint16_t height) {
     uint16_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
-    uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;    
+    uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
+    if (x >= width || y >= height) return;
     spatial_resampling(pt, x,y);
 }
 
@@ -42,12 +44,12 @@ void RaytracedRenderer::gpu_raytrace() {
 
     std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now(); 
 
-    kernel_raytrace_temporal<<<gridDim, blockDim>>>(pt_target, restir);
+    kernel_raytrace_temporal<<<gridDim, blockDim>>>(pt_target, width, height, restir);
     CUDA_ERR(cudaGetLastError());
     CUDA_ERR(cudaDeviceSynchronize());
 
     if (restir) {
-        kernel_spatial_sample<<<gridDim, blockDim>>>(pt_target);
+        kernel_spatial_sample<<<gridDim, blockDim>>>(pt_target, width, height);
         CUDA_ERR(cudaGetLastError());
         CUDA_ERR(cudaDeviceSynchronize());
     }

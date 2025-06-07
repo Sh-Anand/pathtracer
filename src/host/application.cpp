@@ -45,20 +45,7 @@ Application::~Application() {
 }
 
 void Application::init() {
-  // Make a dummy camera so resize() doesn't crash before the scene has been
-  // loaded.
-  // NOTE: there's a chicken-and-egg problem here, because loadScene
-  // requires init, and init requires init_camera (which is only called by
-  // loadScene).
   screenW = 800; screenH = 600; // Default value
-  CameraInfo cameraInfo;
-  cameraInfo.hFov = 50;
-  cameraInfo.vFov = 35;
-  cameraInfo.nClip = 0.01;
-  cameraInfo.fClip = 100;
-  cameraInfo.view_dir = Vector3D{0, 0, -1};
-  cameraInfo.up_dir = Vector3D{0, 1, 0};
-  camera.configure(cameraInfo, screenW, screenH);
 }
 
 void Application::resize(size_t w, size_t h) {
@@ -244,29 +231,67 @@ if (matrix4x4_determinant(&worldTransform) < 0.0f) {
             }
         }
     }
-  }else if(node.camera >= 0){
-    // adding camera code
-    auto gltfCam = model.cameras[node.camera];
+  }else if (node.camera >= 0) {
+    // 1) grab your glTF camera
+    const tinygltf::Camera &gCam = model.cameras[node.camera];
+    if (gCam.type != "perspective")
+      throw std::runtime_error("only perspective cameras supported");
 
-    cam.vFov  = degrees(gltfCam.perspective.yfov);
-    cam.hFov  = degrees(2.0f * atan(tan(gltfCam.perspective.yfov / 2.0f) * gltfCam.perspective.aspectRatio));
-    cam.nClip = gltfCam.perspective.znear;
-    cam.fClip = gltfCam.perspective.zfar;
+    // assume you have a Camera instance called camera
+    // and screenW, screenH in scope.
 
-    // Get transform from camera node
-    Matrix4x4 camTransform = worldTransform;
-    Vector4D forward{0.0f, 0.0f, -1.0f, 0.0f};
-    Vector4D worldF = matrix4x4_vector_multiply(&camTransform, &forward);
-    Vector3D view   = vector3d_unit(vector4d_to3d(worldF));
+    // 2) screen parameters
+    camera.screenW = screenW;
+    camera.screenH = screenH;
+    camera.ar      = float(screenW) / float(screenH);
 
-    Vector3D up   = vector3d_unit(vector4d_to3d(camTransform.c[1]));
+    // 3) FOV in degrees
+    float yFovRad = float(gCam.perspective.yfov);
+    // if glTF aspectRatio was zero, fall back on viewport ar
+    float aspect = gCam.perspective.aspectRatio > 0.0f
+                   ? float(gCam.perspective.aspectRatio)
+                   : camera.ar;
 
-    cam.view_dir = view;
-    cam.up_dir   = up;
+    camera.vFov = yFovRad * (180.0f / M_PI);
+    camera.hFov = 2.0f * atanf( tanf(yFovRad * 0.5f) * aspect )
+                       * (180.0f / M_PI);
 
-  init_camera(cam);
+    // 4) clipping planes
+    camera.nClip = float(gCam.perspective.znear);
+    camera.fClip = float(gCam.perspective.zfar);
 
-  }else if(node.light >= 0){
+    // 5) screen‐to‐camera distance
+    camera.screenDist = float(screenH)
+                              / (2.0f * tanf(yFovRad * 0.5f));
+
+    // 6) depth‐of‐field off by default
+    camera.lensRadius    = 0.0f;
+    camera.focalDistance = 1.0f;
+
+    // 7) carve your node’s worldTransform 4×4 into origin + axes
+    Vector4D P{0,0,0,1}, X{1,0,0,0}, Y{0,1,0,0}, Z{0,0,1,0};
+    Vector4D Pw = matrix4x4_vector_multiply(&worldTransform, &P);
+    Vector4D Xw = matrix4x4_vector_multiply(&worldTransform, &X);
+    Vector4D Yw = matrix4x4_vector_multiply(&worldTransform, &Y);
+    Vector4D Zw = matrix4x4_vector_multiply(&worldTransform, &Z);
+
+    // 8) fill camera position + c2w
+    Matrix3x3 Mcol;
+    Mcol.c[0] = vector4d_to3d(Xw);
+    Mcol.c[1] = vector4d_to3d(Yw);
+    Mcol.c[2] = vector4d_to3d(Zw);
+
+    // transpose it so columns ↔ rows
+    camera.c2w = matrix3x3_transpose(&Mcol);
+    camera.pos = vector4d_to3d(Pw);
+
+    cout << "Camera position: " << camera.pos.x << ", " << camera.pos.y << ", " << camera.pos.z << endl;
+    cout << "Camera right: " << camera.c2w.c[0].x << ", " << camera.c2w.c[0].y << ", " << camera.c2w.c[0].z << endl;
+    cout << "Camera up: " << camera.c2w.c[1].x << ", " << camera.c2w.c[1].y << ", " << camera.c2w.c[1].z << endl;
+    cout << "Camera back: " << camera.c2w.c[2].x << ", " << camera.c2w.c[2].y << ", " << camera.c2w.c[2].z << endl;
+    // (no call to place(), we’ve now exactly replicated the glTF node’s
+    // translation and rotation, so rays come off at the same spot & angle)
+}else if(node.light >= 0){
     // adding lights
     auto ext = node.extensions.find("KHR_lights_punctual");
     if (ext != node.extensions.end()) {
@@ -394,40 +419,23 @@ void Application::load_from_gltf_model(const tinygltf::Model &model) {
     ParseNode(model, rootNode, matrix4x4_identity());
   }
 
-  BBox bbox;
-  for (auto& primitive: primitives) {
-    BBox b(vertices[primitive.i_p1]);
-    b.expand(vertices[primitive.i_p2]);
-    b.expand(vertices[primitive.i_p3]);
-    bbox.expand(b);
-  }
-
-  // assumes non empty bbox, dont be stupid and load an empty scene
-  Vector3D target = bbox.centroid();
-  canonical_view_distance = vector3d_norm(bbox.extent) / 2 * 1.5;
-
-  double view_distance = canonical_view_distance;
-  double min_view_distance = canonical_view_distance / 10.0;
-  double max_view_distance = canonical_view_distance * 20.0;
-
-  canonicalCamera.place(target,
-                        acos(cam.view_dir.y) - M_PI / 8,
-                        atan2(cam.view_dir.x, cam.view_dir.z) - M_PI / 8,
-                        view_distance,
-                        min_view_distance,
-                        max_view_distance);
-
-  camera.place(target,
-                      acos(cam.view_dir.y),
-                      atan2(cam.view_dir.x, cam.view_dir.z) - M_PI / 4,
-              view_distance,
-              min_view_distance,
-              max_view_distance);
+  // Print out all of our final camera parameters:
+  const auto &C = camera;
+  auto &R0 = C.c2w.c[0], &R1 = C.c2w.c[1], &R2 = C.c2w.c[2];
+  std::cerr << "--- CAMERA DUMP ---\n"
+            << "pos    = (" << C.pos.x  << ", " << C.pos.y  << ", " << C.pos.z  << ")\n"
+            << "right  = (" << R0.x      << ", " << R0.y      << ", " << R0.z      << ")\n"
+            << "up     = (" << R1.x      << ", " << R1.y      << ", " << R1.z      << ")\n"
+            << "back   = (" << R2.x      << ", " << R2.y      << ", " << R2.z      << ")\n"
+            << "hFov   = " << C.hFov << "°, "
+            << "vFov = "    << C.vFov << "°\n"
+            << "near   = " << C.nClip
+            << ", far = "   << C.fClip << "\n"
+            << "-------------------\n";
 }
 
 void Application::init_camera(CameraInfo& cameraInfo) {
   camera.configure(cameraInfo, screenW, screenH);
-  canonicalCamera.configure(cameraInfo, screenW, screenH);
 }
 
 
@@ -536,12 +544,11 @@ int main(int argc, char **argv) {
   // write straight to file without opening a window if -f option provided
   app->init();
 
-  app->load_from_gltf_model(model);
-
   if (w && h) {
     app->resize(w, h);
   }
-
+  
+  app->load_from_gltf_model(model);
 
   if(config.total_image_generated == 1){
     app->render_to_file(output_file_name, x, y, dx, dy);

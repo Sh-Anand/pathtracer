@@ -75,8 +75,6 @@ void Camera::copy_placement(const Camera& other) {
  * This sets the screen size & compute the new FOV.
  */
 void Camera::set_screen_size(const size_t screenW, const size_t screenH) {
-  this->r = 1200 / screenH * this->r;
-  compute_position();
   this->screenW = screenW;
   this->screenH = screenH;
   ar = 1.0 * screenW / screenH;
@@ -113,13 +111,21 @@ void Camera::compute_position() {
     phi += EPS_F;
     sinPhi = sin(phi);
   }
-  const Vector3D dirToCamera{r * sinPhi * sinf(theta),
+  const Vector3D dirToCamera{-r * sinPhi * sinf(theta),
                              r * cosf(phi),
                              r * sinPhi * cosf(theta)};
   pos = vector3d_add(targetPos, dirToCamera);
   Vector3D upVec{0, sinPhi > 0 ? 1.0f : -1.0f, 0.f};
   Vector3D screenXDir = vector3d_unit(vector3d_cross(upVec, dirToCamera));
   Vector3D screenYDir = vector3d_unit(vector3d_cross(dirToCamera, screenXDir));
+
+  cout << "Camera position: " << pos.x << ", " << pos.y << ", " << pos.z << endl;
+  cout << "Camera target: " << targetPos.x << ", " << targetPos.y << ", " << targetPos.z << endl;
+  cout << "Camera up: " << upVec.x << ", " << upVec.y << ", " << upVec.z << endl;
+  cout << "Camera screen X direction: " << screenXDir.x << ", " << screenXDir.y << ", " << screenXDir.z << endl;
+  cout << "Camera screen Y direction: " << screenYDir.x << ", " << screenYDir.y << ", " << screenYDir.z << endl;
+  cout << "Camera direction: " << dirToCamera.x << ", " << dirToCamera.y << ", " << dirToCamera.z << endl;
+
 
   c2w.c[0] = screenXDir;
   c2w.c[1] = screenYDir;
