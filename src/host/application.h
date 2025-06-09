@@ -19,7 +19,6 @@
 #include "scene/camera.h"
 
 // GLTF parser
-#include "util/tiny_gltf.h"
 #include "util/vector.h"
 
 using namespace std;
@@ -71,7 +70,7 @@ class Application {
   }
 
   void resize(size_t w, size_t h);
-  void load_from_gltf_model(const tinygltf::Model &model);
+
   void render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy) { 
     set_up_pathtracer();
     renderer->set_cuda_camera();
@@ -101,7 +100,6 @@ class Application {
     }
   }
 
-private:
   void set_up_pathtracer();
 
   RaytracedRenderer* renderer;
@@ -120,9 +118,6 @@ private:
 
   // Initialization functions to get the opengl cooking with oil.
   void init_camera(CameraInfo& camera);
-  void ParseMaterial(const tinygltf::Model&);
-  void ParseNode(const tinygltf::Model &model, int nodeIdx, const Matrix4x4 &parentTransform);
-  void ParseTexture(const tinygltf::Model &model);
 
   std::vector<Vector3D> vertices;
   std::vector<Vector3D> normals;
