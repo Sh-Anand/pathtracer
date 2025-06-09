@@ -25,9 +25,9 @@ void create_bvh(std::vector<CudaPrimitive> &primitives_vec,
   for (uint32_t i = 0; i < primitives_vec.size(); i++) {
     indices[i] = i;
     CudaPrimitive &primitive = primitives_vec[i];
-    BBox bbox(vertices[primitive.i_p1]);
-    bbox.expand(vertices[primitive.i_p2]);
-    bbox.expand(vertices[primitive.i_p3]);
+    BBox bbox(vertices[primitive.i0]);
+    bbox.expand(vertices[primitive.i1]);
+    bbox.expand(vertices[primitive.i2]);
     bboxes.push_back(bbox);
   }
 

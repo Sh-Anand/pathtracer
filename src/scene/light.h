@@ -42,9 +42,9 @@ DEVICE static inline Vector3D sample_L(
     return vector3d_scale(light->radiance, invDist2);
 
   } else {
-    Vector3D p1 = vertices[light->triangle.i_p1];
-    Vector3D p2 = vertices[light->triangle.i_p2];
-    Vector3D p3 = vertices[light->triangle.i_p3];
+    Vector3D p1 = vertices[light->triangle.i0];
+    Vector3D p2 = vertices[light->triangle.i1];
+    Vector3D p3 = vertices[light->triangle.i2];
 
     // 1) Uniformly sample a point on the triangle via barycentrics
     float r1 = next_float(rand_state);

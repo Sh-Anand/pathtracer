@@ -4,10 +4,7 @@
 #include <cstdint>
 #include "util/vector.h"
 typedef struct {
-  uint32_t i_p1, i_p2, i_p3;
-  uint32_t i_n1, i_n2, i_n3;
-  uint32_t i_uv1, i_uv2, i_uv3;
-  int bsdf_idx;
+  uint32_t i0, i1, i2, bsdf_idx;
 } CudaPrimitive;
 
 typedef struct {
@@ -54,21 +51,21 @@ DEVICE static inline bool test_intersect(Ray* r, const Vector3D &p1,
 }
 
 DEVICE static inline bool primitive_intersect(const CudaPrimitive *p, Ray* r, CudaIntersection* isect, const Vector3D* vertices, const Vector3D* normals, const Vector2D* texcoords, const Vector4D* tangents) {
-  Vector3D tp1 = vertices[p->i_p1], tp2 = vertices[p->i_p2], tp3 = vertices[p->i_p3];
-  Vector3D tn1 = normals[p->i_p1], tn2 = normals[p->i_p2], tn3 = normals[p->i_p3];
-  Vector2D tuv1 = texcoords[p->i_uv1], tuv2 = texcoords[p->i_uv2], tuv3 = texcoords[p->i_uv3];
-  Vector4D tt1 = tangents[p->i_uv1], tt2 = tangents[p->i_uv2], tt3 = tangents[p->i_uv3];
+  Vector3D tp0 = vertices[p->i0], tp1 = vertices[p->i1], tp2 = vertices[p->i2];
+  Vector3D tn0 = normals[p->i0], tn1 = normals[p->i1], tn2 = normals[p->i2];
+  Vector2D tuv0 = texcoords[p->i0], tuv1 = texcoords[p->i1], tuv2 = texcoords[p->i2];
+  Vector4D tt1 = tangents[p->i0], tt2 = tangents[p->i1], tt3 = tangents[p->i2];
   float t,a,b;
-  if (!test_intersect(r, tp1, tp2, tp3, t, a, b)) {
+  if (!test_intersect(r, tp0, tp1, tp2, t, a, b)) {
     return false;
   }
 
   float onemab = 1 - a - b;
-  isect->n.x = onemab * tn1.x + a * tn2.x + b * tn3.x;
-  isect->n.y = onemab * tn1.y + a * tn2.y + b * tn3.y;
-  isect->n.z = onemab * tn1.z + a * tn2.z + b * tn3.z;
-  isect->uv.x = onemab * tuv1.x + a * tuv2.x + b * tuv3.x;
-  isect->uv.y = onemab * tuv1.y + a * tuv2.y + b * tuv3.y;
+  isect->n.x = onemab * tn0.x + a * tn1.x + b * tn2.x;
+  isect->n.y = onemab * tn0.y + a * tn1.y + b * tn2.y;
+  isect->n.z = onemab * tn0.z + a * tn1.z + b * tn2.z;
+  isect->uv.x = onemab * tuv0.x + a * tuv1.x + b * tuv2.x;
+  isect->uv.y = onemab * tuv0.y + a * tuv1.y + b * tuv2.y;
   isect->tangent.x = onemab * tt1.x + a * tt2.x + b * tt3.x;
   isect->tangent.y = onemab * tt1.y + a * tt2.y + b * tt3.y;
   isect->tangent.z = onemab * tt1.z + a * tt2.z + b * tt3.z;
@@ -79,9 +76,9 @@ DEVICE static inline bool primitive_intersect(const CudaPrimitive *p, Ray* r, Cu
   return true;
 }
 DEVICE static inline bool primitive_has_intersect(const CudaPrimitive* p, Ray* r, const Vector3D * vertices, float &t) {
-  Vector3D tp1 = vertices[p->i_p1], tp2 = vertices[p->i_p2], tp3 = vertices[p->i_p3];
+  Vector3D tp0 = vertices[p->i0], tp1 = vertices[p->i1], tp2 = vertices[p->i2];
   float a, b;
-  if (!test_intersect(r, tp1, tp2, tp3, t, a, b)) {
+  if (!test_intersect(r, tp0, tp1, tp2, t, a, b)) {
     return false;
   }
 
