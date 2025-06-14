@@ -75,7 +75,10 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
 
     // direct lighting
     Vector3D L_out = estimate_direct_lighting_importance(pt, current_ray, isect, idx);
-    L_out_total = vector3d_add(L_out_total, vector3d_mul(throughput, L_out));
+    if (!first_bounce) {
+      // add emittance to the first bounce
+      L_out_total = vector3d_add(L_out_total, vector3d_mul(throughput, L_out));
+    }
 
     // russian-roulette survival
     float p_survive = (level == 1) ? 1.0f : RRT;
@@ -89,7 +92,7 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     float occlusion = 1.0;
     Vector3D bsdf_f = sample_f(pt->bsdfs, pt->textures, isect, w_out, &wi, &pdf, &occlusion, &pt->rand_states[idx]);
     wi = vector3d_unit(wi); // ensure wi is normalized
-    float costheta = vector3d_dot(isect.n, wi);
+    float costheta = fmaxf(vector3d_dot(isect.n, wi), 0.0f);
     Vector3D fcos = vector3d_scale(bsdf_f, costheta);
     bsdf_f = vector3d_scale(bsdf_f, occlusion);
 
@@ -101,15 +104,14 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
         s->z_v   = vector3d_norm2(vector3d_sub(hit_p, r.o));
         s->pdf   = pdf;
         s->bsdf_f  = bsdf_f;
+        throughput = vector3d_scale(throughput, 1 / p_survive);
+    } else {
+        throughput = vector3d_mul(throughput, fcos);
+        throughput = vector3d_scale(throughput, 1.0f / (pdf * p_survive));
     }
     if (pdf <= 0.0) {
         break;
     }
-
-    // update throughput
-
-    throughput = first_bounce ? throughput: vector3d_mul(throughput, fcos);
-    throughput = first_bounce ? vector3d_scale(throughput, 1 / p_survive) : vector3d_scale(throughput, 1 / (pdf * p_survive));
 
     // spawn next ray
     Ray bounce_ray; bounce_ray.o = hit_p; bounce_ray.d = wi; bounce_ray.max_t = INFINITY; bounce_ray.inv_d = vector3d_rcp(bounce_ray.d);
@@ -135,7 +137,7 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
   }
 
   pt->rays_traced[idx] = rays_traced;
-  return vector3d_sub(L_out_total, pt->initialSampleBuffer[idx].emittance);
+  return L_out_total;
 }
 
 DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_t x, uint16_t y, bool restir) {
@@ -195,7 +197,7 @@ DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_
     pt->temporalReservoirBufferGI[idx] = R;
     pt->initialSampleBuffer[idx] = S;
   } else {
-    float cospdf = S.pdf > 0 ? vector3d_dot(S.n_v, vector3d_unit(vector3d_sub(S.x_v, S.x_s))) / S.pdf : 0.0f;
+    float cospdf = S.pdf > 0 ? fmaxf(vector3d_dot(S.n_v, vector3d_unit(vector3d_sub(S.x_s, S.x_v))), 0.0f) / S.pdf : 0.0f;
     Vector3D L = vector3d_add(S.emittance, vector3d_mul(vector3d_scale(S.bsdf_f, cospdf), S.L));
     pt->sampleBuffer.data[idx] = L;
   }
@@ -277,7 +279,7 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
   Rs.W = Rs.M * phat > 0 ? Rs.w / (Rs.M * phat) : 0;
 
   SampleGI S = Rs.z;
-  float costheta = fabsf(vector3d_dot(q.n_v, vector3d_unit(vector3d_sub(S.x_s, q.x_v))));
+  float costheta = fmaxf(vector3d_dot(q.n_v, vector3d_unit(vector3d_sub(S.x_s, q.x_v))), 0.0f);
   Vector3D L = vector3d_add(q.emittance, vector3d_mul(vector3d_scale(q.bsdf_f, costheta), vector3d_scale(S.L, Rs.W)));
   pt->sampleBuffer.data[idx] = L;
 }
