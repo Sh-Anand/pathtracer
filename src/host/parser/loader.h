@@ -1,3 +1,4 @@
+#include "assimp.h"
 #include "glTF.h"
 
 class Loader {
@@ -14,13 +15,20 @@ class Loader {
         std::string ext = filepath.substr(pos + 1);
         std::transform(ext.begin(), ext.end(), ext.begin(),
                        [](unsigned char c){ return std::tolower(c); });
-        if (ext == "gltf" || ext == "glb") {
-            parser = glTFParser(screenW, screenH, filepath);
+        if (std::find(SupportedExtensions.begin(), SupportedExtensions.end(), ext) != SupportedExtensions.end()) {
+            parser = AssImpParser(screenW, screenH, filepath);
         } else {
             throw std::runtime_error("Loader: unsupported file extension: " + ext);
         }
 
     }
 
+    inline static const std::vector<std::string> SupportedExtensions = {
+        "gltf",
+        "glb",
+        "dae",
+        "obj"
+    };
+   
     Parser parser;
 };

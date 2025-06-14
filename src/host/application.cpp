@@ -45,11 +45,6 @@ void Application::resize(size_t w, size_t h) {
   renderer->set_frame_size(w, h);
 }
 
-void Application::init_camera(CameraInfo& cameraInfo) {
-  camera.configure(cameraInfo, screenW, screenH);
-}
-
-
 void Application::set_up_pathtracer() {
   renderer->set_camera(&camera);
   renderer->set_frame_size(screenW, screenH);

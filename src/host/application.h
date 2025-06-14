@@ -116,9 +116,6 @@ class Application {
   // Guranteed to not have the camera occlude with the mes.
   double canonical_view_distance;
 
-  // Initialization functions to get the opengl cooking with oil.
-  void init_camera(CameraInfo& camera);
-
   std::vector<Vector3D> vertices;
   std::vector<Vector3D> normals;
   std::vector<Vector4D> tangents;

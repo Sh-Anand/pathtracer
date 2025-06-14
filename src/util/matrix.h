@@ -64,6 +64,15 @@ HOST_DEVICE static inline Vector3D matrix3x3_vector_multiply(const Matrix3x3 *A,
   );
 }
 
+// 4x4 -> 3x3
+static inline Matrix3x3 matrix4x4_to3x3(const Matrix4x4 *A) {
+  return {{
+    { A->c[0].x, A->c[0].y, A->c[0].z },
+    { A->c[1].x, A->c[1].y, A->c[1].z },
+    { A->c[2].x, A->c[2].y, A->c[2].z }
+  }};
+}
+
 // Lift 3×3 → 4×4 homogeneous
 static inline Matrix4x4 matrix3x3_to4x4(const Matrix3x3 *A) {
   return {{
@@ -81,6 +90,15 @@ static inline Matrix4x4 matrix4x4_identity() {
     {0,1,0,0},
     {0,0,1,0},
     {0,0,0,1}
+  }};
+}
+
+static inline Matrix4x4 matrix4x4_scale(const Matrix4x4 *A, float x) {
+  return {{
+    { A->c[0].x*x, A->c[0].y*x, A->c[0].z*x, A->c[0].w*x },
+    { A->c[1].x*x, A->c[1].y*x, A->c[1].z*x, A->c[1].w*x },
+    { A->c[2].x*x, A->c[2].y*x, A->c[2].z*x, A->c[2].w*x },
+    { A->c[3].x*x, A->c[3].y*x, A->c[3].z*x, A->c[3].w*x }
   }};
 }
 

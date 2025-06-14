@@ -158,19 +158,25 @@ class glTFParser : public Parser {
                   tangents.push_back(Vector4D{t1.x, t1.y, t1.z, tangentData[i0*4+3]});
                   tangents.push_back(Vector4D{t2.x, t2.y, t2.z, tangentData[i1*4+3]});
                   tangents.push_back(Vector4D{t3.x, t3.y, t3.z, tangentData[i2*4+3]});
+                } else {
+                  tangents.push_back(Vector4D{0.0f, 0.0f, 0.0f, 0.0f});
+                  tangents.push_back(Vector4D{0.0f, 0.0f, 0.0f, 0.0f});
+                  tangents.push_back(Vector4D{0.0f, 0.0f, 0.0f, 0.0f});
                 }
+              } else {
+                // if no texture coordinates, add dummy ones
+                texcoords.push_back(Vector2D{0.0f, 0.0f});
+                texcoords.push_back(Vector2D{0.0f, 0.0f});
+                texcoords.push_back(Vector2D{0.0f, 0.0f});
+                tangents.push_back(Vector4D{0.0f, 0.0f, 0.0f, 0.0f});
+                tangents.push_back(Vector4D{0.0f, 0.0f, 0.0f, 0.0f});
+                tangents.push_back(Vector4D{0.0f, 0.0f, 0.0f, 0.0f});
               }
 
               CudaPrimitive cprimitive {
                   static_cast<uint32_t>(vertices.size() - 3),
                   static_cast<uint32_t>(vertices.size() - 2),
                   static_cast<uint32_t>(vertices.size() - 1),
-                  static_cast<uint32_t>(normals.size() - 3),
-                  static_cast<uint32_t>(normals.size() - 2),
-                  static_cast<uint32_t>(normals.size() - 1),
-                  static_cast<uint32_t>(std::max((int)texcoords.size() - 3, 0)),
-                  static_cast<uint32_t>(std::max((int)texcoords.size() - 2, 0)),
-                  static_cast<uint32_t>(std::max((int)texcoords.size() - 1, 0)),
                   primitive.material,
               };
               primitives.push_back(cprimitive);
@@ -179,7 +185,7 @@ class glTFParser : public Parser {
                 bsdfs[cprimitive.bsdf_idx].emission.y > 0.0f ||
                 bsdfs[cprimitive.bsdf_idx].emission.z > 0.0f) {
                 CudaLight clight;
-                clight.radiance = vector3d_scale(bsdfs[cprimitive.bsdf_idx].emission, 0.7);
+                clight.radiance = bsdfs[cprimitive.bsdf_idx].emission;
                 clight.triangle = cprimitive;
                 clight.area = vector3d_norm(vector3d_cross(vector3d_sub(p2, p1), vector3d_sub(p3, p1))) / 2.0f;
                 clight.is_point_light = false;
@@ -197,16 +203,14 @@ class glTFParser : public Parser {
       // and screenW, screenH in scope.
 
       // 2) screen parameters
-      camera.screenW = screenW;
-      camera.screenH = screenH;
-      camera.ar      = float(screenW) / float(screenH);
+      float ar      = float(screenW) / float(screenH);
 
       // 3) FOV in degrees
       float yFovRad = float(gCam.perspective.yfov);
       // if glTF aspectRatio was zero, fall back on viewport ar
       float aspect = gCam.perspective.aspectRatio > 0.0f
                     ? float(gCam.perspective.aspectRatio)
-                    : camera.ar;
+                    : ar;
 
       camera.vFov = yFovRad * (180.0f / M_PI);
       camera.hFov = 2.0f * atanf( tanf(yFovRad * 0.5f) * aspect )
@@ -215,14 +219,6 @@ class glTFParser : public Parser {
       // 4) clipping planes
       camera.nClip = float(gCam.perspective.znear);
       camera.fClip = float(gCam.perspective.zfar);
-
-      // 5) screen‐to‐camera distance
-      camera.screenDist = float(screenH)
-                                / (2.0f * tanf(yFovRad * 0.5f));
-
-      // 6) depth‐of‐field off by default
-      camera.lensRadius    = 0.0f;
-      camera.focalDistance = 1.0f;
 
       // 7) carve your node’s worldTransform 4×4 into origin + axes
       Vector4D P{0,0,0,1}, X{1,0,0,0}, Y{0,1,0,0}, Z{0,0,1,0};
@@ -241,10 +237,6 @@ class glTFParser : public Parser {
       camera.c2w = matrix3x3_transpose(&Mcol);
       camera.pos = vector4d_to3d(Pw);
 
-      cout << "Camera position: " << camera.pos.x << ", " << camera.pos.y << ", " << camera.pos.z << endl;
-      cout << "Camera right: " << camera.c2w.c[0].x << ", " << camera.c2w.c[0].y << ", " << camera.c2w.c[0].z << endl;
-      cout << "Camera up: " << camera.c2w.c[1].x << ", " << camera.c2w.c[1].y << ", " << camera.c2w.c[1].z << endl;
-      cout << "Camera back: " << camera.c2w.c[2].x << ", " << camera.c2w.c[2].y << ", " << camera.c2w.c[2].z << endl;
       // (no call to place(), we’ve now exactly replicated the glTF node’s
       // translation and rotation, so rays come off at the same spot & angle)
   }else if(node.light >= 0){
@@ -282,8 +274,9 @@ class glTFParser : public Parser {
             CudaLight clight;
             clight.radiance = vector3d_scale(color, (intensity/1000));
             clight.position = position;
-            clight.direction = direction;
             clight.is_point_light = true;
+            cout << "GLTF Point light at " << clight.position.x << ", " << clight.position.y << ", " << clight.position.z << endl;
+            cout << "GLTF Point light rad: " << clight.radiance.x << ", " << clight.radiance.y << ", " << clight.radiance.z << endl;
             lights.push_back(clight);
           } else if (light.type == "point") {
             // default white if no color provided
@@ -307,8 +300,6 @@ class glTFParser : public Parser {
             // scale color by intensity (and any unit conversion)
             clight.radiance      = vector3d_scale(color, intensity / 1000.0f);
             clight.position      = position;
-            // direction unused for true point lights, but zero it for safety
-            clight.direction     = {0.0f, 0.0f, 0.0f};
             clight.is_point_light = true;
             // leave triangle & area unset (ignored for point lights)
 
@@ -334,10 +325,6 @@ class glTFParser : public Parser {
       bsdf.emission = Vector3D{float(material.emissiveFactor[0]),float(material.emissiveFactor[1]),float(material.emissiveFactor[2])};
       bsdf.emission  = vector3d_scale(bsdf.emission, (material.extensions.count("KHR_materials_emissive_strength") ?
           material.extensions.at("KHR_materials_emissive_strength").Get("emissiveStrength").Get<double>()/2 : 0.0f));
-      bsdf.transmissionFactor = material.extensions.count("KHR_materials_transmission") ?
-          material.extensions.at("KHR_materials_transmission").Get("tranmissionFactor").Get<double>() : 0.0f;
-      bsdf.thicknessFactor = material.extensions.count("KHR_materials_volume") ?
-          material.extensions.at("KHR_materials_volume").Get("thicknessFactor").Get<double>() : 0.0f;
 
       bsdf.tex_idx = material.pbrMetallicRoughness.baseColorTexture.index;
       bsdf.normal_idx = material.normalTexture.index;

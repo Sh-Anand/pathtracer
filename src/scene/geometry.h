@@ -4,7 +4,8 @@
 #include <cstdint>
 #include "util/vector.h"
 typedef struct {
-  uint32_t i0, i1, i2, bsdf_idx;
+  uint32_t i0, i1, i2;
+  int bsdf_idx;
 } CudaPrimitive;
 
 typedef struct {

@@ -50,8 +50,6 @@ typedef struct {
   float   metallic;       // [0,1]
   float   roughness;      // [0,1]
   Vector3D emission; // KHR_materials_emissive_strength
-  float   transmissionFactor; // KHR_materials_transmission
-  float   thicknessFactor; // KHR_materials_volume
   int      tex_idx;
   int      normal_idx;
   int      orm_idx;
@@ -288,21 +286,24 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
   float rng = next_float(rand_state);
   Vector3D sample_wi;
   Vector3D res;
+
+  // common compute
+  float alpha = fmaxf(roughness * roughness, 0.04f); // avoid zero roughness
+  float u1 = next_float(rand_state);
+  float u2 = next_float(rand_state);
+  float phi = 2.0f * PI * u1;
+  Vector3D T, B;
+  coordinate_system(N, &T, &B);
+  Vector3D one_mF = Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z};
+
   if (rng < pdf_diff) {
     // 4.3) Diffuse sample
     /* --- 1. Cosine-weighted sample in local frame (0,0,1) --- */
-    float u1 = next_float(rand_state);
-    float u2 = next_float(rand_state);
 
-    float r   = sqrtf(u1);
-    float phi = 2.0f * PI * u2;
+    float r   = sqrtf(u2);
     float x   = r * cosf(phi);
     float y   = r * sinf(phi);
-    float z   = sqrtf(1.0f - u1);          // cosθ
-
-    /* --- 2. Build an orthonormal basis around N --- */
-    Vector3D T, B;
-    coordinate_system(N, &T, &B);          // any robust basis builder
+    float z   = sqrtf(1.0f - u2);          // cosθ
 
     /* --- 3. Lift to world space --- */
     sample_wi = vector3d_unit( vector3d_add(
@@ -312,26 +313,31 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
 
     /* --- 4. Mixture PDF:  P_diff * (cosθ / π) --- */
     float cosTheta = max(vector3d_dot(N, sample_wi), 0.0f);
-    *pdf = pdf_diff * cosTheta * PI_R;      // PI_R = 1/π
+    *pdf = fmaxf(pdf_diff * cosTheta * PI_R, EPS_F);      // PI_R = 1/π
 
     /* --- 5. Evaluate *both* lobes at (wo, wi) --- */
     Vector3D H  = vector3d_unit(vector3d_add(wo, sample_wi));
     float    VoH = max(vector3d_dot(wo, H), 0.0f);
 
     /*   5a. Diffuse BRDF */
-    Vector3D one_mF = Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z};
     Vector3D c_diff = vector3d_scale(base, onem);
     Vector3D f_diff = vector3d_scale(vector3d_mul(one_mF, c_diff), PI_R);
 
     /*   5b. Specular BRDF (uses GGX D and G helpers) */
-    float alpha = roughness * roughness;
     float NoV   = max(vector3d_dot(N, wo), 0.0f);
     float NoL   = cosTheta;
+
+    if (NoV < EPS_F || NoL < EPS_F) {
+      *pdf = 0.0f;
+      res  = Vector3D{};
+      return res;  // return zero vector
+    }
+
     float NoH   = max(vector3d_dot(N, H), 0.0f);
     float D     = D_compute(alpha, NoH);
     float G     = G_compute(alpha, NoV, NoL) / (4.0f * NoV * NoL + EPS_F);
     Vector3D F  = vector3d_add(F0,
-                    vector3d_scale(Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z},
+                    vector3d_scale(one_mF,
                                    powf(1.0f - VoH, 5.0f)));
     Vector3D f_spec = vector3d_scale(F, D * G);
 
@@ -339,11 +345,6 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
   } else { 
     // 4.4) Specular sample
     /* --- 1. GGX half-vector sample (isotropic) -------------------- */
-    float u1 = next_float(rand_state);
-    float u2 = next_float(rand_state);
-
-    float alpha  = roughness * roughness;          // α = r²
-    float phi    = 2.0f * PI * u1;
     float cosH   = sqrtf((1.0f - u2) / (1.0f + (alpha - 1.0f) * u2));
     float sinH   = sqrtf(max(0.0f, 1.0f - cosH * cosH));
 
@@ -351,8 +352,6 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
     Vector3D H_local = Vector3D{sinH * cosf(phi), sinH * sinf(phi), cosH};
 
     /* --- 2. Rotate H_local into world space (same basis as before) */
-    Vector3D T, B;
-    coordinate_system(N, &T, &B);
     Vector3D H = vector3d_unit(vector3d_add(
                   vector3d_add(vector3d_scale(T, H_local.x),
                                 vector3d_scale(B, H_local.y)),
@@ -367,33 +366,30 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
 
     if (NoL < EPS_F || NoV < EPS_F || VoH < EPS_F) {
         *pdf = 0.0f;
-        res  = Vector3D{};
+        return Vector3D{};
     }
-    else {
-        /* --- 4. PDF for the chosen lobe (mixture) ---------------- */
-        float D     = D_compute(alpha, NoH);
-        float pdf_w = (D * NoH) / (4.0f * VoH);      // GGX reflection PDF
-        *pdf = pdf_spec * pdf_w;                     // mixture weight
+    /* --- 4. PDF for the chosen lobe (mixture) ---------------- */
+    float D     = D_compute(alpha, NoH);
+    float pdf_w = (D * NoH) / (4.0f * VoH);      // GGX reflection PDF
+    *pdf = fmaxf(pdf_spec * pdf_w, EPS_F);                     // mixture weight
 
-        /* --- 5. Full BRDF evaluation ----------------------------- */
-        /* 5a. Schlick Fresnel F */
-        Vector3D F = vector3d_add(F0,
-                      vector3d_scale(Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z},
-                                     powf(1.0f - VoH, 5.0f)));
+    /* --- 5. Full BRDF evaluation ----------------------------- */
+    /* 5a. Schlick Fresnel F */
+    Vector3D F = vector3d_add(F0,
+                  vector3d_scale(Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z},
+                                  powf(1.0f - VoH, 5.0f)));
 
-        /* 5b. Geometry term */
-        float G = G_compute(alpha, NoV, NoL) / (4.0f * NoV * NoL + EPS_F);
+    /* 5b. Geometry term */
+    float G = G_compute(alpha, NoV, NoL) / (4.0f * NoV * NoL + EPS_F);
 
-        /* 5c. Specular BRDF */
-        Vector3D f_spec = vector3d_scale(F, D * G);
+    /* 5c. Specular BRDF */
+    Vector3D f_spec = vector3d_scale(F, D * G);
 
-        /* 5d. Diffuse BRDF (same formula as diffuse branch) */
-        Vector3D one_mF = Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z};
-        Vector3D c_diff = vector3d_scale(base, onem);
-        Vector3D f_diff = vector3d_scale(vector3d_mul(one_mF, c_diff), PI_R);
+    /* 5d. Diffuse BRDF (same formula as diffuse branch) */
+    Vector3D c_diff = vector3d_scale(base, onem);
+    Vector3D f_diff = vector3d_scale(vector3d_mul(one_mF, c_diff), PI_R);
 
-        res = vector3d_add(f_diff, f_spec);
-    }
+    res = vector3d_add(f_diff, f_spec);
   }
 
   *wi = sample_wi;

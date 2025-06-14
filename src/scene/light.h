@@ -12,7 +12,7 @@ typedef struct {
 
   // if point light
   Vector3D position;
-  Vector3D direction;
+  float radius; // radius for spherical light. 0 = special case for point light
   bool is_point_light = false;
 } CudaLight;
 

@@ -1,3 +1,5 @@
+#pragma once
+
 #include "scene/camera.h"
 #include "scene/geometry.h"
 #include "scene/light.h"
