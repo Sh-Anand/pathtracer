@@ -93,8 +93,6 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     Vector3D bsdf_f = sample_f(pt->bsdfs, pt->textures, isect, w_out, &wi, &pdf, &occlusion, &pt->rand_states[idx]);
     wi = vector3d_unit(wi); // ensure wi is normalized
     bsdf_f = vector3d_scale(bsdf_f, occlusion);
-    float costheta = fmaxf(vector3d_dot(isect.n, wi), 0.0f);
-    Vector3D fcos = vector3d_scale(bsdf_f, costheta);
 
     if (first_bounce) {
         Sample* s = &pt->initialSampleBuffer[idx];
@@ -106,6 +104,8 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
         s->bsdf_f  = bsdf_f;
         throughput = vector3d_scale(throughput, 1 / p_survive);
     } else {
+        float costheta = fmaxf(vector3d_dot(isect.n, wi), 0.0f);
+        Vector3D fcos = vector3d_scale(bsdf_f, costheta);
         throughput = vector3d_mul(throughput, fcos);
         throughput = vector3d_scale(throughput, 1.0f / (pdf * p_survive));
     }

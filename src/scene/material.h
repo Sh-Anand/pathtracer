@@ -198,11 +198,8 @@ DEVICE static inline Vector3D f( const CudaBSDF *bsdfs,
     *occlusion   = orm.x;
   }
 
-  // clamp & compute derived quantities
-  metal     = clampd(metal,     0.0f, 1.0f);
-  roughness = clampd(roughness, 0.04f,1.0f);
   float onemmetal = 1.0f - metal;
-  float alpha     = roughness * roughness;
+  float alpha     = fmaxf(roughness * roughness, EPS_F);
 
   // 4) diffuse term
   Vector3D c_diff  = vector3d_scale(base, onemmetal);
@@ -266,8 +263,8 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
   }
 
   // 3) Metallic, roughness, occlusion from ORM
-  float metal     = clampd(bsdf.metallic,  0.0, 1.0);
-  float roughness = clampd(bsdf.roughness, 0.04,1.0);
+  float metal     = bsdf.metallic;
+  float roughness = bsdf.roughness;
   *occlusion = 1.0f;
   if (bsdf.orm_idx >= 0) {
     Vector4D orm = sample_texture(textures[bsdf.orm_idx], uv);
@@ -275,6 +272,15 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
     roughness    = orm.y;
     metal        = orm.z;
   }
+
+  // 3.5) Special case for perfect conductor
+  if (metal > 0.95f && roughness < 0.05f)
+  {
+      *wi  = vector3d_reflect(vector3d_neg(wo), N);   // perfect reflection
+      *pdf = 1.0f;                                    // δ‐distribution
+      return Vector3D{base.x, base.y, base.z};        // F0 for a perfect conductor
+  }
+  
   float onem  = 1.0f - metal;
   Vector3D F0 = { 0.04f*onem + base.x*metal,
                   0.04f*onem + base.y*metal,
@@ -290,7 +296,7 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
   Vector3D res;
 
   // common compute
-  float alpha = fmaxf(roughness * roughness, 0.04f); // avoid zero roughness
+  float alpha = fmaxf(roughness * roughness, EPS_F); // avoid zero roughness
   float u1 = next_float(rand_state);
   float u2 = next_float(rand_state);
   float phi = 2.0f * PI * u1;
