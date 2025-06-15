@@ -92,9 +92,9 @@ DEVICE static inline Vector3D at_least_one_bounce_radiance(PathTracer *pt, Ray r
     float occlusion = 1.0;
     Vector3D bsdf_f = sample_f(pt->bsdfs, pt->textures, isect, w_out, &wi, &pdf, &occlusion, &pt->rand_states[idx]);
     wi = vector3d_unit(wi); // ensure wi is normalized
+    bsdf_f = vector3d_scale(bsdf_f, occlusion);
     float costheta = fmaxf(vector3d_dot(isect.n, wi), 0.0f);
     Vector3D fcos = vector3d_scale(bsdf_f, costheta);
-    bsdf_f = vector3d_scale(bsdf_f, occlusion);
 
     if (first_bounce) {
         Sample* s = &pt->initialSampleBuffer[idx];
@@ -197,7 +197,8 @@ DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_
     pt->temporalReservoirBufferGI[idx] = R;
     pt->initialSampleBuffer[idx] = S;
   } else {
-    float cospdf = S.pdf > 0 ? fmaxf(vector3d_dot(S.n_v, vector3d_unit(vector3d_sub(S.x_s, S.x_v))), 0.0f) / S.pdf : 0.0f;
+    float costheta = fmaxf(vector3d_dot(S.n_v, vector3d_unit(vector3d_sub(S.x_s, S.x_v))), 0.0f);
+    float cospdf = S.pdf > 0 ? costheta / S.pdf : 0.0f;
     Vector3D L = vector3d_add(S.emittance, vector3d_mul(vector3d_scale(S.bsdf_f, cospdf), S.L));
     pt->sampleBuffer.data[idx] = L;
   }

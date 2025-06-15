@@ -156,7 +156,7 @@ DEVICE static inline Vector3D f( const CudaBSDF *bsdfs,
                           const CudaIntersection isect,
                           const Vector3D wo,
                           const Vector3D wi,
-                          float *occlusion ) {
+                          float *occlusion) {
   // always initialize occlusion
   *occlusion = 1.0f;
 
@@ -167,14 +167,17 @@ DEVICE static inline Vector3D f( const CudaBSDF *bsdfs,
 
   // 1) geometry terms
   Vector3D H   = vector3d_unit(vector3d_add(wo, wi));
-  float NoV    = max( vector3d_dot(N, wo), 0.0f );
-  float NoL    = max( vector3d_dot(N, wi), 0.0f );
-  if (NoL == 0.0f || NoV == 0.0f)
+  float NoV    = vector3d_dot(N, wo);
+  float NoL    = vector3d_dot(N, wi);
+  if (NoL <= 0.0f || NoV <= 0.0f)
     return Vector3D{};                  // zero vector
 
   float NoH    = vector3d_dot(N, H);
   float VoH    = vector3d_dot(wo, H);
   float LoH    = vector3d_dot(wi, H);
+
+  if (NoH <= 0.0f || VoH <= 0.0f || LoH <= 0.0f)
+    return Vector3D{};                  // zero vector
 
   // 2) base color (albedo)
   Vector3D base{ bsdf.baseColor.x,
@@ -205,9 +208,8 @@ DEVICE static inline Vector3D f( const CudaBSDF *bsdfs,
   Vector3D c_diff  = vector3d_scale(base, onemmetal);
   float sonemmetal = 0.04f * onemmetal;
   Vector3D f0      = Vector3D{sonemmetal + base.x * metal, sonemmetal + base.y * metal, sonemmetal + base.z * metal};
-  Vector3D F       = vector3d_add(f0, vector3d_scale((Vector3D{1 - f0.x, 1 - f0.y, 1 - f0.z}), powf(1.0f - VoH, 5.0f)));
-  Vector3D one_mF  = Vector3D{1 - F.x, 1 - F.y, 1 - F.z};
-  Vector3D diffTerm= vector3d_scale(one_mF, PI_R);
+  Vector3D F       = vector3d_add(f0, vector3d_scale((Vector3D{1 - f0.x, 1 - f0.y, 1 - f0.z}), powf(1.0f - fabsf(VoH), 5.0f)));
+  Vector3D diffTerm  = Vector3D{(1 - F.x) * PI_R, (1 - F.y) * PI_R, (1 - F.z) * PI_R};
   Vector3D f_diffuse = vector3d_mul(diffTerm, c_diff);   // component‑wise
 
   // 5) specular term
@@ -296,6 +298,7 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
   coordinate_system(N, &T, &B);
   Vector3D one_mF = Vector3D{1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z};
 
+
   if (rng < pdf_diff) {
     // 4.3) Diffuse sample
     /* --- 1. Cosine-weighted sample in local frame (0,0,1) --- */
@@ -311,10 +314,6 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
                                  vector3d_scale(B, y)),
                    vector3d_scale(N, z)) );
 
-    /* --- 4. Mixture PDF:  P_diff * (cosθ / π) --- */
-    float cosTheta = max(vector3d_dot(N, sample_wi), 0.0f);
-    *pdf = fmaxf(pdf_diff * cosTheta * PI_R, EPS_F);      // PI_R = 1/π
-
     /* --- 5. Evaluate *both* lobes at (wo, wi) --- */
     Vector3D H  = vector3d_unit(vector3d_add(wo, sample_wi));
     float    VoH = max(vector3d_dot(wo, H), 0.0f);
@@ -325,7 +324,7 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
 
     /*   5b. Specular BRDF (uses GGX D and G helpers) */
     float NoV   = max(vector3d_dot(N, wo), 0.0f);
-    float NoL   = cosTheta;
+    float NoL   = fmaxf(vector3d_dot(N, sample_wi), 0.0f);;
 
     if (NoV < EPS_F || NoL < EPS_F) {
       *pdf = 0.0f;
@@ -341,8 +340,11 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
                                    powf(1.0f - VoH, 5.0f)));
     Vector3D f_spec = vector3d_scale(F, D * G);
 
+    /*   5c. Mixture PDF */
+    *pdf = fmaxf(pdf_diff * NoL * PI_R + pdf_spec * (D * NoH) / (4.0f * VoH), EPS_F);
+
     res = vector3d_add(f_diff, f_spec);   // full BRDF
-  } else { 
+  } else {
     // 4.4) Specular sample
     /* --- 1. GGX half-vector sample (isotropic) -------------------- */
     float cosH   = sqrtf((1.0f - u2) / (1.0f + (alpha - 1.0f) * u2));
@@ -370,8 +372,7 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
     }
     /* --- 4. PDF for the chosen lobe (mixture) ---------------- */
     float D     = D_compute(alpha, NoH);
-    float pdf_w = (D * NoH) / (4.0f * VoH);      // GGX reflection PDF
-    *pdf = fmaxf(pdf_spec * pdf_w, EPS_F);                     // mixture weight
+    *pdf = fmaxf(pdf_diff * NoL * PI_R + pdf_spec * (D * NoH) / (4.0f * VoH), EPS_F);
 
     /* --- 5. Full BRDF evaluation ----------------------------- */
     /* 5a. Schlick Fresnel F */
