@@ -267,7 +267,7 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
 
   // 3) Metallic, roughness, occlusion from ORM
   float metal     = clampd(bsdf.metallic,  0.0, 1.0);
-  float roughness = clampd(bsdf.roughness, 0.02,1.0);
+  float roughness = clampd(bsdf.roughness, 0.04,1.0);
   *occlusion = 1.0f;
   if (bsdf.orm_idx >= 0) {
     Vector4D orm = sample_texture(textures[bsdf.orm_idx], uv);

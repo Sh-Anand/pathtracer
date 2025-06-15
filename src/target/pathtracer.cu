@@ -39,7 +39,7 @@ DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt
       // shadow test
       Ray shadow; shadow.o = hit_p; shadow.d = wi; shadow.inv_d = vector3d_rcp(wi);
       shadow.min_t = EPS_F;
-      shadow.max_t = distToL;
+      shadow.max_t = distToL - EPS_F;
       if (!has_intersect(pt->bvh, &shadow)) {
         // BRDF eval and PDF of sampling that same wi via BSDF
         Vector3D f_val = f(pt->bsdfs, pt->textures, isect, w_out, wi, &occlusion);
@@ -200,7 +200,11 @@ DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_
     float costheta = fmaxf(vector3d_dot(S.n_v, vector3d_unit(vector3d_sub(S.x_s, S.x_v))), 0.0f);
     float cospdf = S.pdf > 0 ? costheta / S.pdf : 0.0f;
     Vector3D L = vector3d_add(S.emittance, vector3d_mul(vector3d_scale(S.bsdf_f, cospdf), S.L));
-    pt->sampleBuffer.data[idx] = L;
+    pt->sampleBuffer.pixel[idx] = {
+      .data = L,
+      .normal = S.n_v,
+      .depth = S.z_v
+    };
   }
 }
 
@@ -282,5 +286,9 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
   SampleGI S = Rs.z;
   float costheta = fmaxf(vector3d_dot(q.n_v, vector3d_unit(vector3d_sub(S.x_s, q.x_v))), 0.0f);
   Vector3D L = vector3d_add(q.emittance, vector3d_mul(vector3d_scale(q.bsdf_f, costheta), vector3d_scale(S.L, Rs.W)));
-  pt->sampleBuffer.data[idx] = L;
+  pt->sampleBuffer.pixel[idx] = {
+    .data = L,
+    .normal = S.n_v,
+    .depth = S.z_v
+  };
 }

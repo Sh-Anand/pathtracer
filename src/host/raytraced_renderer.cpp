@@ -104,7 +104,7 @@ void RaytracedRenderer::save_image(const std::string filename) {
     // Write pixels bottom→top
     for (int y = 0; y < h; ++y) {
       for (int x = 0; x < w; ++x) {
-        Vector3D c = buf.data[x + y * w];  // HDR radiance
+        Vector3D c = buf.pixel[x + y * w].data;  // HDR radiance
 
         // 1) Exposure & key (middle gray)
         c.x *= exposure * key;

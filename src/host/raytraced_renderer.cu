@@ -74,15 +74,15 @@ void RaytracedRenderer::gpu_raytrace() {
     std::cout << "Rays per second: " << (tot_rays_traced / duration) << std::endl;
     std::cout << "Copying target SampleBuffer to host, width: " << width << ", height: " << height << std::endl;
     )
-    auto data_tmp = pt_host->sampleBuffer.data;
-    pt_host->sampleBuffer.data = (Vector3D*) malloc(width * height * sizeof(Vector3D));
-    CUDA_ERR(cudaMemcpy(pt_host->sampleBuffer.data, data_tmp, width * height * sizeof(Vector3D), cudaMemcpyDeviceToHost));
-    
+    auto data_tmp = pt_host->sampleBuffer.pixel;
+    pt_host->sampleBuffer.pixel = (PixelData*) malloc(width * height * sizeof(PixelData));
+    CUDA_ERR(cudaMemcpy(pt_host->sampleBuffer.pixel, data_tmp, width * height * sizeof(PixelData), cudaMemcpyDeviceToHost));
+
     // write_to_framebuffer
     frameBuffer = pt_host->sampleBuffer;
 
     // restore back
-    pt_host->sampleBuffer.data = data_tmp;
+    pt_host->sampleBuffer.pixel = data_tmp;
 }
 
 void RaytracedRenderer::update_camera(){
@@ -154,8 +154,8 @@ void RaytracedRenderer::copy_host_device_pt(std::vector<CudaLight> &lights, std:
     CUDA_ERR(cudaMemcpy(bvh_cuda, bvh, sizeof(BVHCuda), cudaMemcpyHostToDevice));
     pt_host->bvh = bvh_cuda;
 
-    CUDA_ERR(cudaMalloc(&pt_host->sampleBuffer.data, frameBuffer.w * frameBuffer.h * sizeof(Vector3D)));
-    
+    CUDA_ERR(cudaMalloc(&pt_host->sampleBuffer.pixel, frameBuffer.w * frameBuffer.h * sizeof(PixelData)));
+
     CUDA_ERR(cudaMalloc(&pt_host->initialSampleBuffer, sizeof(Sample) * frameBuffer.w * frameBuffer.h));
     CUDA_ERR(cudaMalloc(&pt_host->temporalReservoirBufferDirect, sizeof(Reservoir) * frameBuffer.w * frameBuffer.h));
     CUDA_ERR(cudaMalloc(&pt_host->temporalReservoirBufferGI, sizeof(Reservoir) * frameBuffer.w * frameBuffer.h));

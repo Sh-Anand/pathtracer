@@ -13,9 +13,15 @@
 
 #pragma once
 typedef struct {
+  Vector3D data;
+  Vector3D normal;
+  float depth;
+} PixelData;
+typedef struct {
   size_t w;
   size_t h;
-  Vector3D* data;
+  PixelData* pixel;
+
 } HDRImageBuffer;
 typedef struct {
     uint16_t max_ray_depth; ///< maximum allowed ray depth (applies to all rays)
