@@ -1,55 +1,31 @@
 #include "application.h"
 
-#include "parser/loader.h"
-
-#include <cmath>
-#include <iostream>
 #include <unistd.h>
 
 #define msg(s) cerr << "[PathTracer] " << s << endl;
 
-Application::Application(AppConfig config) {
+Application::Application(AppConfig config, string sceneFilePath, int w, int h) {
   renderer = new RaytracedRenderer (
     config.pathtracer_accumulate_bounces,
     config.pathtracer_max_ray_depth,
     config.pathtracer_ns_area_light,
-    config.pathtracer_filename,
     config.debug,
     config.restir
   );
-  filename = config.pathtracer_filename;
-
-  texcoords.clear();
-  vertices.clear();
-  normals.clear();
-  tangents.clear();
-  bsdfs.clear();
-  lights.clear();
-  textures.clear();
-  
-  texcoords.push_back(Vector2D{0, 0}); // dummy texcoord for all non-textured materials
-  tangents.push_back(Vector4D{0,0,0,0}); // dummy tangent for all non-bump mapped materials
+  loader = new Loader(w, h, sceneFilePath);
+  screenW = w;
+  screenH = h;
+  renderer->set_frame_size(w, h);
+  renderer->set_camera(&loader->parser.camera);
+  renderer->set_frame_size(screenW, screenH);
+  renderer->build_accel(loader->parser.primitives, loader->parser.vertices, loader->parser.normals, loader->parser.texcoords, loader->parser.tangents);
 }
 
 Application::~Application() {
   delete renderer;
+  delete loader;
 }
 
-void Application::init() {
-  screenW = 800; screenH = 600; // Default value
-}
-
-void Application::resize(size_t w, size_t h) {
-  screenW = w;
-  screenH = h;
-  renderer->set_frame_size(w, h);
-}
-
-void Application::set_up_pathtracer() {
-  renderer->set_camera(&camera);
-  renderer->set_frame_size(screenW, screenH);
-  renderer->build_accel(primitives, vertices, normals, texcoords, tangents);
-}
 
 void usage(const char *binaryName) {
   printf("Usage: %s [options] <scenefile>\n", binaryName);
@@ -72,7 +48,7 @@ int main(int argc, char **argv) {
   // get the options
   AppConfig config;
   int opt;
-  size_t w = 0, h = 0, x = -1, y = 0, dx = 0, dy = 0;
+  size_t w = 0, h = 0;
   string output_file_name, cam_settings = "";
   string sceneFilePath;
   while ((opt = getopt(argc, argv, "l:m:o:h:f:r:d:R:g:")) !=
@@ -119,41 +95,47 @@ int main(int argc, char **argv) {
 
     sceneFilePath = argv[optind];
   }
-  string sceneFile = sceneFilePath.substr(sceneFilePath.find_last_of('/') + 1);
-  sceneFile = sceneFile.substr(0, sceneFile.find(".dae"));
-  config.pathtracer_filename = sceneFile;
 
   w = w ? w : 800; // default width
   h = h ? h : 600; // default height
 
   // Load scene
   cout << "[PathTracer] Loading scene from " << sceneFilePath << endl;
-  Loader* loader = new Loader(w, h, sceneFilePath);
-  
+
   // create application
-  Application *app = new Application(config);
-
-  // write straight to file without opening a window if -f option provided
-  app->init();
-
-  if (w && h) {
-    app->resize(w, h);
-  }
-
-  app->bsdfs = loader->parser.bsdfs;
-  app->camera = loader->parser.camera;
-  app->lights = loader->parser.lights;
-  app->normals = loader->parser.normals;
-  app->primitives = loader->parser.primitives;
-  app->tangents = loader->parser.tangents;
-  app->texcoords = loader->parser.texcoords;
-  app->textures = loader->parser.textures;
-  app->vertices = loader->parser.vertices;
+  Application *app = new Application(config, sceneFilePath, w, h);
 
   if(config.total_image_generated == 1){
-    app->render_to_file(output_file_name, x, y, dx, dy);
+    app->render_to_file(output_file_name);
   }else{
-    app->render_to_video(output_file_name, x, y, dx, dy, config.total_image_generated);
+    app->render_to_video(output_file_name, config.total_image_generated);
   }
   return 0;
+}
+
+void Application::render_to_file(std::string filename) { 
+    renderer->set_cuda_camera();
+    renderer->copy_host_device_pt(loader->parser.lights, loader->parser.bsdfs, loader->parser.textures);
+    renderer->render_to_file(filename); 
+}
+
+void Application::render_to_video(std::string filename, size_t num_images){
+  const double TOTAL_ROTATION = M_PI * 2;
+  double angle_per_image = TOTAL_ROTATION / (double)num_images;
+  size_t dot_pos = filename.find_last_of('.');
+  auto name = filename.substr(0, dot_pos);
+  auto dot_extension = filename.substr(dot_pos);
+
+  renderer->set_cuda_camera();
+  renderer->copy_host_device_pt(loader->parser.lights, loader->parser.bsdfs, loader->parser.textures);
+
+  for(size_t i = 0; i < num_images; ++i){
+    std::ostringstream oss;
+    oss << std::setw(4) << std::setfill('0') << i;
+    auto filename_per_image = name + oss.str() + dot_extension;
+    loader->parser.camera.rotate_by(0, angle_per_image);
+    renderer->set_cuda_camera();
+    renderer->update_camera();
+    renderer->render_to_file(filename_per_image); 
+  }
 }

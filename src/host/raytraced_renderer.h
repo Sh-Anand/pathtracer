@@ -17,7 +17,6 @@ public:
 
   RaytracedRenderer(bool accumulate = 1,
              size_t max_ray_depth = 4, size_t ns_area_light = 1,
-             std::string filename = "",
              bool debug = false,
              bool restir = false);
 
@@ -25,7 +24,7 @@ public:
 
   void set_frame_size(size_t width, size_t height);
 
-  void render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy);
+  void render_to_file(std::string filename);
 
   void set_cuda_camera();
 
@@ -55,8 +54,6 @@ public:
 
   BVHCuda* bvh;             ///< BVH accelerator aggregate for cuda
   HDRImageBuffer frameBuffer;       ///< frame buffer
-
-  std::string filename;
 
   bool debug;
   bool restir;

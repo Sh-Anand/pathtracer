@@ -16,7 +16,6 @@ using std::max;
 
 RaytracedRenderer::RaytracedRenderer(bool accumulate,
                        size_t max_ray_depth, size_t ns_area_light,
-                       std::string filename,
                        bool debug,
                        bool restir) {
   pt_host = (PathTracer*) malloc(sizeof(PathTracer));
@@ -25,7 +24,6 @@ RaytracedRenderer::RaytracedRenderer(bool accumulate,
   pt_host->ns_area_light = ns_area_light;                        // Number of samples for area light
   pt_host->accumulate = accumulate;
 
-  this->filename = filename;
 
   this->debug = debug;
   this->restir = restir;
@@ -58,7 +56,7 @@ void RaytracedRenderer::set_cuda_camera(){
   pt_host->camera.vFov = camera->vFov;
 }
 
-void RaytracedRenderer::render_to_file(std::string filename, size_t x, size_t y, size_t dx, size_t dy) {
+void RaytracedRenderer::render_to_file(std::string filename) {
   // launch threads
   DEBUG(debug,
   fprintf(stdout, "[PathTracer] Rendering... "); fflush(stdout);
