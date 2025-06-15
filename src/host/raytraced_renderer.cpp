@@ -11,6 +11,12 @@
 #include <fstream>
 #include <cmath>
 
+#include <OpenEXR/ImfOutputFile.h>
+#include <OpenEXR/ImfHeader.h>
+#include <OpenEXR/ImfChannelList.h>
+#include <OpenEXR/ImfFrameBuffer.h>
+#include <OpenEXR/ImfIO.h>
+
 using std::min;
 using std::max;
 
@@ -79,59 +85,58 @@ static inline float aces_film(float x) {
 }
 
 void RaytracedRenderer::save_image(const std::string filename) {
-    // Tonemapping parameters (good defaults for a 4K laptop display)
-    const float gamma    = 2.2f;    // display gammaz
-    const float level    = 1.0f;    // exposure stops: final exposure = 2^level
-    const float key      = 0.18f;   // middle gray
-    const float wht      = 5.0f;    // white point (scene brightness clamp)
+    const auto &buf = frameBuffer;
+    int W = int(buf.w), H = int(buf.h);
 
-    // Precompute exposure and white‐point normalization
-    float exposure   = std::pow(2.0f, level);
-    float whiteScale = 1.0f / aces_film(wht * key * exposure);
+    // 1) Build the EXR header
+    Imf::Header header(W, H);
+    auto &ch = header.channels();
+    ch.insert("R",  Imf::Channel(Imf::FLOAT));
+    ch.insert("G",  Imf::Channel(Imf::FLOAT));
+    ch.insert("B",  Imf::Channel(Imf::FLOAT));
+    ch.insert("NX", Imf::Channel(Imf::FLOAT));
+    ch.insert("NY", Imf::Channel(Imf::FLOAT));
+    ch.insert("NZ", Imf::Channel(Imf::FLOAT));
+    ch.insert("Z",  Imf::Channel(Imf::FLOAT));
 
-    auto &buf = frameBuffer;
-    int w = buf.w, h = buf.h;
+    // 2) Create the file
+    Imf::OutputFile file(filename.c_str(), header);
 
-    std::ofstream ofs(filename, std::ios::binary);
-    if (!ofs) throw std::runtime_error("Could not open " + filename);
+    // 3) Prepare the frame buffer with flipped Y
+    Imf::FrameBuffer frameBufferExr;
+    const size_t pixelSize = sizeof(PixelData);
+    const size_t lineSize  = pixelSize * W;
 
-    // PFM header: "PF" = color, width height, scale (neg = little‐endian)
-    ofs << "PF\n" << w << " " << h << "\n" << "-1.0\n";
-    DEBUG(debug,
-    cout << "Writing " << filename << "...\n";
-    cout << "Image size " << w << " " << h << "\n";
-    )
-    // Write pixels bottom→top
-    for (int y = 0; y < h; ++y) {
-      for (int x = 0; x < w; ++x) {
-        Vector3D c = buf.pixel[x + y * w].data;  // HDR radiance
+    // We want buf.pixel[y=0] (first row in memory) → EXR scanline H-1,
+    // and buf.pixel[y=H-1] → scanline 0.  So:
+    char *base = reinterpret_cast<char*>(buf.pixel);
 
-        // 1) Exposure & key (middle gray)
-        c.x *= exposure * key;
-        c.y *= exposure * key;
-        c.z *= exposure * key;
+    auto insertSliceFlipped = [&](const char *name, size_t offset){
+      // start pointer = beginning of *last* row + offset
+      char *start = base + (H - 1) * lineSize + offset;
+      // xStride = +pixelSize (move right in memory), yStride = -lineSize (move up)
+      frameBufferExr.insert(name, Imf::Slice(
+        Imf::FLOAT,
+        start,
+        pixelSize,
+        -lineSize
+      ));
+    };
 
-        // 2) ACES filmic curve + white‐point normalization
-        c.x = aces_film(c.x) * whiteScale;
-        c.y = aces_film(c.y) * whiteScale;
-        c.z = aces_film(c.z) * whiteScale;
+    // data.x/y/z → R/G/B
+    insertSliceFlipped("R", offsetof(PixelData, data)   + sizeof(float)*0);
+    insertSliceFlipped("G", offsetof(PixelData, data)   + sizeof(float)*1);
+    insertSliceFlipped("B", offsetof(PixelData, data)   + sizeof(float)*2);
+    // normal.x/y/z → NX/NY/NZ
+    insertSliceFlipped("NX", offsetof(PixelData, normal) + sizeof(float)*0);
+    insertSliceFlipped("NY", offsetof(PixelData, normal) + sizeof(float)*1);
+    insertSliceFlipped("NZ", offsetof(PixelData, normal) + sizeof(float)*2);
+    // depth → Z
+    insertSliceFlipped("Z", offsetof(PixelData, depth));
 
-        // 3) Clamp to [0,1]
-        c.x = std::clamp(c.x, 0.0f, 1.0f);
-        c.y = std::clamp(c.y, 0.0f, 1.0f);
-        c.z = std::clamp(c.z, 0.0f, 1.0f);
-
-        // 4) Gamma‐encode to sRGB
-        c.x = std::pow(c.x, 1.0f / gamma);
-        c.y = std::pow(c.y, 1.0f / gamma);
-        c.z = std::pow(c.z, 1.0f / gamma);
-
-        // 5) Write as three floats (R, G, B)
-        ofs.write(reinterpret_cast<const char*>(&c.x), sizeof(float));
-        ofs.write(reinterpret_cast<const char*>(&c.y), sizeof(float));
-        ofs.write(reinterpret_cast<const char*>(&c.z), sizeof(float));
-      }
-    }
-
-    ofs.close();
+    // 4) Write out all scanlines
+    file.setFrameBuffer(frameBufferExr);
+    file.writePixels(H);
 }
+
+

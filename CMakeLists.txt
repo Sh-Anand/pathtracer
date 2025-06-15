@@ -26,11 +26,13 @@ set(APPLICATION_SOURCE
     src/host/application.cpp
 )
 
-#assimp
 find_package(assimp REQUIRED)
+find_package(OpenEXR REQUIRED)
 
 add_executable(pathtracer ${APPLICATION_SOURCE})
 target_include_directories(pathtracer PUBLIC src)
-target_link_libraries(pathtracer assimp::assimp)
+target_link_libraries(pathtracer
+    assimp::assimp
+    OpenEXR::OpenEXR)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
