@@ -88,6 +88,20 @@ void RaytracedRenderer::save_image(const std::string filename) {
     const auto &buf = frameBuffer;
     int W = int(buf.w), H = int(buf.h);
 
+    for (size_t i = 0; i < W * H; ++i) {
+        // Apply ACES filmic curve to each pixel
+        PixelData &pixel = buf.pixel[i];
+        pixel.data.x = aces_film(pixel.data.x);
+        pixel.data.x = std::clamp(pixel.data.x, 0.0f, 1.0f);
+        pixel.data.x = pow(pixel.data.x, 1.0f / 2.2f); // gamma correction
+        pixel.data.y = aces_film(pixel.data.y);
+        pixel.data.y = std::clamp(pixel.data.y, 0.0f, 1.0f);
+        pixel.data.y = pow(pixel.data.y, 1.0f / 2.2f); // gamma correction
+        pixel.data.z = aces_film(pixel.data.z);
+        pixel.data.z = std::clamp(pixel.data.z, 0.0f, 1.0f);
+        pixel.data.z = pow(pixel.data.z, 1.0f / 2.2f); // gamma correction
+    }
+
     // 1) Build the EXR header
     Imf::Header header(W, H);
     auto &ch = header.channels();
