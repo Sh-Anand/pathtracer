@@ -45,6 +45,8 @@ struct Reservoir {
 // precompute thresholds
 static constexpr float COS_ANGLE_THRESH = 0.906307f; // cos(25°)
 static constexpr float DEPTH_THRESH    = 0.05f;      // 5%
+static constexpr float ILLUM_DELTA_THRESH = 1.4f; // 1.4x illumination difference
+static constexpr float ILLUM_DELTA_THRESH_INV = 1 / ILLUM_DELTA_THRESH; // inverse threshold for illumination ratio
 
 FORCE_INLINE bool are_geometrically_similar(const SampleGI *s1, const SampleGI *s2) {
     // 1) Angle test: normals within 25°
@@ -56,6 +58,11 @@ FORCE_INLINE bool are_geometrically_similar(const SampleGI *s1, const SampleGI *
     //    (Assuming s1.z_v and s2.z_v are camera‑space depths)
     float depthRatio = s1->z_v / max(s2->z_v, 0.001f); // avoid division by zero
     if (depthRatio < 1.0f - DEPTH_THRESH || depthRatio > 1.0f + DEPTH_THRESH)
+        return false;
+
+    // 3) Illum delta test: ≤ 2x illumination difference
+    float ratio = illum(s1->L) / max(illum(s2->L), 0.001f); // avoid division by zero
+    if (ratio > ILLUM_DELTA_THRESH || ratio < ILLUM_DELTA_THRESH_INV)
         return false;
 
     return true;
