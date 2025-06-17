@@ -60,7 +60,7 @@ typedef struct {
     uint16_t width;
     uint16_t height;
     uint8_t channels;
-    uint8_t * data;
+    const uint8_t * data;
 } CudaTexture;
 
 DEVICE static inline Vector4D sample_texture(const CudaTexture tex, const Vector2D uv) {

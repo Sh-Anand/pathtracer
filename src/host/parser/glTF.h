@@ -343,8 +343,9 @@ class glTFParser : public Parser {
       ctex.width = image.width;
       ctex.height = image.height;
       ctex.channels = image.component;
-      ctex.data = (uint8_t *) malloc(image.width * image.height * image.component);
-      memcpy(ctex.data, image.image.data(), image.width * image.height * image.component);
+      uint8_t *data = (uint8_t *) malloc(image.width * image.height * image.component);
+      memcpy(data, image.image.data(), image.width * image.height * image.component);
+      ctex.data = data;
       textures.push_back(ctex);
     }
   }

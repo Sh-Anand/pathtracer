@@ -65,61 +65,102 @@ private:
       return M;
   }
 
-  int LoadTexture(const aiString &path)
+  /* -------------------------------------------------------------------------- */
+  /* Helper: repeatedly halve until ≤ 256                                       */
+  /* -------------------------------------------------------------------------- */
+  static uint8_t* downscale_to_max256(uint8_t* src,
+                                      int&      w,
+                                      int&      h,
+                                      int       comp)
   {
-    static std::unordered_map<std::string, int> cache;
-    std::string key = path.C_Str();
-    auto it = cache.find(key);
-    if (it != cache.end())
-      return it->second;
+      while (w > 256 || h > 256)         /* keep halving both axes             */
+      {
+          const int newW = w >> 1;       /* assume w,h are even (true for 2048)*/
+          const int newH = h >> 1;
+          const size_t dstSz = (size_t)newW * newH * comp;
+          uint8_t* dst = (uint8_t*)malloc(dstSz);
 
-    CudaTexture tex;
-    unsigned char *data = nullptr;
-    int w, h, comp;
+          for (int y = 0; y < newH; ++y)
+          {
+              for (int x = 0; x < newW; ++x)
+              {
+                  const size_t dstOfs = ( (size_t)y * newW + x ) * comp;
 
-    if (key.size() > 0 && key[0] == '*') {
-      // embedded
-      int texIdx = std::atoi(key.c_str() + 1);
-      aiTexture *at = scene_->mTextures[texIdx];
-      if (at->mHeight == 0) {
-        // compressed (PNG/JPEG) in at->pcData, length = at->mWidth
-        data = stbi_load_from_memory(
-            reinterpret_cast<unsigned char *>(at->pcData),
-            at->mWidth, &w, &h, &comp, 0);
+                  const size_t srcOfs00 = ( ((size_t)(y*2)   * w + (x*2)  ) * comp );
+                  const size_t srcOfs01 = srcOfs00 + comp;
+                  const size_t srcOfs10 = srcOfs00 + (size_t)w * comp;
+                  const size_t srcOfs11 = srcOfs10 + comp;
+
+                  for (int c = 0; c < comp; ++c)
+                  {
+                      uint32_t sum =
+                          src[srcOfs00 + c] + src[srcOfs01 + c] +
+                          src[srcOfs10 + c] + src[srcOfs11 + c];
+                      dst[dstOfs + c] = (uint8_t)(sum >> 2);   /* ÷4 */
+                  }
+              }
+          }
+
+          free(src);                     /* recycle */
+          src = dst;  w = newW;  h = newH;
       }
-      else {
-        // uncompressed RGBA8888 in at->pcData, size = mWidth*mHeight*4
-        w = at->mWidth;
-        h = at->mHeight;
-        comp = 4;
-        size_t sz = size_t(w) * h * comp;
-        data = (unsigned char *)malloc(sz);
-        memcpy(data, at->pcData, sz);
-      }
-    }
-    else {
-      // external file on disk
-      data = stbi_load(path.C_Str(), &w, &h, &comp, 0);
-    }
-
-    if (!data) {
-      std::cerr << "Failed to load texture " << key << std::endl;
-      return -1;
-    }
-
-    tex.width = w;
-    tex.height = h;
-    tex.channels = comp;
-    size_t sz = size_t(w) * h * comp;
-    tex.data = (uint8_t *)malloc(sz);
-    memcpy(tex.data, data, sz);
-    stbi_image_free(data);
-
-    int idx = (int)textures.size();
-    textures.push_back(tex);
-    cache[key] = idx;
-    return idx;
+      return src;
   }
+
+  /* -------------------------------------------------------------------------- */
+  /*  Texture loader with built-in down-sampler                                 */
+  /* -------------------------------------------------------------------------- */
+  int LoadTexture(const aiString& path)
+  {
+      static std::unordered_map<std::string, int> cache;
+      std::string key = path.C_Str();
+      auto it = cache.find(key);
+      if (it != cache.end()) return it->second;
+
+      /* ---------- decode (Assimp embedded or external) -------------------- */
+      CudaTexture tex;
+      unsigned char* data = nullptr;
+      int w, h, comp;
+
+      if (!key.empty() && key[0] == '*') {
+          /* Embedded -------------------------------------------------------- */
+          int texIdx = std::atoi(key.c_str() + 1);
+          aiTexture* at = scene_->mTextures[texIdx];
+          if (at->mHeight == 0) {
+              data = stbi_load_from_memory(reinterpret_cast<unsigned char*>(at->pcData),
+                                          at->mWidth, &w, &h, &comp, 0);
+          } else {
+              w = at->mWidth;  h = at->mHeight;  comp = 4;
+              size_t sz = (size_t)w * h * comp;
+              data = (unsigned char*)malloc(sz);
+              memcpy(data, at->pcData, sz);
+          }
+      } else {
+          /* External -------------------------------------------------------- */
+          data = stbi_load(path.C_Str(), &w, &h, &comp, 0);
+      }
+
+      if (!data) { std::cerr << "Failed to load texture " << key << '\n'; return -1; }
+
+      /* ---------- cheap down-sample to ≤256×256 --------------------------- */
+      data = downscale_to_max256(data, w, h, comp);
+
+      /* ---------- upload to CPU-side texture array ------------------------ */
+      tex.width    = (uint16_t)w;
+      tex.height   = (uint16_t)h;
+      tex.channels = (uint8_t)comp;
+      size_t sz    = (size_t)w * h * comp;
+      uint8_t *data_tex = (uint8_t*)malloc(sz);
+      memcpy(data_tex, data, sz);
+      tex.data = data_tex;
+      stbi_image_free(data);
+
+      int idx = (int)textures.size();
+      textures.push_back(tex);
+      cache[key] = idx;
+      return idx;
+  }
+
 
   void ParseMaterialsAndTextures(const aiScene *scene)
   {
@@ -325,6 +366,8 @@ private:
         L.area = vector3d_norm(vector3d_cross(vector3d_sub(p1, p0), vector3d_sub(p2, p0))) * 0.5f;
         L.radiance = M.emission;
         L.is_point_light = false;
+        L.radius = 0.0f;
+        L.position = Vector3D{0, 0, 0};
         lights.push_back(L);
       }
     }
