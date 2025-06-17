@@ -342,7 +342,7 @@ class glTFParser : public Parser {
       CudaTexture ctex;
       ctex.width = image.width;
       ctex.height = image.height;
-      ctex.has_alpha = (image.component == 4);
+      ctex.channels = image.component;
       ctex.data = (uint8_t *) malloc(image.width * image.height * image.component);
       memcpy(ctex.data, image.image.data(), image.width * image.height * image.component);
       textures.push_back(ctex);

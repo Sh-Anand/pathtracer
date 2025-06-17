@@ -109,7 +109,7 @@ private:
 
     tex.width = w;
     tex.height = h;
-    tex.has_alpha = (comp == 4);
+    tex.channels = comp;
     size_t sz = size_t(w) * h * comp;
     tex.data = (uint8_t *)malloc(sz);
     memcpy(tex.data, data, sz);

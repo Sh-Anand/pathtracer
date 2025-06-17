@@ -59,7 +59,7 @@ typedef struct {
 typedef struct {
     uint16_t width;
     uint16_t height;
-    bool has_alpha;
+    uint8_t channels;
     uint8_t * data;
 } CudaTexture;
 
@@ -76,24 +76,15 @@ DEVICE static inline Vector4D sample_texture(const CudaTexture tex, const Vector
     v = max(0, min(v, tex.height - 1));
 
     // compute byte index
-    int comps = tex.has_alpha ? 4 : 3;
-    size_t idx = (size_t(v) * tex.width + size_t(u)) * comps;
+    size_t idx = (size_t(v) * tex.width + size_t(u)) * tex.channels;
     const uint8_t *base = tex.data;
 
     uint8_t c[4];
-    if (tex.has_alpha) {
-    // RGBA8
-    c[0] = base[idx + 0];
-    c[1] = base[idx + 1];
-    c[2] = base[idx + 2];
-    c[3] = base[idx + 3];
-    } else {
-    // RGB8 → treat alpha = 255
-    c[0] = base[idx + 0];
-    c[1] = base[idx + 1];
-    c[2] = base[idx + 2];
-    c[3] = 255;
-    }
+    c[0] = base[idx];
+    c[1] = tex.channels >= 2 ? base[idx + 1] : base[idx];
+    c[2] = tex.channels >= 3 ? base[idx + 2] : base[idx];
+    c[3] = tex.channels >= 4 ? base[idx + 3] : 255; // alpha channel
+
     return Vector4D{c[0]*RGB_R, c[1]*RGB_R, c[2]*RGB_R, c[3]*RGB_R};
 }
 
