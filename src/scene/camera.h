@@ -1,8 +1,6 @@
 #ifndef CGL_CAMERA_H
 #define CGL_CAMERA_H
 
-#include <iostream>
-
 #include "util/matrix.h"
 
 #include "math.h"
@@ -76,7 +74,7 @@ HOST_DEVICE inline float d_radians(float degrees) {
   return degrees * (PI / 180.0);
 }
 
-DEVICE static inline Ray generate_ray(CudaCamera *cam, float x, float y) {
+DEVICE static inline Ray generate_ray(const CudaCamera *cam, float x, float y) {
   Vector3D sensor = Vector3D{(x - 0.5f) * 2 * tanf(d_radians(cam->hFov) * 0.5f), (y - 0.5f) * 2 * tanf(d_radians(cam->vFov) * 0.5f),-1};
   Vector3D dir = matrix3x3_vector_multiply(&cam->c2w, &sensor);
   Ray camera_ray;
@@ -85,6 +83,12 @@ DEVICE static inline Ray generate_ray(CudaCamera *cam, float x, float y) {
 
   return camera_ray;
 }
+
+typedef struct {
+  Vector3D data;
+  Vector3D normal;
+  float depth;
+} PixelData;
 
 
 #endif // CGL_CAMERA_H

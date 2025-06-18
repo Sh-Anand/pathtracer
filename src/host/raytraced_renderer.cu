@@ -1,172 +1,122 @@
 #include "scene/camera.h"
-#include "target/pathtracer.h"
 #include "raytraced_renderer.h"
 
 #include <cstddef>
 #include <cuda_runtime.h>
+#include <filesystem>
 
-#include "scene/light.h"
+#include "scene/serializer.h"
 
-#include "target/pathtracer.cu"
+// #include "target/pathtracer.cu"
 
-__global__ void kernel_raytrace_temporal(PathTracer* pt, uint16_t width, uint16_t height, bool restir) {
-    uint16_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
-    uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
-    if (x >= width || y >= height) return;
-    raytrace_pixel_temporal_sample(pt, x, y, restir);
-}
+// void RaytracedRenderer::gpu_raytrace() {
+//     uint16_t width = w;
+//     uint16_t height = h;
 
-__global__ void kernel_spatial_sample(PathTracer* pt, uint16_t width, uint16_t height) {
-    uint16_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
-    uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
-    if (x >= width || y >= height) return;
-    spatial_resampling(pt, x,y);
-}
-
-void RaytracedRenderer::gpu_raytrace() {
-    uint16_t width = frameBuffer.w;
-    uint16_t height = frameBuffer.h;
-
-    dim3 blockDim(16, 16);
-    dim3 gridDim(
-        (width + blockDim.x - 1) / blockDim.x,
-        (height + blockDim.y - 1) / blockDim.y
-    );
+//     dim3 blockDim(16, 16);
+//     dim3 gridDim(
+//         (width + blockDim.x - 1) / blockDim.x,
+//         (height + blockDim.y - 1) / blockDim.y
+//     );
     
+//     DEBUG(debug, 
+//     std::cout << "Raytracing on GPU..." << std::endl;
+//     std::cout << "Frame size: " << width << " x " << height << std::endl;
+//     std::cout << "BlockDim: " << blockDim.x << " x " << blockDim.y << std::endl;
+//     std::cout << "GridDim: " << gridDim.x << " x " << gridDim.y << std::endl;
+//     )
+
+//     // cudaDeviceSetLimit(cudaLimitStackSize, 4096);
+
+//     std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now(); 
+
+//     kernel_raytrace_temporal<<<gridDim, blockDim>>>(width, height, restir);
+//     CUDA_ERR(cudaGetLastError());
+//     CUDA_ERR(cudaDeviceSynchronize());
+
+//     if (restir) {
+//         kernel_spatial_sample<<<gridDim, blockDim>>>(width, height);
+//         CUDA_ERR(cudaGetLastError());
+//         CUDA_ERR(cudaDeviceSynchronize());
+//     }
+
+//     std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
+//     float duration = (std::chrono::duration<float>(t1 - t0)).count();
+//     DEBUG(debug,
+//     std::cout << "Raytracing on GPU done!" << std::endl;
+//     std::cout << "Time: " << duration << " sec" << std::endl;
+//     )
+// }
+
+void RaytracedRenderer::copy_host_device_pt(std::vector<CudaPrimitive> &primitives, 
+                                            std::vector<Vector3D> &vertices,
+                                            std::vector<Vector3D> &normals, 
+                                            std::vector<Vector2D> &texcoords,
+                                            std::vector<Vector4D> &tangents, 
+                                            std::vector<CudaLight> &lights, 
+                                            std::vector<CudaBSDF> &bsdfs, 
+                                            std::vector<CudaTexture> &textures) {
+
+    // build BVH //
     DEBUG(debug, 
-    std::cout << "Raytracing on GPU..." << std::endl;
-    std::cout << "Frame size: " << width << " x " << height << std::endl;
-    std::cout << "BlockDim: " << blockDim.x << " x " << blockDim.y << std::endl;
-    std::cout << "GridDim: " << gridDim.x << " x " << gridDim.y << std::endl;
+    fprintf(stdout, "[PathTracer] Building BVH from %lu primitives... ", primitives.size()); 
+    fflush(stdout);
     )
+    std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now();
 
-    // cudaDeviceSetLimit(cudaLimitStackSize, 4096);
+    std::vector<BVHNode> nodes;
 
-    std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now(); 
-
-    kernel_raytrace_temporal<<<gridDim, blockDim>>>(pt_target, width, height, restir);
-    CUDA_ERR(cudaGetLastError());
-    CUDA_ERR(cudaDeviceSynchronize());
-
-    if (restir) {
-        kernel_spatial_sample<<<gridDim, blockDim>>>(pt_target, width, height);
-        CUDA_ERR(cudaGetLastError());
-        CUDA_ERR(cudaDeviceSynchronize());
-    }
-
+    create_bvh(primitives, vertices, normals, texcoords, tangents, nodes, debug, 2);
     std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
-    float duration = (std::chrono::duration<float>(t1 - t0)).count();
-    DEBUG(debug,
-    std::cout << "Raytracing on GPU done!" << std::endl;
-    std::cout << "Time: " << duration << " sec" << std::endl;
+    DEBUG(debug, 
+    fprintf(stdout, "Done! (%.4f sec)\n", (std::chrono::duration<float>(t1 - t0)).count());
     )
-    
-    CUDA_ERR(cudaMemcpy(pt_host, pt_target, sizeof(PathTracer), cudaMemcpyDeviceToHost));
-    uint8_t *rays_traced = (uint8_t *) malloc(sizeof(uint8_t) * width * height);
-    CUDA_ERR(cudaMemcpy(rays_traced, pt_host->rays_traced, sizeof(uint8_t) * width * height, cudaMemcpyDeviceToHost));
 
-    size_t tot_rays_traced = 0;
-    for (size_t i = 0; i < width * height; i++)
-        tot_rays_traced += rays_traced[i];
-    free(rays_traced);
     DEBUG(debug,
-    std::cout << "Total rays traced: " << tot_rays_traced << std::endl;
-    std::cout << "Rays per second: " << (tot_rays_traced / duration) << std::endl;
-    std::cout << "Copying target SampleBuffer to host, width: " << width << ", height: " << height << std::endl;
-    )
-    auto data_tmp = pt_host->sampleBuffer.pixel;
-    pt_host->sampleBuffer.pixel = (PixelData*) malloc(width * height * sizeof(PixelData));
-    CUDA_ERR(cudaMemcpy(pt_host->sampleBuffer.pixel, data_tmp, width * height * sizeof(PixelData), cudaMemcpyDeviceToHost));
-
-    // write_to_framebuffer
-    frameBuffer = pt_host->sampleBuffer;
-
-    // restore back
-    pt_host->sampleBuffer.pixel = data_tmp;
-}
-
-void RaytracedRenderer::update_camera(){
-    cudaMemcpy(pt_target, pt_host, sizeof(PathTracer), cudaMemcpyHostToDevice);
-    CUDA_ERR(cudaGetLastError());
-    CUDA_ERR(cudaDeviceSynchronize());
-}
-
-void RaytracedRenderer::build_accel(std::vector<CudaPrimitive> &primitives, 
-                                    std::vector<Vector3D> &vertices,
-                                    std::vector<Vector3D> &normals, 
-                                    std::vector<Vector2D> &texcoords,
-                                    std::vector<Vector4D> &tangents) {
-  // build BVH //
-  DEBUG(debug, 
-  fprintf(stdout, "[PathTracer] Building BVH from %lu primitives... ", primitives.size()); 
-  fflush(stdout);
-  )
-  std::chrono::time_point<std::chrono::steady_clock> t0 = std::chrono::steady_clock::now();
-
-  create_bvh(primitives, vertices, normals, texcoords, tangents, debug, 2, &bvh);
-  std::chrono::time_point<std::chrono::steady_clock> t1 = std::chrono::steady_clock::now();
-  DEBUG(debug, 
-  fprintf(stdout, "Done! (%.4f sec)\n", (std::chrono::duration<float>(t1 - t0)).count());
-  )
-}
-
-void RaytracedRenderer::copy_host_device_pt(std::vector<CudaLight> &lights, std::vector<CudaBSDF> &bsdfs, std::vector<CudaTexture> &textures) {
-    DEBUG(debug,
-    std::cout << "Copying PathTracer to GPU..." << std::endl;
+    std::cout << "Baking..." << std::endl;
     std::cout << "BSDFs size: " << bsdfs.size() << std::endl;
     std::cout << "Lights size: " << lights.size() << std::endl;
     std::cout << "Textures size: " << textures.size() << std::endl;
     )
 
-    //lights
-    CudaLight *lights_cuda;
-    CUDA_ERR(cudaMalloc(&lights_cuda, lights.size() * sizeof(CudaLight)));
-    CUDA_ERR(cudaMemcpy(lights_cuda, lights.data(), lights.size() * sizeof(CudaLight), cudaMemcpyHostToDevice));
-    pt_host->num_lights = lights.size();
-    pt_host->lights = lights_cuda;
+    FILE* f = fopen("../src/target/baked_data.cu", "w");
+    if (!f) { perror("open baked_data.cu"); return; }
 
-    //bsdfs
-    CudaBSDF *bsdfs_cuda;
-    CUDA_ERR(cudaMalloc(&bsdfs_cuda, bsdfs.size() * sizeof(CudaBSDF)));
-    CUDA_ERR(cudaMemcpy(bsdfs_cuda, bsdfs.data(), bsdfs.size() * sizeof(CudaBSDF), cudaMemcpyHostToDevice));
-    pt_host->bsdfs = bsdfs_cuda;
+    /* 1) Preamble */
+    fprintf(f,
+            "// *** AUTO-GENERATED — DO NOT TOUCH ***\n");
+    /* 1.5) consts */
+    fprintf(f, "__device__ int max_ray_depth = %zu;\n", max_ray_depth);
+    fprintf(f, "__device__ int ns_area_light = %zu;\n", ns_area_light);
+    fprintf(f, "__device__ bool accumulate = %d;\n", accumulate);
+    /* 1.6) Camera */
+    serialize(f, *camera);
+    /* 2) Lights */
+    serialize_lights(f, lights);
+    /* 3) BSDFs */
+    serialize_bsdfs(f, bsdfs);
+    /* 4) Textures */
+    serialize_textures(f, textures);
+    /* 5) Primitives */
+    serialize(f, primitives);
+    /* 6) Vertices */
+    serialize(f, vertices, "vertices");
+    /* 7) Normals */
+    serialize(f, normals, "normals");
+    /* 8) Texcoords */
+    serialize(f, texcoords, "texcoords");
+    /* 9) Tangents */
+    serialize(f, tangents, "tangents");
+    /* 10) BVH */
+    serialize_bvh_nodes(f, nodes);
+    /* 11) RNG */
+    serialize_empty_gpurng(f, w * h);
+    /* 12) ImageBuffer */
+    serialize_empty_image_buffer(f, w, h);
 
-    //textures
-    CudaTexture *textures_host = (CudaTexture*) malloc(textures.size() * sizeof(CudaTexture));
-    for (size_t i = 0; i < textures.size(); i++) {
-        textures_host[i].channels = textures[i].channels;
-        textures_host[i].width = textures[i].width;
-        textures_host[i].height = textures[i].height;
-        CUDA_ERR(cudaMalloc(&textures_host[i].data, textures[i].width * textures[i].height * textures[i].channels));
-        CUDA_ERR(cudaMemcpy(textures_host[i].data, textures[i].data, textures[i].width * textures[i].height * textures[i].channels, cudaMemcpyHostToDevice));
-    }
+    fclose(f);
 
-    CudaTexture *textures_cuda;
-    CUDA_ERR(cudaMalloc(&textures_cuda, textures.size() * sizeof(CudaTexture)));
-    CUDA_ERR(cudaMemcpy(textures_cuda, textures_host, textures.size() * sizeof(CudaTexture), cudaMemcpyHostToDevice));
-    pt_host->textures = textures_cuda;
-    free(textures_host);
-
-    //bvh
-    BVHCuda *bvh_cuda;
-    CUDA_ERR(cudaMalloc(&bvh_cuda, sizeof(BVHCuda)));
-    CUDA_ERR(cudaMemcpy(bvh_cuda, bvh, sizeof(BVHCuda), cudaMemcpyHostToDevice));
-    pt_host->bvh = bvh_cuda;
-
-    CUDA_ERR(cudaMalloc(&pt_host->sampleBuffer.pixel, frameBuffer.w * frameBuffer.h * sizeof(PixelData)));
-
-    CUDA_ERR(cudaMalloc(&pt_host->initialSampleBuffer, sizeof(Sample) * frameBuffer.w * frameBuffer.h));
-    CUDA_ERR(cudaMalloc(&pt_host->temporalReservoirBufferDirect, sizeof(Reservoir) * frameBuffer.w * frameBuffer.h));
-    CUDA_ERR(cudaMalloc(&pt_host->temporalReservoirBufferGI, sizeof(Reservoir) * frameBuffer.w * frameBuffer.h));
-    
-    CUDA_ERR(cudaMalloc(&pt_host->rays_traced, sizeof(uint8_t) * frameBuffer.w * frameBuffer.h));
-
-    CUDA_ERR(cudaMalloc(&pt_host->rand_states, sizeof(RNGState) * frameBuffer.w * frameBuffer.h));
-
-    PathTracer *pt_target;
-    CUDA_ERR(cudaMalloc(&pt_target, sizeof(PathTracer)));
-    CUDA_ERR(cudaMemcpy(pt_target, pt_host, sizeof(PathTracer), cudaMemcpyHostToDevice));
-
-
-    this->pt_target = pt_target;    
+    DEBUG(debug,
+    std::cout << "Done cooking..." << std::endl;
+    )
 }

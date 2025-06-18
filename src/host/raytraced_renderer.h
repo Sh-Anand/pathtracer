@@ -9,8 +9,8 @@
 
 #include "scene/bvh.h"
 #include "scene/camera.h"
-
-#include "target/pathtracer.h"
+#include "scene/light.h"
+#include "scene/material.h"
 
 class RaytracedRenderer {
 public:
@@ -26,37 +26,31 @@ public:
 
   void render_to_file(std::string filename);
 
-  void set_cuda_camera();
-
-  void update_camera();
-
   void save_image(std::string filename="");
 
-  void build_accel(std::vector<CudaPrimitive> &primitives, 
-                   std::vector<Vector3D> &vertices,
-                   std::vector<Vector3D> &normals,
-                   std::vector<Vector2D> &texcoords,
-                   std::vector<Vector4D> &tangents);
+  // void gpu_raytrace();
 
-  void gpu_raytrace();
-
-  void copy_host_device_pt(std::vector<CudaLight> &lights,
-                           std::vector<CudaBSDF> &bsdfs, std::vector<CudaTexture> &textures);
-
-  PathTracer *pt_host;
-  PathTracer *pt_target;
+  void copy_host_device_pt(std::vector<CudaPrimitive> &primitives, 
+                                            std::vector<Vector3D> &vertices,
+                                            std::vector<Vector3D> &normals, 
+                                            std::vector<Vector2D> &texcoords,
+                                            std::vector<Vector4D> &tangents, 
+                                            std::vector<CudaLight> &lights, 
+                                            std::vector<CudaBSDF> &bsdfs, 
+                                            std::vector<CudaTexture> &textures);
 
   // Configurables //
 
   Camera* camera;       ///< current camera
 
   // Components //
-
-  BVHCuda* bvh;             ///< BVH accelerator aggregate for cuda
-  HDRImageBuffer frameBuffer;       ///< frame buffer
-
+  PixelData *pixel;
+  int w, h;
   bool debug;
   bool restir;
+  uint16_t max_ray_depth;
+  uint16_t ns_area_light;           
+  bool accumulate;
 };
 
 #endif  // CGL_RAYTRACER_H

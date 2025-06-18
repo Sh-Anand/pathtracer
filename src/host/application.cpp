@@ -18,7 +18,10 @@ Application::Application(AppConfig config, string sceneFilePath, int w, int h) {
   renderer->set_frame_size(w, h);
   renderer->set_camera(&loader->parser.camera);
   renderer->set_frame_size(screenW, screenH);
-  renderer->build_accel(loader->parser.primitives, loader->parser.vertices, loader->parser.normals, loader->parser.texcoords, loader->parser.tangents);
+  renderer->copy_host_device_pt(loader->parser.primitives, 
+        loader->parser.vertices, loader->parser.normals, 
+        loader->parser.texcoords, loader->parser.tangents, 
+        loader->parser.lights, loader->parser.bsdfs, loader->parser.textures);
 }
 
 Application::~Application() {
@@ -114,8 +117,6 @@ int main(int argc, char **argv) {
 }
 
 void Application::render_to_file(std::string filename) { 
-    renderer->set_cuda_camera();
-    renderer->copy_host_device_pt(loader->parser.lights, loader->parser.bsdfs, loader->parser.textures);
     renderer->render_to_file(filename); 
 }
 
@@ -126,16 +127,6 @@ void Application::render_to_video(std::string filename, size_t num_images){
   auto name = filename.substr(0, dot_pos);
   auto dot_extension = filename.substr(dot_pos);
 
-  renderer->set_cuda_camera();
-  renderer->copy_host_device_pt(loader->parser.lights, loader->parser.bsdfs, loader->parser.textures);
-
-  for(size_t i = 0; i < num_images; ++i){
-    std::ostringstream oss;
-    oss << std::setw(4) << std::setfill('0') << i;
-    auto filename_per_image = name + oss.str() + dot_extension;
-    loader->parser.camera.rotate_by(0, angle_per_image);
-    renderer->set_cuda_camera();
-    renderer->update_camera();
-    renderer->render_to_file(filename_per_image); 
-  }
+  // UNSUPPORTED: This is a placeholder for video rendering.
+  msg("Rendering to video is not supported yet. Please use the single image rendering option.");
 }

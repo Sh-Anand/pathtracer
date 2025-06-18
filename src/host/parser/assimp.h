@@ -30,6 +30,16 @@ public:
     if (!scene_)
       throw std::runtime_error(importer_.GetErrorString());
 
+    CudaTexture emptyTexture;
+    emptyTexture.width = 128; 
+    emptyTexture.height = 1;
+    emptyTexture.channels = 1;
+    emptyTexture.data = (uint8_t*)calloc(128, 1); // allocate 128 bytes for empty texture
+
+    textures.push_back(emptyTexture); // reserve index 0 for no texture
+    texcoords.push_back({}); // reserve index 0 for no texture coordinate
+    tangents.push_back({}); // reserve index 0 for no tangent
+
     ParseMaterialsAndTextures(scene_);
     
     Matrix4x4 identity = matrix4x4_identity();
