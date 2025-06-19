@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "raytraced_renderer.h"
 #include "parser/loader.h"
 
 using namespace std;
@@ -21,10 +20,10 @@ struct AppConfig {
     restir = false;
   }
 
-  size_t pathtracer_max_ray_depth;
+  int pathtracer_max_ray_depth;
   bool pathtracer_accumulate_bounces; // whether we accumulate light bounce or only sample from the last bounce
-  size_t pathtracer_ns_area_light;
-  size_t total_image_generated;
+  int pathtracer_ns_area_light;
+  int total_image_generated;
   bool debug;
   bool restir;
 };
@@ -32,15 +31,9 @@ struct AppConfig {
 class Application {
  public:
 
-  Application(AppConfig config, string sceneFilePath, int w, int h);
+  Application(AppConfig config, string sceneFilePath, string output_file_name, int serializer_type, int w, int h);
 
   ~Application();
-
-  void render_to_file(std::string filename);
-
-  void render_to_video(std::string filename, size_t num_images);
-
-  RaytracedRenderer* renderer;
 
   size_t screenW;
   size_t screenH;

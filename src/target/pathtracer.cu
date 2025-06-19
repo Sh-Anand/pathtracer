@@ -7,25 +7,26 @@
 
 #include <chrono>
 #include <fstream>
+#include <stdbool.h>
 
-extern __device__ int max_ray_depth;
-extern __device__ int ns_area_light;
-extern __device__ bool accumulate;
-extern __device__ CudaCamera camera;       ///< current camera
-extern __device__ CudaLight* lights;
-extern __device__ int num_lights;
-extern __device__ CudaBSDF* bsdfs;
-extern __device__ CudaTexture* textures;
-extern __device__ CudaPrimitive* primitives;
-extern __device__ Vector3D* vertices;
-extern __device__ Vector3D* normals;
-extern __device__ Vector2D* texcoords;
-extern __device__ Vector4D* tangents;
-extern __device__ BVHNode* nodes;
-extern __device__ RNGState* rand_states;
-extern __device__ int w;
-extern __device__ int h;
-extern __device__ PixelData* pixel;
+extern __device__ const int max_ray_depth;
+extern __device__ const int ns_area_light;
+extern __device__ const bool accumulate;
+extern __device__ const CudaCamera camera;       ///< current camera
+extern __device__ const CudaLight lights[];
+extern __device__ const int num_lights;
+extern __device__ const CudaBSDF bsdfs[];
+extern __device__ const CudaTexture textures[];
+extern __device__ const CudaPrimitive primitives[];
+extern __device__ const Vector3D vertices[];
+extern __device__ const Vector3D normals[];
+extern __device__ const Vector2D texcoords[];
+extern __device__ const Vector4D tangents[];
+extern __device__ const BVHNode nodes[];
+extern __device__ RNGState rand_states[];
+extern __device__ const int w;
+extern __device__ const int h;
+extern __device__ PixelData pixel[];
 
 DEVICE static inline Vector3D get_emission(const CudaBSDF *bsdfs,
                                            const CudaTexture *textures,
@@ -231,14 +232,20 @@ static void write_pfm(const char* fname, int W, int H)
 {
     /* 1. get device pointer held in the global symbol `pixel` */
     PixelData* d_pixels = nullptr;
-    CUDA_ERR(cudaMemcpyFromSymbol(&d_pixels,
-                                  pixel,
-                                  sizeof(PixelData*),
-                                  0, cudaMemcpyDeviceToHost));
+    CUDA_ERR(cudaGetSymbolAddress((void**)&d_pixels, pixel));
 
     /* 2. copy entire framebuffer to host */
     const size_t N = static_cast<size_t>(W) * H;
     std::vector<PixelData> cpu_fb(N);
+    printf ("Copying %zu pixels from device to host...\n", N);
+    if (N == 0) {
+        std::cerr << "Framebuffer is empty, nothing to write." << std::endl;
+        return;
+    }
+    if (d_pixels == nullptr) {
+        std::cerr << "Framebuffer pointer is null, nothing to write." << std::endl;
+        return;
+    }
     CUDA_ERR(cudaMemcpy(cpu_fb.data(), d_pixels,
                         N * sizeof(PixelData),
                         cudaMemcpyDeviceToHost));

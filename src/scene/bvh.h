@@ -297,11 +297,6 @@ static void create_bvh(std::vector<CudaPrimitive> &primitives_vec,
 
   DEBUG(debug,
   std::cout << "Building BVHCuda" << std::endl;
-  std::cout << "Vertices size: " << vertices.size() << std::endl;
-  std::cout << "Normals size: " << normals.size() << std::endl;
-  std::cout << "Texcoords size: " << texcoords.size() << std::endl;
-  std::cout << "Tangets size: " << tangents.size() << std::endl;
-  std::cout << "Primitives size: " << primitives_vec.size() << std::endl;
   )
 
   std::vector<BBox> bboxes;

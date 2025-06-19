@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 project(pathtracer LANGUAGES CXX CUDA) 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CUDA_SEPARABLE_COMPILATION ON)
 
 option(BUILD_DEBUG     "Build with debug settings"    OFF)
 set(BUILD_DEBUG ${BUILD_DEBUG} CACHE BOOL "Build debug" FORCE)
@@ -19,20 +20,15 @@ if (BUILD_DEBUG)
 endif()
 
 set(APPLICATION_SOURCE
-    src/scene/bvh.cpp
-    src/scene/bvh.cu
-    src/host/raytraced_renderer.cpp
-    src/host/raytraced_renderer.cu
     src/host/application.cpp
 )
 
 find_package(assimp REQUIRED)
-find_package(OpenEXR REQUIRED)
 
 add_executable(pathtracer ${APPLICATION_SOURCE})
 target_include_directories(pathtracer PUBLIC src)
 target_link_libraries(pathtracer
     assimp::assimp
-    OpenEXR::OpenEXR)
+)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")

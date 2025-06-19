@@ -4,6 +4,7 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
+#include "scene/bvh.h"
 #include "util/stb_image.h"
 
 #include <stdexcept>

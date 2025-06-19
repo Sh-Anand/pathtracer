@@ -8,3 +8,4 @@ out
 Debug
 .cache
 cmake-build-*
+bakes
