@@ -137,8 +137,10 @@ void RaytracedRenderer::copy_host_device_pt(std::vector<CudaLight> &lights, std:
         textures_host[i].channels = textures[i].channels;
         textures_host[i].width = textures[i].width;
         textures_host[i].height = textures[i].height;
-        CUDA_ERR(cudaMalloc(&textures_host[i].data, textures[i].width * textures[i].height * textures[i].channels));
-        CUDA_ERR(cudaMemcpy(textures_host[i].data, textures[i].data, textures[i].width * textures[i].height * textures[i].channels, cudaMemcpyHostToDevice));
+        uint8_t *data;
+        CUDA_ERR(cudaMalloc(&data, textures[i].width * textures[i].height * textures[i].channels));
+        CUDA_ERR(cudaMemcpy(data, textures[i].data, textures[i].width * textures[i].height * textures[i].channels, cudaMemcpyHostToDevice));
+        textures_host[i].data = data;
     }
 
     CudaTexture *textures_cuda;
