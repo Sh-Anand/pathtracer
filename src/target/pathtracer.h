@@ -36,6 +36,7 @@ typedef struct {
     const CudaTexture *textures;
 
     Sample* initialSampleBuffer;
+    SampleMetadata* initialSampleMetadataBuffer;
     Reservoir* temporalReservoirBufferDirect;
     Reservoir* temporalReservoirBufferGI;
     uint8_t* rays_traced;

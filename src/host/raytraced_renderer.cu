@@ -158,6 +158,9 @@ void RaytracedRenderer::copy_host_device_pt(std::vector<CudaLight> &lights, std:
     CUDA_ERR(cudaMalloc(&pt_host->sampleBuffer.pixel, frameBuffer.w * frameBuffer.h * sizeof(PixelData)));
 
     CUDA_ERR(cudaMalloc(&pt_host->initialSampleBuffer, sizeof(Sample) * frameBuffer.w * frameBuffer.h));
+    CUDA_ERR(cudaMemset(pt_host->initialSampleBuffer, 0, sizeof(Sample) * frameBuffer.w * frameBuffer.h));
+    CUDA_ERR(cudaMalloc(&pt_host->initialSampleMetadataBuffer, sizeof(SampleMetadata) * frameBuffer.w * frameBuffer.h));
+    CUDA_ERR(cudaMemset(pt_host->initialSampleMetadataBuffer, 0, sizeof(SampleMetadata) * frameBuffer.w * frameBuffer.h));
     CUDA_ERR(cudaMalloc(&pt_host->temporalReservoirBufferDirect, sizeof(Reservoir) * frameBuffer.w * frameBuffer.h));
     CUDA_ERR(cudaMalloc(&pt_host->temporalReservoirBufferGI, sizeof(Reservoir) * frameBuffer.w * frameBuffer.h));
     
