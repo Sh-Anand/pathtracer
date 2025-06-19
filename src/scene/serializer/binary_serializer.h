@@ -74,4 +74,14 @@ class BinarySerializer : public Serializer {
     size_t N = size_t(W) * H;
     for (size_t i = 0; i < N; ++i) fwrite(&zero, sizeof(zero), 1, f);
   }
+
+  // name ignored, just write the value
+  void serialize_const(FILE* f, const char* name, int value) {
+    fwrite(&value, sizeof(value), 1, f);
+  }
+  void serialize_const(FILE* f, const char* name, bool value) {
+    int v = value ? 1 : 0;
+    fwrite(&v, sizeof(v), 1, f);
+  }
+
 };

@@ -276,4 +276,12 @@ class TextSerializer : public Serializer {
         safe_fprintf(f, "};\n");
     }
 
+    void serialize_const(FILE* f, const char* name, int value) {
+        safe_fprintf(f, "extern __device__ const int %s = %d;\n", name, value);
+    }
+    void serialize_const(FILE* f, const char* name, bool value) {
+        safe_fprintf(f, "extern __device__ const bool %s = %s;\n",
+                     name, value ? "true" : "false");
+    }
+
 };

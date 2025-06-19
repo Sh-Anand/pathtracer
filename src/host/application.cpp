@@ -47,7 +47,9 @@ Application::Application(AppConfig config, string sceneFilePath, string output_f
   size_t bvh_size = sizeof(BVHNode) * nodes.size();
   size_t rand_state_size = sizeof(RNGState) * w * h; // for each pixel
   size_t image_buffer_size = sizeof(PixelData) * w * h; // for each pixel
-  size_t total_size = cam_size + light_size + bsdf_size + tex_size + prim_size + vertex_size + normal_size + texcoord_size + tangent_size + bvh_size + rand_state_size + image_buffer_size + const_size;
+  size_t samples_size = sizeof(Sample) * w * h; // for each pixel
+  size_t reservoirs_size = sizeof(Reservoir) * w * h; // for each pixel
+  size_t total_size = cam_size + light_size + bsdf_size + tex_size + prim_size + vertex_size + normal_size + texcoord_size + tangent_size + bvh_size + rand_state_size + image_buffer_size + const_size + samples_size + reservoirs_size;
 
   DEBUG(config.debug,
   cout << "Camera size: " << cam_size / (1024.0 * 1024.0) << " MB" << endl;
@@ -63,6 +65,9 @@ Application::Application(AppConfig config, string sceneFilePath, string output_f
   cout << "RNG states num: " << w * h << ", size: " << rand_state_size / (1024.0 * 1024.0) << " MB" << endl;
   cout << "Image buffer num: " << w * h << ", size: " << image_buffer_size / (1024.0 * 1024.0) << " MB" << endl;
   cout << "Constants size: " << const_size / (1024.0 * 1024.0) << " MB" << endl;
+  cout << "Samples num: " << w * h << ", size: " << samples_size / (1024.0 * 1024.0) << " MB" << endl;
+  cout << "Reservoirs num: " << w * h << ", size: " << reservoirs_size / (1024.0 * 1024.0) << " MB" << endl;
+  cout << "Serializer type: " << serializer_type << endl;
   cout << "Total size: " << total_size / (1024.0 * 1024.0) << " MB" << endl;
   )
 
@@ -102,10 +107,14 @@ Application::Application(AppConfig config, string sceneFilePath, string output_f
   serializer->serialize_empty_gpurng(f, w * h);
   /* 12) ImageBuffer */
   serializer->serialize_empty_image_buffer(f, w, h);
-  /* 13) Consts */
-  fprintf(f, "extern __device__ const int max_ray_depth = %zu;\n", config.pathtracer_max_ray_depth);
-  fprintf(f, "extern __device__ const int ns_area_light = %zu;\n", config.pathtracer_ns_area_light);
-  fprintf(f, "extern __device__ const bool accumulate = %d;\n", config.pathtracer_accumulate_bounces);
+  /* 13) Samples */
+  serializer->serialize_empty_samples(f, w * h);
+  /* 14) Reservoirs */
+  serializer->serialize_empty_reservoirs(f, w * h, "temporalReservoirBuffer");
+  /* 15) Consts */
+  serializer->serialize_const(f, "max_ray_depth", config.pathtracer_max_ray_depth);
+  serializer->serialize_const(f, "ns_area_light", config.pathtracer_ns_area_light);
+  serializer->serialize_const(f, "accumulate", config.pathtracer_accumulate_bounces);
 
   fclose(f);
 

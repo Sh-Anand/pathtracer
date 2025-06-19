@@ -38,4 +38,6 @@ public:
     virtual void serialize_empty_samples(FILE* f, int num_samples) = 0;
     virtual void serialize_empty_reservoirs(FILE* f, int num_samples, std::string name) = 0;
     virtual void serialize_empty_image_buffer(FILE* f, int W, int H) = 0;
+    virtual void serialize_const(FILE* f, const char* name, int value) = 0;
+    virtual void serialize_const(FILE* f, const char* name, bool value) = 0;
 };
