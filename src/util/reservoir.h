@@ -12,31 +12,19 @@
   #define FORCE_INLINE inline __attribute__((always_inline))
 #endif
 
+struct SampleMetadata {
+    Vector3D bsdf_f;
+    Vector3D emittance;
+};
 struct Sample {
     Vector3D x_v, n_v;       // visible point, normal (normalized)
     float z_v;               // depth
     Vector3D x_s, n_s;       // sample point & normal (normalized)
     Vector3D L;              // outgoing radiance at x_s
-    float    pdf;            // pdf of the sample
-    Vector3D bsdf_f;           // bsdf_f at visible point
-    Vector3D emittance;
-};
-
-struct SampleDirect { 
-    Vector3D x_v, n_v;       // visible point, normal (normalized)
-    Vector3D L;              // Direct lighting
-};
-
-struct SampleGI {
-    Vector3D x_v, n_v;       // visible point, normal (normalized)
-    float z_v;               // depth
-    Vector3D x_s, n_s;            // sample point & normal (normalized)
-    Vector3D L;              // outgoing radiance at x_s
-    Vector3D bsdf_f;           // bsdf_f at visible point
 };
 
 struct Reservoir {
-    SampleGI z;                // current chosen sample
+    int z;                   // index of the current sample
     float  w;                // sum of weights seen
     float  M;                // number of samples seen
     float  W;                // normalizing constant
@@ -48,7 +36,7 @@ static constexpr float DEPTH_THRESH    = 0.05f;      // 5%
 static constexpr float ILLUM_DELTA_THRESH = 1.4f; // 1.4x illumination difference
 static constexpr float ILLUM_DELTA_THRESH_INV = 1 / ILLUM_DELTA_THRESH; // inverse threshold for illumination ratio
 
-FORCE_INLINE bool are_geometrically_similar(const SampleGI *s1, const SampleGI *s2) {
+FORCE_INLINE bool are_geometrically_similar(const Sample *s1, const Sample *s2) {
     // 1) Angle test: normals within 25°
     float dn = vector3d_dot(s1->n_v, s2->n_v);
     if (dn < COS_ANGLE_THRESH) 
@@ -68,18 +56,8 @@ FORCE_INLINE bool are_geometrically_similar(const SampleGI *s1, const SampleGI *
     return true;
 }
 
-FORCE_INLINE void to_sample_GI(const Sample *s, SampleGI *s_gi) {
-    s_gi->x_v = s->x_v;
-    s_gi->n_v = s->n_v;
-    s_gi->z_v = s->z_v;
-    s_gi->x_s = s->x_s;
-    s_gi->n_s = s->n_s;
-    s_gi->L   = s->L;
-    s_gi->bsdf_f = s->bsdf_f;
-}
-
 FORCE_INLINE void update(Reservoir *r,
-                         const SampleGI s_new,
+                         int s_new,
                          float w_new,
                          RNGState *rand_state) {
     if (w_new <= 0) return;

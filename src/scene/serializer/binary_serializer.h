@@ -27,6 +27,11 @@ class BinarySerializer : public Serializer {
     fwrite(&cam, sizeof(cam), 1, f);
   }
 
+  void serialize_headers(FILE* f) override {
+    // No headers in binary format
+    // This is a no-op
+  }
+
   // Lights, BSDFs, Primitives, BVHNodes
   void serialize_lights   (FILE* f, const std::vector<CudaLight>&   lights)   override {
     write_array(f, lights.data(), lights.size());
@@ -56,25 +61,6 @@ class BinarySerializer : public Serializer {
     }
   }
 
-  // Empty buffers: just repeat default-constructed POD
-  void serialize_empty_gpurng    (FILE* f, int N) override {
-    RNGState zero{};
-    for (int i = 0; i < N; ++i) fwrite(&zero, sizeof(zero), 1, f);
-  }
-  void serialize_empty_samples   (FILE* f, int N) override {
-    Sample zero{};
-    for (int i = 0; i < N; ++i) fwrite(&zero, sizeof(zero), 1, f);
-  }
-  void serialize_empty_reservoirs(FILE* f, int N, std::string) override {
-    Reservoir zero{};
-    for (int i = 0; i < N; ++i) fwrite(&zero, sizeof(zero), 1, f);
-  }
-  void serialize_empty_image_buffer(FILE* f, int W, int H) override {
-    PixelData zero{};
-    size_t N = size_t(W) * H;
-    for (size_t i = 0; i < N; ++i) fwrite(&zero, sizeof(zero), 1, f);
-  }
-
   // name ignored, just write the value
   void serialize_const(FILE* f, const char* name, int value) {
     fwrite(&value, sizeof(value), 1, f);
@@ -83,5 +69,27 @@ class BinarySerializer : public Serializer {
     int v = value ? 1 : 0;
     fwrite(&v, sizeof(v), 1, f);
   }
+
+protected:
+    void serializeEmptyImpl(FILE*          f,
+                            const char*    /*var_name – ignored*/,
+                            size_t         count,
+                            size_t         elem_size,
+                            std::string    /*type_name – ignored*/,
+                            const std::type_info& /*ti – ignored*/) override
+    {
+        uint32_t n32 = static_cast<uint32_t>(count);
+        fwrite(&n32, sizeof(n32), 1, f);
+
+        constexpr size_t CHUNK = 4096;
+        unsigned char zeros[CHUNK] = {0};
+
+        size_t bytes = count * elem_size;
+        while (bytes) {
+            size_t k = std::min(bytes, CHUNK);
+            fwrite(zeros, 1, k, f);
+            bytes -= k;
+        }
+    }
 
 };

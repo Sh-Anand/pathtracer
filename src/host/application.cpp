@@ -83,6 +83,8 @@ Application::Application(AppConfig config, string sceneFilePath, string output_f
   FILE* f = fopen(output_file_name.c_str(), "w");
   if (!f) { perror("open baked_data.cu"); return; }
 
+  /* 1) Headers */
+  serializer->serialize_headers(f);
   /* 1.6) Camera */
   serializer->serialize(f, loader->parser.camera);
   /* 2) Lights */
@@ -103,15 +105,21 @@ Application::Application(AppConfig config, string sceneFilePath, string output_f
   serializer->serialize(f, loader->parser.tangents, "tangents");
   /* 10) BVH */
   serializer->serialize_bvh_nodes(f, nodes);
-  /* 11) RNG */
-  serializer->serialize_empty_gpurng(f, w * h);
-  /* 12) ImageBuffer */
-  serializer->serialize_empty_image_buffer(f, w, h);
+  /* 11) RNG states */
+  serializer->serializeEmpty<RNGState>(f, "rand_states", "RNGState", w*h);
+  /* 12) Image buffer */
+  serializer->serializeEmpty<PixelData>(f, "pixel", "PixelData", w*h);
   /* 13) Samples */
-  serializer->serialize_empty_samples(f, w * h);
+  serializer->serializeEmpty<Sample>(   f, "initialSampleBuffer", "Sample", w*h);
+  /* 13.1) SampleMetadata */
+  serializer->serializeEmpty<SampleMetadata>(f,"initialSampleMetadataBuffer", "SampleMetadata", w*h);
   /* 14) Reservoirs */
-  serializer->serialize_empty_reservoirs(f, w * h, "temporalReservoirBuffer");
-  /* 15) Consts */
+  serializer->serializeEmpty<Reservoir>(f, "temporalReservoirBufferGI", "Reservoir", w*h);
+  /* 15) Rays_traced */
+  serializer->serializeEmpty<uint8_t>(f, "rays_traced", "uint8_t", w*h);
+  /* 16) Consts */
+  serializer->serialize_const(f, "w", w);
+  serializer->serialize_const(f, "h", h);
   serializer->serialize_const(f, "max_ray_depth", config.pathtracer_max_ray_depth);
   serializer->serialize_const(f, "ns_area_light", config.pathtracer_ns_area_light);
   serializer->serialize_const(f, "accumulate", config.pathtracer_accumulate_bounces);
