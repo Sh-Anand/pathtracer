@@ -449,7 +449,11 @@ int main(int argc, char** argv) {
   #else
   // 3) run temporal kernel
   auto t0 = std::chrono::steady_clock::now();
-  raytrace_pixel_temporal_sample(0, 0, restir);
+  for (uint16_t y = 0; y < height; ++y) {
+    for (uint16_t x = 0; x < width; ++x) {
+      raytrace_pixel_temporal_sample(x, y, restir);
+    }
+  }
   auto t1 = std::chrono::steady_clock::now();
   #endif
 
