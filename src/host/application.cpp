@@ -71,6 +71,16 @@ Application::Application(AppConfig config, string sceneFilePath, string output_f
   cout << "Total size: " << total_size / (1024.0 * 1024.0) << " MB" << endl;
   )
 
+  bool CUDA = false;
+  size_t dot_pos = output_file_name.find_last_of('.');
+  if (dot_pos != std::string::npos) {
+    std::string extension = output_file_name.substr(dot_pos);
+    if (extension == ".cu") {
+      CUDA = true;
+      DEBUG(config.debug, cout << "CUDA mode enabled (detected .cu extension)" << endl;)
+    }
+  }
+
   Serializer *serializer;
   if (serializer_type == 0) {
     serializer = new TextSerializer();

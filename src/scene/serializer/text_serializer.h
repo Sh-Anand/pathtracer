@@ -14,6 +14,14 @@ static void safe_fprintf(FILE* f, const char* fmt, ...) {
 
 class TextSerializer : public Serializer {
 
+    void variable_declaration(FILE* f, const char* type, const char* name, size_t count, bool constant = true) {
+        std::string decl_str = "extern " + (CUDA ? std::string("__device__ ") : std::string(""));
+        decl_str += constant ? "const " : "";
+        decl_str += type + std::string(" ") + name;
+        decl_str += count == 0 ? "= " : "[" + std::to_string(count) + "] = {";
+        safe_fprintf(f, "%s", decl_str.c_str());
+    }
+
     void serialize(FILE* f, const CudaLight& L)
     {
         safe_fprintf(f,
@@ -61,29 +69,29 @@ class TextSerializer : public Serializer {
     }
 
     void serialize(FILE* f, const std::vector<Vector2D>& vectors, std::string name) override {
-        safe_fprintf(f, "extern __device__ const Vector2D %s[%zu] = {\n", name.c_str(), vectors.size());
+        variable_declaration(f, "Vector2D", name.c_str(), vectors.size());
         for (const auto& v : vectors) {
             safe_fprintf(f,
                 "{%.8g,%.8g},",
                 v.x, v.y);
         }
         safe_fprintf(f, "};\n");
-        safe_fprintf(f, "size_t num_%s = %zu;\n", name.c_str(), vectors.size());
+        safe_fprintf(f, "const size_t num_%s = %zu;\n", name.c_str(), vectors.size());
     }
 
     void serialize(FILE* f, const std::vector<Vector3D>& vectors, std::string name) override {
-        safe_fprintf(f, "extern __device__ const Vector3D %s[%zu] = {\n", name.c_str(), vectors.size());
+        variable_declaration(f, "Vector3D", name.c_str(), vectors.size());
         for (const auto& v : vectors) {
             safe_fprintf(f,
                 "{%.8g,%.8g,%.8g},",
                 v.x, v.y, v.z);
         }
         safe_fprintf(f, "};\n");
-        safe_fprintf(f, "size_t num_%s = %zu;\n", name.c_str(), vectors.size());
+        safe_fprintf(f, "const size_t num_%s = %zu;\n", name.c_str(), vectors.size());
     }
 
     void serialize(FILE* f, const std::vector<Vector4D>& vectors, std::string name) override {
-        safe_fprintf(f, "extern __device__ const Vector4D %s[%zu] = {\n", name.c_str(), vectors.size());
+        variable_declaration(f, "Vector4D", name.c_str(), vectors.size());
         for (const auto& v : vectors) {
             safe_fprintf(f,
                 "{%.8g,%.8g,%.8g,%.8g},",
@@ -93,9 +101,10 @@ class TextSerializer : public Serializer {
         safe_fprintf(f, "const size_t num_%s = %zu;\n", name.c_str(), vectors.size());
     }
 
-    void serialize(FILE *f, const Camera &camera) override {        
+    void serialize(FILE *f, const Camera &camera) override {
+        variable_declaration(f, "CudaCamera", "camera", 0);
         safe_fprintf(f,
-            "extern __device__ const CudaCamera camera = {%.8g, %.8g, %.8g, %.8g, "
+            "{%.8g, %.8g, %.8g, %.8g, "
             "{%.8g, %.8g, %.8g}, "
             "{{{%.8g, %.8g, %.8g}, "
             "{%.8g, %.8g, %.8g}, "
@@ -176,17 +185,18 @@ class TextSerializer : public Serializer {
 
     void serialize_lights(FILE* f, const std::vector<CudaLight>& lights) override
     {
-        safe_fprintf(f, "extern __device__ const CudaLight lights[%zu] = {\n", lights.size());
+        variable_declaration(f, "CudaLight", "lights", lights.size());
 
         for (const auto& L : lights) serialize(f, L);
 
         safe_fprintf(f, "};\n");
-        safe_fprintf(f, "extern __device__ const int num_lights = %zu;\n\n", lights.size());
+        variable_declaration(f, "int", "num_lights", 0);
+        safe_fprintf(f, "%zu;\n\n", lights.size());
     }
 
     void serialize_bsdfs(FILE* f, const std::vector<CudaBSDF>& bsdfs) override
     {
-        safe_fprintf(f, "extern __device__ const CudaBSDF bsdfs[%zu] = {\n", bsdfs.size());
+        variable_declaration(f, "CudaBSDF", "bsdfs", bsdfs.size());
 
         for (const auto& B : bsdfs) serialize(f, B);
 
@@ -198,7 +208,10 @@ class TextSerializer : public Serializer {
     {
         size_t size = static_cast<size_t>(T.width) * T.height * T.channels;
 
-        safe_fprintf(f, "__device__ const uint8_t tex_data_%d[] = {", idx);
+        char name_buf[32];
+        snprintf(name_buf, sizeof(name_buf), "tex_data_%d", idx);
+        variable_declaration(f, "uint8_t", name_buf, size);
+
         for (size_t i = 0; i < size; ++i) {
             safe_fprintf(f, "%u,", T.data[i]);
         }
@@ -211,7 +224,7 @@ class TextSerializer : public Serializer {
         for (size_t i = 0; i < textures.size(); ++i)
             serialize_texture_data(f, textures[i], static_cast<int>(i));
 
-        safe_fprintf(f, "extern __device__ const CudaTexture textures[%zu] = {", textures.size());
+        variable_declaration(f, "CudaTexture", "textures", textures.size());
 
         for (size_t i = 0; i < textures.size(); ++i)
             serialize(f, textures[i], static_cast<int>(i));
@@ -222,7 +235,7 @@ class TextSerializer : public Serializer {
 
     void serialize_primitives(FILE* f, const std::vector<CudaPrimitive>& primitives) override
     {   
-        safe_fprintf(f, "extern __device__ const CudaPrimitive primitives[%zu] = {\n", primitives.size());
+        variable_declaration(f, "CudaPrimitive", "primitives", primitives.size());
         for (const auto& P : primitives) 
         {
             serialize(f, P);
@@ -233,7 +246,7 @@ class TextSerializer : public Serializer {
 
     void serialize_bvh_nodes(FILE* f, const std::vector<BVHNode>& nodes) override
     {
-        safe_fprintf(f, "extern __device__ const BVHNode nodes[%zu] = {\n", nodes.size());
+        variable_declaration(f, "BVHNode", "nodes", nodes.size());
 
         for (const auto& node : nodes) serialize(f, node);
 
@@ -243,12 +256,13 @@ class TextSerializer : public Serializer {
 
     void serialize_const(FILE* f, const char* name, int value) override
     {
-        safe_fprintf(f, "extern __device__ const int %s = %d;\n", name, value);
+        variable_declaration(f, "int", name, 0);
+        safe_fprintf(f, "%d;\n", value);
     }
 
     void serialize_const(FILE* f, const char* name, bool value) override
     {
-        safe_fprintf(f, "extern __device__ const bool %s = ", name);
+        variable_declaration(f, "bool", name, 0);
         fprint_bool(f, value);
         std::fputs(";\n", f);
     }
@@ -261,15 +275,12 @@ protected:
                           std::string    type_name,
                           const std::type_info& ti) override
   {
-    safe_fprintf(f, "extern __attribute__((device)) %s %s[%zu] = {",
-                 type_name.c_str(),
-                 var_name,
-                 count);
+    variable_declaration(f, type_name.c_str(), var_name, count, false);
 
     // close array and the size symbol
     safe_fprintf(f,
       "};\n"
-      "size_t num_%s = %zu;\n",
+      "const size_t num_%s = %zu;\n",
       var_name, count);
   }
 
