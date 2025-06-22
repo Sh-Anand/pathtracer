@@ -1,34 +1,45 @@
-cmake_minimum_required(VERSION 3.8)
-project(pathtracer LANGUAGES CXX CUDA) 
+cmake_minimum_required(VERSION 3.14)       # FetchContent needs ≥3.11
+project(pathtracer LANGUAGES CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CUDA_SEPARABLE_COMPILATION ON)
 
-option(BUILD_DEBUG     "Build with debug settings"    OFF)
-set(BUILD_DEBUG ${BUILD_DEBUG} CACHE BOOL "Build debug" FORCE)
-
+option(BUILD_DEBUG "Build with debug settings" OFF)
 if (BUILD_DEBUG)
-  # switch to Debug build
   set(CMAKE_BUILD_TYPE Debug CACHE STRING "" FORCE)
-
-  # C++ debug flags: symbols, no opt, extra warnings
   set(CMAKE_CXX_FLAGS_DEBUG
       "${CMAKE_CXX_FLAGS_DEBUG} -g -O0 -Wall -Wextra -Wpedantic")
-
-  # CUDA debug flags: device debug info, line info
-  set(CMAKE_CUDA_FLAGS_DEBUG
-      "${CMAKE_CUDA_FLAGS_DEBUG} -G -lineinfo")
 endif()
 
 set(APPLICATION_SOURCE
     src/host/application.cpp
 )
 
-find_package(assimp REQUIRED)
+#  Assimp: find it or fetch-&-build it
+find_package(assimp CONFIG QUIET)
+
+if (NOT assimp_FOUND)
+  message(STATUS "Assimp not found – downloading and building it ...")
+
+  include(FetchContent)
+
+  # Options to slim down and make static
+  set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
+  set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT ON CACHE BOOL "" FORCE)
+  set(ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)   # force static .a
+
+  FetchContent_Declare(
+    assimp
+    GIT_REPOSITORY https://github.com/assimp/assimp.git
+    GIT_TAG        v5.3.1
+  )
+  FetchContent_MakeAvailable(assimp)
+
+  if (NOT TARGET assimp::assimp)
+    add_library(assimp::assimp ALIAS assimp)
+  endif()
+endif()
 
 add_executable(pathtracer ${APPLICATION_SOURCE})
 target_include_directories(pathtracer PUBLIC src)
-target_link_libraries(pathtracer
-    assimp::assimp
-)
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+target_link_libraries(pathtracer PRIVATE assimp::assimp)
