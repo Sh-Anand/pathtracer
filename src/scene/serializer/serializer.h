@@ -14,6 +14,8 @@
 
 class Serializer {
 public:
+    bool CUDA;
+
     Serializer(bool cuda = false) : CUDA(cuda) {}
     virtual void serialize(FILE* f, const std::vector<Vector2D>& vectors, std::string name) = 0;
     virtual void serialize(FILE* f, const std::vector<Vector3D>& vectors, std::string name) = 0;
@@ -47,5 +49,4 @@ public:
                                         size_t      elem_size,
                                         std::string type_name,
                                         const std::type_info& ti) = 0;
-    bool CUDA;
 };

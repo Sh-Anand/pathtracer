@@ -5,7 +5,6 @@
 
 
 #include <cfloat>
-#include <iostream>
 #include <vector>
 
 struct BBox {
@@ -295,10 +294,6 @@ static void create_bvh(std::vector<CudaPrimitive> &primitives_vec,
                 bool debug,
                 size_t max_leaf_size) {
 
-  DEBUG(debug,
-  std::cout << "Building BVHCuda" << std::endl;
-  )
-
   std::vector<BBox> bboxes;
   bboxes.reserve(primitives_vec.size());
   std::vector<uint32_t> indices(primitives_vec.size());
@@ -322,9 +317,6 @@ static void create_bvh(std::vector<CudaPrimitive> &primitives_vec,
 
   size_t num_nodes = nodes_vec.size();
 
-  DEBUG(debug,
-  std::cout<< "BVHCuda Built: " << num_nodes << " nodes, root at: " << root << std::endl;
-  )
 }
 
 

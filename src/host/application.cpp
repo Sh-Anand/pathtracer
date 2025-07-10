@@ -90,6 +90,7 @@ Application::Application(AppConfig config, string sceneFilePath, string output_f
     std::cerr << "Unknown serializer type: " << serializer_type << std::endl;
     return;
   }
+  serializer->CUDA = CUDA;
   FILE* f = fopen(output_file_name.c_str(), "w");
   if (!f) { perror("open baked_data.cu"); return; }
 
