@@ -331,7 +331,6 @@ DEVICE static inline void spatial_resampling(uint16_t x, uint16_t y) {
 }
 
 
-#ifdef __CUDACC__
 __global__ void kernel_raytrace_temporal(uint16_t width, uint16_t height, bool restir) {
     uint16_t x = ::blockIdx.x * ::blockDim.x + ::threadIdx.x;
     uint16_t y = ::blockIdx.y * ::blockDim.y + ::threadIdx.y;
@@ -345,9 +344,7 @@ __global__ void kernel_spatial_sample(uint16_t width, uint16_t height) {
     if (x >= width || y >= height) return;
     spatial_resampling(x,y);
 }
-#endif
 
-#ifdef __CUDACC__
 static void write_pfm(const char* fname, int W, int H)
 {
     /* 1. get device pointer held in the global symbol `pixel` */
@@ -395,8 +392,6 @@ static void write_pfm(const char* fname, int W, int H)
         }
     }
 }
-#endif
-
 
 int main(int argc, char** argv) {
   std::cout << "Starting raytracing on GPU...\n";
@@ -405,19 +400,11 @@ int main(int argc, char** argv) {
   int h_max_ray_depth = 0, h_ns_area_light = 0;
   bool h_accumulate = false;
 
-  #ifdef __CUDACC__
   CUDA_ERR(cudaMemcpyFromSymbol(&width,  w, sizeof(width)));
   CUDA_ERR(cudaMemcpyFromSymbol(&height, h, sizeof(height)));
   CUDA_ERR(cudaMemcpyFromSymbol(&h_max_ray_depth, max_ray_depth, sizeof(h_max_ray_depth)));
   CUDA_ERR(cudaMemcpyFromSymbol(&h_ns_area_light, ns_area_light, sizeof(h_ns_area_light)));
   CUDA_ERR(cudaMemcpyFromSymbol(&h_accumulate, accumulate, sizeof(h_accumulate)));
-  #else
-  width = w;
-  height = h;
-  h_max_ray_depth = max_ray_depth;
-  h_ns_area_light = ns_area_light;
-  h_accumulate = accumulate;
-  #endif
 
   std::cout << "Frame size: " << width << "x" << height << "\n";
   std::cout << "Max ray depth: " << h_max_ray_depth << "\n";
@@ -432,7 +419,6 @@ int main(int argc, char** argv) {
   }
   std::cout << "ReSTIR: " << (restir ? "enabled" : "disabled") << "\n";
 
-  #ifdef __CUDACC__
   // 3) build launch dims
   dim3 blockDim(16, 16);
   dim3 gridDim(
@@ -446,28 +432,14 @@ int main(int argc, char** argv) {
   CUDA_ERR(cudaGetLastError());
   CUDA_ERR(cudaDeviceSynchronize());
   auto t1 = std::chrono::steady_clock::now();
-  #else
-  // 3) run temporal kernel
-  auto t0 = std::chrono::steady_clock::now();
-  for (uint16_t y = 0; y < height; ++y) {
-    for (uint16_t x = 0; x < width; ++x) {
-      raytrace_pixel_temporal_sample(x, y, restir);
-    }
-  }
-  auto t1 = std::chrono::steady_clock::now();
-  #endif
 
   float elapsed = std::chrono::duration<float>(t1 - t0).count();
   std::cout << "Raytracing on GPU done in " << elapsed << " sec\n";
 
   // 5) copy rays traced from device to host
   uint8_t *h_rays_traced;
-  #ifdef __CUDACC__
   h_rays_traced = new uint8_t[width * height];
   CUDA_ERR(cudaMemcpyFromSymbol(h_rays_traced, rays_traced, width * height * sizeof(uint8_t)));
-  #else
-  h_rays_traced = rays_traced;
-  #endif
 
   size_t total_rays = 0;
   for (uint32_t i = 0; i < width * height; ++i) {
@@ -475,13 +447,11 @@ int main(int argc, char** argv) {
   }
   std::cout << "Rays per second: " << (total_rays / elapsed) << "\n";
 
-  #ifdef __CUDACC__
   // 6) optionally write out to PFM
   if (argc > 2) {
     write_pfm(argv[2], width, height);
     std::cout << "Wrote image to " << argv[2] << "\n";
   }
-  #endif
 
   return 0;
 }
