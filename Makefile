@@ -36,7 +36,7 @@ APP_EXE := $(BUILD_DIR)/baker
 BAKED_OBJ := $(TARGET_DIR)/baked_data.o
 PT := $(TARGET_DIR)/pathtracer
 
-.PHONY: all clean libvortex
+.PHONY: all relink libvortex clean clean-link clean-libvortex
 ifeq ($(target),cuda)
 all: $(PT).dump $(PT)
 else
@@ -46,9 +46,18 @@ endif
 # Build the vortex library for RISC-V target
 libvortex: $(VORTEX_LIB_DIR)/libvortex.a
 
+relink: clean-link
+	@$(MAKE) all
+
 $(VORTEX_LIB_DIR)/libvortex.a:
 	@echo "[Make] Building libvortex for RISC-V target"
 	@$(MAKE) -C $(LIB_DIR) RISCV_32=$(RISCV_32)
+
+clean-libvortex:
+	@$(MAKE) -C $(LIB_DIR) clean
+
+clean-link:
+	@rm -f $(PT)*
 
 clean:
 	@rm -rf $(BUILD_DIR) bakes

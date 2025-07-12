@@ -269,13 +269,20 @@ int main() {
   bool restir = false;
 
   uint32_t dimension = 2;
-  uint32_t block_dim[2] = {8, 8};
+  uint32_t block_dim[2] = {4, 4};
   uint32_t grid_dim[2] = {(width + block_dim[0] - 1) / block_dim[0],
                           (height + block_dim[1] - 1) / block_dim[1]};
 
   rt_args_t args = { .restir = restir };
 
   vx_spawn_threads(dimension, grid_dim, block_dim, (vx_kernel_func_cb)rt_entry_point, &args);
+
+  vx_printf("PIXEL_BUFFER_START\n");
+  for (uint32_t i = 0; i < width * height; i++) {
+    vx_printf("(%f, %f, %f)\n",
+           pixel[i].data.x, pixel[i].data.y, pixel[i].data.z);
+  }
+  vx_printf("PIXEL_BUFFER_END\n");
 
   vx_printf("Raytracing complete\n");
   return 0;
