@@ -6,15 +6,13 @@
 #include "util/cuda_defs.h"
 #include "util/reservoir.h"
 
-#include <stdbool.h>
-
 #include "vx_print.h"
 #include "vx_spawn.h"
 
 // read only start
 extern const int max_ray_depth;
 extern const int ns_area_light;
-extern const bool accumulate;
+extern const int accumulate;
 extern const CudaCamera camera;       ///< current camera
 extern const CudaLight lights[];
 extern const int num_lights;
@@ -28,6 +26,7 @@ extern const Vector4D tangents[];
 extern const BVHNode nodes[];
 extern const int w;
 extern const int h;
+extern const int restir;
 // read only end
 
 // read/write start
@@ -79,7 +78,7 @@ static inline __attribute__((always_inline)) Vector3D estimate_direct_lighting_i
       Ray shadow; shadow.o = hit_p; shadow.d = wi; shadow.inv_d = vector3d_rcp(wi);
       shadow.min_t = EPS_F;
       shadow.max_t = distToL - EPS_F;
-      bool has_shadow = has_intersect(primitives, vertices, nodes, &shadow);
+      int has_shadow = has_intersect(primitives, vertices, nodes, &shadow);
       if (!has_shadow) {
         // BRDF eval and PDF of sampling that same wi via BSDF
         Vector3D f_val = f(bsdfs, textures, isect, w_out, wi, &occlusion);
@@ -97,11 +96,7 @@ static inline __attribute__((always_inline)) Vector3D estimate_direct_lighting_i
 
 #define RRT 0.7f
 
-typedef struct {
-  bool restir;
-} rt_args_t;
-
-static inline void raytrace_pixel_temporal_sample(uint16_t x, uint16_t y, bool restir) {
+static inline void raytrace_pixel_temporal_sample(uint16_t x, uint16_t y) {
   CudaIntersection isect{}; isect.t = INFINITY;
   
   Ray r;
@@ -240,53 +235,41 @@ static inline void raytrace_pixel_temporal_sample(uint16_t x, uint16_t y, bool r
   }
 }
 
-static void rt_entry_point(rt_args_t *args) {
+static void rt_entry_point(void *args) {
   uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
   uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= w || y >= h) return;
-  raytrace_pixel_temporal_sample(x, y, args->restir);
+  raytrace_pixel_temporal_sample(x, y);
 }
 
 int main() {
   vx_printf("Pathtracer starting...\n");
-  // 1) copy width/height from device symbols
-  uint16_t width  = 0, height = 0;
-  int h_max_ray_depth = 0, h_ns_area_light = 0;
-  bool h_accumulate = false;
 
   vx_printf("RAYTRACING_START\n");
 
-  width = w;
-  height = h;
-  h_max_ray_depth = max_ray_depth;
-  h_ns_area_light = ns_area_light;
-  h_accumulate = accumulate;
-
-  vx_printf("Width: %d, Height: %d\n", width, height);
-  vx_printf("Max Ray Depth: %d, NS Area Light: %d, Accumulate: %s\n",
-            h_max_ray_depth, h_ns_area_light, h_accumulate ? "true" : "false");
-
-  bool restir = false;
+  vx_printf("Width: %d, Height: %d\n", w, h);
+  vx_printf("Max Ray Depth: %d, NS Area Light: %d, Accumulate: %s\n, ReSTIR: %s\n",
+            max_ray_depth, ns_area_light, accumulate ? "true" : "false", restir ? "true" : "false");
 
   uint32_t dimension = 2;
   uint32_t block_dim[2] = {4, 4};
-  uint32_t grid_dim[2] = {(width + block_dim[0] - 1) / block_dim[0],
-                          (height + block_dim[1] - 1) / block_dim[1]};
+  uint32_t grid_dim[2] = {(w + block_dim[0] - 1) / block_dim[0],
+                          (h + block_dim[1] - 1) / block_dim[1]};
 
-  rt_args_t args = { .restir = restir };
+  vx_spawn_threads(dimension, grid_dim, block_dim, (vx_kernel_func_cb)rt_entry_point, NULL);
 
-  vx_spawn_threads(dimension, grid_dim, block_dim, (vx_kernel_func_cb)rt_entry_point, &args);
-
-  vx_printf("PIXEL_BUFFER_START\n");
-  vx_printf("%d, %d\n", width, height);
-  for (uint32_t i = 0; i < width; i++) {
-    for (uint32_t j = 0; j < height; j++) {
-      vx_printf("(%f, %f, %f) ",
-           pixel[i + j * width].data.x, pixel[i + j * width].data.y, pixel[i + j * width].data.z);
+  if (!restir) {
+    vx_printf("PIXEL_BUFFER_START\n");
+    vx_printf("%d, %d\n", w, h);
+    for (uint32_t i = 0; i < w; i++) {
+      for (uint32_t j = 0; j < h; j++) {
+        vx_printf("(%f, %f, %f) ",
+            pixel[i + j * w].data.x, pixel[i + j * w].data.y, pixel[i + j * w].data.z);
+      }
+      vx_printf("\n");
     }
-    vx_printf("\n");
+    vx_printf("PIXEL_BUFFER_END\n");
   }
-  vx_printf("PIXEL_BUFFER_END\n");
 
   vx_printf("RAYTRACING_COMPLETE\n");
   return 0;

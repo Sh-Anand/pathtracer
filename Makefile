@@ -2,13 +2,13 @@
 scene ?= gltf/bunny.glb
 w ?= 32
 h ?= 32
-l ?= 2     # samples / area-light
-m ?= 10    # max ray depth
-d ?= 1     # debug flag
-o ?= 1     # accumulate
-R ?= 0     # ReSTIR-GI
-S ?= 0     # serializer (0=text,1=binary)
-f ?=       # optional explicit output filename
+l ?= 2# samples / area-light
+m ?= 10# max ray depth
+d ?= 1# debug flag
+o ?= 1# accumulate
+R ?= 0# ReSTIR-GI
+S ?= 0# serializer (0=text,1=binary)
+f ?=  # optional explicit output filename
 target ?= riscv# or "cuda"
 
 # Project configuration
@@ -18,7 +18,7 @@ ext := .cpp
 ifeq ($(target),cuda)
   ext := .cu
 endif
-baked := $(CURDIR)/bakes/$(scene_name)_$(w)_$(h)$(ext)
+baked = $(CURDIR)/bakes/$(scene_name)_$(w)_$(h)_$(R)$(ext)
 
 # Tool paths
 LLVM_VORTEX ?= $(HOME)/opt/llvm-vortex
@@ -33,7 +33,7 @@ PT_TARGET := $(PT_SRC_DIR)/target/$(PROJECT_NAME)$(ext)
 # Build directories
 BUILD_DIR ?= build
 VORTEX_LIB_DIR ?= lib
-TARGET_DIR := $(BUILD_DIR)/$(scene_name)_$(w)_$(h)_$(target)
+TARGET_DIR = $(BUILD_DIR)/$(scene_name)_$(w)_$(h)_$(R)_$(target)
 APP_EXE := $(BUILD_DIR)/baker
 BAKED_OBJ := $(TARGET_DIR)/baked_data.o
 PT := $(TARGET_DIR)/$(PROJECT_NAME)

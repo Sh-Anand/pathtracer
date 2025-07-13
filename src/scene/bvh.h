@@ -60,7 +60,7 @@ typedef struct {
 } BVHNode;
 
 
-HOST_DEVICE static inline bool intersect_bbox(
+DEVICE static inline int intersect_bbox(
     Ray r,
     const Vector3D mn,
     const Vector3D mx,
@@ -79,7 +79,7 @@ HOST_DEVICE static inline bool intersect_bbox(
   float tmax = fmaxf(tx1, tx2);
   // early exit if miss or outside [min_t,max_t]
   if (tmax < r.min_t || tmin > r.max_t || tmin > tmax) 
-    return false;
+    return 0;
 
   // Y slab
   float ty1 = (mn.y - r.o.y) * inv_dy;
@@ -91,7 +91,7 @@ HOST_DEVICE static inline bool intersect_bbox(
   tmax = fminf(tmax, tymax);
   // early exit again
   if (tmax < r.min_t || tmin > r.max_t || tmin > tmax) 
-    return false;
+    return 0;
 
   // Z slab
   float tz1 = (mn.z - r.o.z) * inv_dz;
@@ -102,22 +102,22 @@ HOST_DEVICE static inline bool intersect_bbox(
   tmin = fmaxf(tmin, tzmin);
   tmax = fminf(tmax, tzmax);
   if (tmax < r.min_t || tmin > r.max_t || tmin > tmax) 
-    return false;
+    return 0;
 
   // Hit!
   *t0 = tmin;
   *t1 = tmax;
-  return true;
+  return 1;
 }
 
-DEVICE static inline bool intersect(Ray *ray, const CudaPrimitive *primitives, const Vector3D *vertices, const Vector3D *normals,
+DEVICE static inline int intersect(Ray *ray, const CudaPrimitive *primitives, const Vector3D *vertices, const Vector3D *normals,
                                      const Vector2D *texcoords, const Vector4D *tangents, const BVHNode *nodes, CudaIntersection *i) {
   constexpr int STACK_SIZE = 20;
   uint32_t stack[STACK_SIZE];
   int stack_ptr = 0;
 
   stack[stack_ptr++] = 0;
-  bool hit = false;
+  int hit = 0;
 
   while (stack_ptr > 0) {
     uint32_t idx = stack[--stack_ptr];
@@ -130,7 +130,7 @@ DEVICE static inline bool intersect(Ray *ray, const CudaPrimitive *primitives, c
       CudaIntersection tmp; tmp.t = INFINITY;
       for (uint32_t p = node.start; p < node.end; p++) {
           if (primitive_intersect(&(primitives[p]), ray, &tmp, vertices, normals, texcoords, tangents) && tmp.t < i->t) {
-            hit = true;
+            hit = 1;
             *i = tmp;
           }
       }
@@ -145,7 +145,7 @@ DEVICE static inline bool intersect(Ray *ray, const CudaPrimitive *primitives, c
   return hit;
 }
 
-DEVICE static inline bool has_intersect(const CudaPrimitive *primitives, const Vector3D *vertices, const BVHNode* nodes, Ray *ray) {
+DEVICE static inline int has_intersect(const CudaPrimitive *primitives, const Vector3D *vertices, const BVHNode* nodes, Ray *ray) {
   constexpr int STACK_SIZE = 20;
   uint32_t stack[STACK_SIZE];
   int stack_ptr = 0;
@@ -168,7 +168,7 @@ DEVICE static inline bool has_intersect(const CudaPrimitive *primitives, const V
           // 2) test each primitive in the leaf
           for (uint32_t p = node.start; p < node.end; ++p) {
               if (primitive_has_intersect(&primitives[p], ray, vertices, t)) {
-                  return true;
+                  return 1;
               }
           }
       } else {
@@ -180,7 +180,7 @@ DEVICE static inline bool has_intersect(const CudaPrimitive *primitives, const V
       }
   }
 
-  return false;
+  return 0;
 }
 
 static int construct_nodes(size_t start, size_t end,

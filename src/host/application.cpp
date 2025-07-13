@@ -134,6 +134,7 @@ Application::Application(AppConfig config, string sceneFilePath, string output_f
   serializer->serialize_const(f, "max_ray_depth", config.pathtracer_max_ray_depth);
   serializer->serialize_const(f, "ns_area_light", config.pathtracer_ns_area_light);
   serializer->serialize_const(f, "accumulate", config.pathtracer_accumulate_bounces);
+  serializer->serialize_const(f, "restir", (int)config.restir);
 
   fclose(f);
 
