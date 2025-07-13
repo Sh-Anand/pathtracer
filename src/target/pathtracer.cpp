@@ -254,7 +254,7 @@ int main() {
   int h_max_ray_depth = 0, h_ns_area_light = 0;
   bool h_accumulate = false;
 
-  vx_printf("Raytracing start\n");
+  vx_printf("RAYTRACING_START\n");
 
   width = w;
   height = h;
@@ -278,12 +278,16 @@ int main() {
   vx_spawn_threads(dimension, grid_dim, block_dim, (vx_kernel_func_cb)rt_entry_point, &args);
 
   vx_printf("PIXEL_BUFFER_START\n");
-  for (uint32_t i = 0; i < width * height; i++) {
-    vx_printf("(%f, %f, %f)\n",
-           pixel[i].data.x, pixel[i].data.y, pixel[i].data.z);
+  vx_printf("%d, %d\n", width, height);
+  for (uint32_t i = 0; i < width; i++) {
+    for (uint32_t j = 0; j < height; j++) {
+      vx_printf("(%f, %f, %f) ",
+           pixel[i + j * width].data.x, pixel[i + j * width].data.y, pixel[i + j * width].data.z);
+    }
+    vx_printf("\n");
   }
   vx_printf("PIXEL_BUFFER_END\n");
 
-  vx_printf("Raytracing complete\n");
+  vx_printf("RAYTRACING_COMPLETE\n");
   return 0;
 }
