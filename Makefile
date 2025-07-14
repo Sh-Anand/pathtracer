@@ -52,6 +52,18 @@ STDOUT_SENTINEL ?= "RAYTRACING_COMPLETE"
 STDOUT_SKIP_STR ?= "\#0: "
 RENDER_PFM ?= $(TARGET_DIR)/render.pfm
 DEBUG ?= 0
+RUN_CMD = 	python3 scripts/run_sim.py \
+		--ssh $(SSH) \
+		--user $(SSH_USER) \
+		--host $(SSH_HOST) \
+		--sim $(GPU_SIM) \
+		--bin $(GPU_SIM_BIN) \
+		--build_folder $(TARGET_DIR) \
+		--post $(POST_PROCESS_SCRIPT) \
+		--sentinel $(STDOUT_SENTINEL) \
+		--skip $(STDOUT_SKIP_STR) \
+		--outfile $(RENDER_PFM) \
+		--debug $(DEBUG)
 
 # RISC-V toolchain
 RISCV_CC := $(LLVM_VORTEX)/bin/clang++
@@ -93,6 +105,8 @@ CFLAGS := $(CUDA_FLAGS)
 LDFLAGS := $(CUDA_LDFLAGS)
 OBJDUMP_FLAGS := $(CUDA_OBJDUMP_FLAGS)
 PT_OBJ := $(PT)
+GPU_SIM_BIN := $(PT)
+RUN_CMD := $(GPU_SIM_BIN) $(R) $(RENDER_PFM)
 endif
 
 .PHONY: all relink libvortex clean clean-link clean-libvortex run-sim run-sim-ssh
@@ -132,33 +146,22 @@ $(PT_OBJ): $(BAKED_OBJ) $(if $(filter riscv,$(target)),$(VORTEX_LIB_DIR)/libvort
 	@echo "[Link] $(target) $(PROJECT_NAME)"
 	@$(CC) $(CFLAGS) $(PT_TARGET) $< $(LDFLAGS) -o $@
 
-$(PT).bin: $(PT).elf
-	@echo "[Objcopy] $(target) $(PROJECT_NAME).bin"
-	@$(RISCV_OBJCOPY) -O binary $< $@
-
 $(PT).dump: $(PT_OBJ)
 	@echo "[Objdump] $(target) $(PROJECT_NAME)"
 	@$(OBJDUMP) $(OBJDUMP_FLAGS) $< > $@
 
-# Simulation targets
-run-sim: $(PT).bin
-	@python3 scripts/run_sim.py \
-		--ssh $(SSH) \
-		--user $(SSH_USER) \
-		--host $(SSH_HOST) \
-		--sim $(GPU_SIM) \
-		--bin $(GPU_SIM_BIN) \
-		--build_folder $(TARGET_DIR) \
-		--post $(POST_PROCESS_SCRIPT) \
-		--sentinel $(STDOUT_SENTINEL) \
-		--skip $(STDOUT_SKIP_STR) \
-		--outfile $(RENDER_PFM) \
-		--debug $(DEBUG)
+$(PT).bin: $(PT).dump
+	@echo "[Objcopy] $(target) $(PROJECT_NAME).bin"
+	@$(RISCV_OBJCOPY) -O binary $(PT).elf $@
 
-run-sim-ssh:
-	@GPU_SIM_BIN=$(GPU_SIM_DIR)/$(PROJECT_NAME).bin; \
-	scp $(PT).bin $(SSH_USER)@$(SSH_HOST):$$GPU_SIM_BIN; \
-	$(MAKE) SSH=1 GPU_SIM_BIN=$$GPU_SIM_BIN run-sim
+# run targets
+run: $(GPU_SIM_BIN)
+	$(RUN_CMD)
+
+run-ssh: $(GPU_SIM_BIN)
+	@GPU_SIM_BIN_REMOTE=$(GPU_SIM_DIR)/$(PROJECT_NAME).bin; \
+	scp $(PT).bin $(SSH_USER)@$(SSH_HOST):$$GPU_SIM_BIN_REMOTE; \
+	$(subst --ssh $(SSH),--ssh 1,$(subst --bin $(GPU_SIM_BIN),--bin $$GPU_SIM_BIN_REMOTE,$(RUN_CMD)))
 
 # Utility targets
 relink: clean-link

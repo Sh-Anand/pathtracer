@@ -248,7 +248,7 @@ int main() {
   vx_printf("RAYTRACING_START\n");
 
   vx_printf("Width: %d, Height: %d\n", w, h);
-  vx_printf("Max Ray Depth: %d, NS Area Light: %d, Accumulate: %s\n, ReSTIR: %s\n",
+  vx_printf("Max Ray Depth: %d, NS Area Light: %d, Accumulate: %s, ReSTIR: %s\n",
             max_ray_depth, ns_area_light, accumulate ? "true" : "false", restir ? "true" : "false");
 
   uint32_t dimension = 2;

@@ -347,11 +347,9 @@ __global__ void kernel_spatial_sample(uint16_t width, uint16_t height) {
 
 static void write_pfm(const char* fname, int W, int H)
 {
-    /* 1. get device pointer held in the global symbol `pixel` */
     PixelData* d_pixels = nullptr;
     CUDA_ERR(cudaGetSymbolAddress((void**)&d_pixels, pixel));
 
-    /* 2. copy entire framebuffer to host */
     const size_t N = static_cast<size_t>(W) * H;
     std::vector<PixelData> cpu_fb(N);
     if (N == 0) {
@@ -366,29 +364,22 @@ static void write_pfm(const char* fname, int W, int H)
                         N * sizeof(PixelData),
                         cudaMemcpyDeviceToHost));
 
-    /* 3. open file */
     std::ofstream f(fname, std::ios::binary);
     if (!f) {
         std::perror(fname);
         return;
     }
 
-    /* 4. write PFM header
-     *    PF          = RGB float image
-     *    width height
-     *    -1.0        = little-endian
-     */
-    f << "PF\n" << W << " " << H << "\n" << "-1.0\n";
+    f << "PF\n";
+    f << W << " " << H << "\n"; 
+    f << "-1.0\n";
 
-    /* 5. write rows from top to bottom (pixel(0,0) is bottom-left) */
-    for (int y = H - 1; y >= 0; --y) {
-        const PixelData* row = cpu_fb.data() + size_t(y) * W;
+    for (int y = H - 1; y >= 0; --y) { 
         for (int x = 0; x < W; ++x) {
-            // write the 3 floats of the color
-            const Vector3D& c = row[x].data;
-            f.write(reinterpret_cast<const char*>(&c.z), sizeof(c.z));
-            f.write(reinterpret_cast<const char*>(&c.y), sizeof(c.y));
-            f.write(reinterpret_cast<const char*>(&c.x), sizeof(c.x));
+            PixelData& pixel = cpu_fb[x + y * W];
+            f.write(reinterpret_cast<const char*>(&pixel.data.z), sizeof(float));  // R
+            f.write(reinterpret_cast<const char*>(&pixel.data.y), sizeof(float));  // G
+            f.write(reinterpret_cast<const char*>(&pixel.data.x), sizeof(float));  // B
         }
     }
 }
