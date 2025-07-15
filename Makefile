@@ -35,7 +35,7 @@ BUILD_DIR ?= build
 VORTEX_LIB_DIR ?= lib
 TARGET_DIR = $(BUILD_DIR)/$(scene_name)_$(w)_$(h)_$(R)_$(target)
 APP_EXE := $(BUILD_DIR)/baker
-BAKED_OBJ := $(TARGET_DIR)/baked_data.o
+BAKED_OBJ := $(CURDIR)/bakes/$(scene_name)_$(w)_$(h)_$(R)_$(target).o
 PT := $(TARGET_DIR)/$(PROJECT_NAME)
 
 # SSH parameters
@@ -70,13 +70,13 @@ RISCV_CC := $(LLVM_VORTEX)/bin/clang++
 RISCV_OBJDUMP := $(LLVM_VORTEX)/bin/llvm-objdump
 RISCV_OBJCOPY := $(LLVM_VORTEX)/bin/llvm-objcopy
 RISCV_CFLAGS := --target=riscv32-unknown-elf --sysroot=$(RISCV_32)/riscv32-unknown-elf --gcc-toolchain=$(RISCV_32)
-RISCV_CFLAGS += -march=rv32imaf -mabi=ilp32f -O3 -std=c++17
+RISCV_CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -std=c++17
 RISCV_CFLAGS += -Xclang -target-feature -Xclang +vortex
 RISCV_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -fdata-sections -ffunction-sections -mllvm -inline-threshold=262144
 RISCV_CFLAGS += -I$(PT_SRC_DIR) -I$(LIB_DIR)/include/
 RISCV_CFLAGS += -DLLVM_VORTEX
 RISCV_LDFLAGS := -nostartfiles -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_LIB_DIR)/linker/link32.ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_LIB_DIR)/libvortex.a
-RISCV_OBJDUMP_FLAGS := -D --section=.text
+RISCV_OBJDUMP_FLAGS := -D --section=.init --section=.text
 
 # CUDA toolchain
 CUDA_CC := nvcc
@@ -132,17 +132,17 @@ $(BUILD_DIR)/build.ninja: CMakeLists.txt
 $(APP_EXE): $(BUILD_DIR)/build.ninja
 	@ninja -C $(BUILD_DIR)
 
-$(baked): $(APP_EXE)
+$(baked): | $(APP_EXE)
 	@mkdir -p $(@D)
 	@echo "[Bake]  Cooking scene -> $@"
 	@$(APP_EXE) -l $(l) -m $(m) -d $(d) -o $(o) -R $(R) -r $(w) $(h) -S $(S) -f $@ $(scene)
 
-$(BAKED_OBJ): $(baked)
-	@mkdir -p $(@D)
+$(BAKED_OBJ): | $(baked)
 	@echo "[Compile] $(target) baked data"
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -c $(baked) -o $@
 
-$(PT_OBJ): $(BAKED_OBJ) $(if $(filter riscv,$(target)),$(VORTEX_LIB_DIR)/libvortex.a)
+$(PT_OBJ): $(BAKED_OBJ) | $(if $(filter riscv,$(target)),$(VORTEX_LIB_DIR)/libvortex.a)
+	@mkdir -p $(@D)
 	@echo "[Link] $(target) $(PROJECT_NAME)"
 	@$(CC) $(CFLAGS) $(PT_TARGET) $< $(LDFLAGS) -o $@
 
@@ -174,5 +174,8 @@ clean-link:
 	@rm -f $(PT)*
 
 clean:
-	@rm -rf $(BUILD_DIR) bakes
+	@rm -rf $(BUILD_DIR)
 	@$(MAKE) -C $(LIB_DIR) clean
+
+clean-all: clean
+	@rm -rf bakes

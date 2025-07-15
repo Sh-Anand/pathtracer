@@ -5,18 +5,20 @@ SRC_DIR := src
 
 LLVM_CFLAGS += --sysroot=$(RISCV_32)/riscv32-unknown-elf --gcc-toolchain=$(RISCV_32) --target=riscv32-unknown-elf
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex -mllvm -vortex-branch-divergence=0
+LLVM_CFLAGS += -DLLVM_VORTEX
 
-CC  = $(RISCV_32)/bin/riscv32-unknown-elf-gcc
-AR  = $(RISCV_32)/bin/riscv32-unknown-elf-gcc-ar
-DP  = $(RISCV_32)/bin/riscv32-unknown-elf-objdump
-CP  = $(RISCV_32)/bin/riscv32-unknown-elf-objcopy
+CC  = $(LLVM_VORTEX)/bin/clang
+AR  = $(LLVM_VORTEX)/bin/llvm-ar
+DP  = $(LLVM_VORTEX)/bin/llvm-objdump
+CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
-CFLAGS += -march=rv32imaf -mabi=ilp32f
-CFLAGS += -O3 -mcmodel=medany -fno-exceptions -fdata-sections -ffunction-sections
+CFLAGS += -march=rv32imf -mabi=ilp32f
+CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 CFLAGS += -I$(INC_DIR)
 CFLAGS += -DXLEN_32
+CFLAGS += $(LLVM_CFLAGS)
 
-PROJECT := libvortex
+PROJECT ?= libvortex
 
 SRCS = $(SRC_DIR)/vx_start.S $(SRC_DIR)/vx_syscalls.c $(SRC_DIR)/vx_print.S $(SRC_DIR)/tinyprintf.c $(SRC_DIR)/vx_print.c $(SRC_DIR)/vx_spawn.c $(SRC_DIR)/vx_serial.S $(SRC_DIR)/vx_perf.c
 
