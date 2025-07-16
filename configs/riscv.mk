@@ -9,9 +9,10 @@ CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -std=c++17
 CFLAGS += -Xclang -target-feature -Xclang +vortex
 CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -fdata-sections -ffunction-sections -mllvm -inline-threshold=262144
 CFLAGS += -I$(PT_SRC_DIR) -I$(RT_LIB_DIR)/include/
-CFLAGS += -DLLVM_VORTEX
+CFLAGS += -fuse-ld=lld
+CFLAGS += -DLLVM_VORTEX 
 
-LDFLAGS := -nostartfiles -Wl,-Bstatic,--gc-sections,-T,$(RT_LIB_DIR)/linker/link32.ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(RT_LIB)
+LDFLAGS := -nostartfiles -Wl,-Bstatic,-T,$(RT_LIB_DIR)/linker/link32.ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(RT_LIB)
 
 OBJDUMP_FLAGS := -D --section=.init --section=.text
 
