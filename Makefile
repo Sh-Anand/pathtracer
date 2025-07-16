@@ -9,30 +9,22 @@ o ?= 1# accumulate
 R ?= 0# ReSTIR-GI
 S ?= 0# serializer (0=text,1=binary)
 f ?=  # optional explicit output filename
-target ?= riscv# or "cuda"
+#[cuda, muon, vortex]
+target ?= muon
 
 # Project configuration
 PROJECT_NAME := pathtracer
 scene_name := $(basename $(notdir $(scene)))
-ext := .cpp
-ifeq ($(target),cuda)
-  ext := .cu
-endif
-baked = $(CURDIR)/bakes/$(scene_name)_$(w)_$(h)_$(R)$(ext)
-
-# Tool paths
-LLVM_VORTEX ?= $(HOME)/opt/llvm-vortex
-RISCV_32 ?= $(HOME)/opt/riscv32
-STARTUP_ADDR ?= 0x80000000
+baked = $(CURDIR)/bakes/$(scene_name)_$(w)_$(h)_$(R)
 
 # Source directories
 PT_SRC_DIR ?= src
 LIB_DIR ?= lib
-PT_TARGET := $(PT_SRC_DIR)/target/$(PROJECT_NAME)$(ext)
+PT_TARGET := $(PT_SRC_DIR)/target/$(target)/$(PROJECT_NAME)
+RT_LIB_DIR ?= $(LIB_DIR)/$(target)
 
 # Build directories
 BUILD_DIR ?= build
-VORTEX_LIB_DIR ?= lib
 TARGET_DIR = $(BUILD_DIR)/$(scene_name)_$(w)_$(h)_$(R)_$(target)
 APP_EXE := $(BUILD_DIR)/baker
 BAKED_OBJ := $(CURDIR)/bakes/$(scene_name)_$(w)_$(h)_$(R)_$(target).o
@@ -65,67 +57,20 @@ RUN_CMD = 	python3 scripts/run_sim.py \
 		--outfile $(RENDER_PFM) \
 		--debug $(DEBUG)
 
-# RISC-V toolchain
-RISCV_CC := $(LLVM_VORTEX)/bin/clang++
-RISCV_OBJDUMP := $(LLVM_VORTEX)/bin/llvm-objdump
-RISCV_OBJCOPY := $(LLVM_VORTEX)/bin/llvm-objcopy
-RISCV_CFLAGS := --target=riscv32-unknown-elf --sysroot=$(RISCV_32)/riscv32-unknown-elf --gcc-toolchain=$(RISCV_32)
-RISCV_CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -std=c++17
-RISCV_CFLAGS += -Xclang -target-feature -Xclang +vortex
-RISCV_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -fdata-sections -ffunction-sections -mllvm -inline-threshold=262144
-RISCV_CFLAGS += -I$(PT_SRC_DIR) -I$(LIB_DIR)/include/
-RISCV_CFLAGS += -DLLVM_VORTEX
-RISCV_LDFLAGS := -nostartfiles -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_LIB_DIR)/linker/link32.ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_LIB_DIR)/libvortex.a
-RISCV_OBJDUMP_FLAGS := -D --section=.init --section=.text
+# Runtime library
+RT_LIB := $(RT_LIB_DIR)/lib$(target).a
 
-# CUDA toolchain
-CUDA_CC := nvcc
-CUDA_OBJDUMP := cuobjdump 
-CUDA_FLAGS := -std=c++17 -rdc=true -I$(PT_SRC_DIR)
-CUDA_LDFLAGS :=
-CUDA_OBJDUMP_FLAGS := --dump-sass
+.PHONY: all relink runtime clean clean-link clean-lib run-sim run-sim-ssh
 
-# Platform-specific fixes
-ifeq ($(shell test -f /etc/fedora-release && grep -q "Fedora.*release 42" /etc/fedora-release && echo yes),yes)
-NVCC_CCBIN := /usr/bin/g++-14
-endif
-
-# Target-specific toolchain selection
-CC := $(RISCV_CC)
-OBJDUMP := $(RISCV_OBJDUMP)
-CFLAGS := $(RISCV_CFLAGS)
-LDFLAGS := $(RISCV_LDFLAGS)
-OBJDUMP_FLAGS := $(RISCV_OBJDUMP_FLAGS)
-PT_OBJ := $(PT).elf
-
-ifeq ($(target),cuda)
-CC := NVCC_CCBIN=$(NVCC_CCBIN) $(CUDA_CC)
-OBJDUMP := $(CUDA_OBJDUMP)
-CFLAGS := $(CUDA_FLAGS)
-LDFLAGS := $(CUDA_LDFLAGS)
-OBJDUMP_FLAGS := $(CUDA_OBJDUMP_FLAGS)
-PT_OBJ := $(PT)
-GPU_SIM_BIN := $(PT)
-RUN_CMD := $(GPU_SIM_BIN) $(R) $(RENDER_PFM)
-endif
-
-.PHONY: all relink libvortex clean clean-link clean-libvortex run-sim run-sim-ssh
-
-ifeq ($(target),cuda)
-all: $(PT).dump $(PT)
-else
-all: libvortex $(PT).dump $(PT).bin $(PT).elf
-endif
+include configs/$(target).mk
 
 # Build targets
-libvortex: $(VORTEX_LIB_DIR)/libvortex.a
+lib$(target): $(RT_LIB)
 
-$(VORTEX_LIB_DIR)/libvortex.a:
-	@echo "[Make] Building libvortex for RISC-V target"
-	@$(MAKE) -C $(LIB_DIR) RISCV_32=$(RISCV_32)
+$(RT_LIB):
+	@$(MAKE) -C $(RT_LIB_DIR)
 
 $(BUILD_DIR)/build.ninja: CMakeLists.txt
-	@echo "[CMake] Configuring (only if first run) ..."
 	@cmake -S . -B $(BUILD_DIR) -G Ninja
 	@touch $@
 
@@ -141,7 +86,7 @@ $(BAKED_OBJ): | $(baked)
 	@echo "[Compile] $(target) baked data"
 	@$(CC) $(CFLAGS) -c $(baked) -o $@
 
-$(PT_OBJ): $(BAKED_OBJ) | $(if $(filter riscv,$(target)),$(VORTEX_LIB_DIR)/libvortex.a)
+$(PT_OBJ): $(BAKED_OBJ) | $(TARGET_LIB_DEP)
 	@mkdir -p $(@D)
 	@echo "[Link] $(target) $(PROJECT_NAME)"
 	@$(CC) $(CFLAGS) $(PT_TARGET) $< $(LDFLAGS) -o $@
@@ -152,7 +97,7 @@ $(PT).dump: $(PT_OBJ)
 
 $(PT).bin: $(PT).dump
 	@echo "[Objcopy] $(target) $(PROJECT_NAME).bin"
-	@$(RISCV_OBJCOPY) -O binary $(PT).elf $@
+	@$(OBJCOPY) -O binary $(PT).elf $@
 
 # run targets
 run: $(GPU_SIM_BIN)
@@ -167,15 +112,25 @@ run-ssh: $(GPU_SIM_BIN)
 relink: clean-link
 	@$(MAKE) all
 
-clean-libvortex:
-	@$(MAKE) -C $(LIB_DIR) clean
+clean-bakes:
+	@rm -rf bakes
+
+clean-build:
+	@rm -rf $(BUILD_DIR)
+
+clean-lib:
+	@$(MAKE) -C $(RT_LIB_DIR) clean
+
+clean-lib-all:
+	@for dir in $(LIB_DIR)/*/; do \
+		if [ -d "$$dir" ] && [ -f "$$dir/Makefile" ]; then \
+			$(MAKE) -C "$$dir" clean; \
+		fi; \
+	done
 
 clean-link:
 	@rm -f $(PT)*
 
-clean:
-	@rm -rf $(BUILD_DIR)
-	@$(MAKE) -C $(LIB_DIR) clean
+clean: clean-build clean-lib
 
-clean-all: clean
-	@rm -rf bakes
+clean-all: clean-bakes clean-build clean-lib-all
