@@ -1,7 +1,10 @@
 LLVM ?= /home/shashank/radiance/radiance-llvm/build
 
+CFLAGS += -march=rv32im_zfinx -mabi=ilp32
+
 include configs/riscv.mk
 
+CFLAGS += -nostartfiles -nostdlib
 CFLAGS += -DMUON
 
 GPU_SIM_DIR ?= /home/shashank/radiance/cyclotron

@@ -1,5 +1,7 @@
 LLVM ?= /home/shashank/radiance/vortex-llvm/build
 
+CFLAGS += -march=rv32imf -mabi=ilp32f
+
 include configs/riscv.mk
 
 CFLAGS += -DVORTEX
