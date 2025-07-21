@@ -1,5 +1,5 @@
 #include "application.h"
-#include "scene/bvh.h"
+#include "bvh_host.h"
 #include "scene/serializer/text_serializer.h"
 #include "scene/serializer/binary_serializer.h"
 

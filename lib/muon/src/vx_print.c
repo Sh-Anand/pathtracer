@@ -14,11 +14,11 @@
 #include <vx_print.h>
 #include <vx_spawn.h>
 #include <vx_intrinsics.h>
+#include <vx_utils.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <math.h>
 #include "tinyprintf.h"
 
 #ifdef __cplusplus
@@ -62,7 +62,7 @@ static void __putfloat_cb(const putfloat_arg_t* arg) {
     if (precision != 0) {
         vx_putchar('.');
 		float frac = value - (float)ipart;
-        float fscaled = frac * pow(10, precision);  
+        float fscaled = frac * powf(10, precision);  
         vx_putint((int)fscaled, 10);
     }
 }

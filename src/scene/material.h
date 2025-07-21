@@ -5,6 +5,10 @@
 #include "util/matrix.h"
 #include "util/vector.h"
 
+#ifdef MUON
+#include <vx_utils.h>
+#endif
+
 using namespace std;
 
 // Helper math functions. Assume all vectors are in unit hemisphere //

@@ -2,7 +2,8 @@ LLVM ?= /home/shashank/radiance/vortex-llvm/build
 
 include configs/riscv.mk
 
-# run params
+CFLAGS += -DVORTEX
+
 GPU_SIM_DIR ?= /home/eecs/shashank.anand/vortex/build/sim/rtlsim
 GPU_SIM ?= $(GPU_SIM_DIR)/rtlsim
 GPU_SIM_BIN ?= $(PT).bin

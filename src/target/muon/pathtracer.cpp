@@ -243,13 +243,13 @@ static void rt_entry_point(int taskid, void *args) {
 }
 
 int main() {
-  // vx_printf("Pathtracer starting...\n");
+  vx_printf("Pathtracer starting...\n");
 
-  // vx_printf("RAYTRACING_START\n");
+  vx_printf("RAYTRACING_START\n");
 
-  // vx_printf("Width: %d, Height: %d\n", w, h);
-  // vx_printf("Max Ray Depth: %d, NS Area Light: %d, Accumulate: %s, ReSTIR: %s\n",
-  //           max_ray_depth, ns_area_light, accumulate ? "true" : "false", restir ? "true" : "false");
+  vx_printf("Width: %d, Height: %d\n", w, h);
+  vx_printf("Max Ray Depth: %d, NS Area Light: %d, Accumulate: %s, ReSTIR: %s\n",
+            max_ray_depth, ns_area_light, accumulate ? "true" : "false", restir ? "true" : "false");
 
   uint32_t dimension = 2;
   uint32_t block_dim[2] = {4, 4};
@@ -259,18 +259,18 @@ int main() {
   vx_spawn_tasks(w*h, (vx_spawn_tasks_cb)rt_entry_point, NULL);
 
   if (!restir) {
-    // vx_printf("PIXEL_BUFFER_START\n");
-    // vx_printf("%d, %d\n", w, h);
-    // for (uint32_t i = 0; i < w; i++) {
-    //   for (uint32_t j = 0; j < h; j++) {
-    //     vx_printf("(%f, %f, %f) ",
-    //         pixel[i + j * w].data.x, pixel[i + j * w].data.y, pixel[i + j * w].data.z);
-    //   }
-    //   vx_printf("\n");
-    // }
-    // vx_printf("PIXEL_BUFFER_END\n");
+    vx_printf("PIXEL_BUFFER_START\n");
+    vx_printf("%d, %d\n", w, h);
+    for (uint32_t i = 0; i < w; i++) {
+      for (uint32_t j = 0; j < h; j++) {
+        vx_printf("(%f, %f, %f) ",
+            pixel[i + j * w].data.x, pixel[i + j * w].data.y, pixel[i + j * w].data.z);
+      }
+      vx_printf("\n");
+    }
+    vx_printf("PIXEL_BUFFER_END\n");
   }
 
-  // vx_printf("RAYTRACING_COMPLETE\n");
+  vx_printf("RAYTRACING_COMPLETE\n");
   return 0;
 }

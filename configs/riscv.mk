@@ -10,7 +10,7 @@ CFLAGS += -Xclang -target-feature -Xclang +vortex
 CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -fdata-sections -ffunction-sections -mllvm -inline-threshold=262144
 CFLAGS += -I$(PT_SRC_DIR) -I$(RT_LIB_DIR)/include/
 CFLAGS += -fuse-ld=lld
-CFLAGS += -DLLVM_VORTEX 
+CFLAGS += -DLLVM_VORTEX -DRISCV_32
 
 LDFLAGS := -nostartfiles -Wl,-Bstatic,-T,$(RT_LIB_DIR)/linker/link32.ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(RT_LIB)
 
