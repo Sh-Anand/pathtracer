@@ -30,9 +30,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line) {
 #define EPS_F (0.000001f)
 #define RGB_R (1/255.0f)
 
-#include <cmath>
-#include <limits>
-#include <algorithm>
+#include <math.h>
 
 /*
   Takes any kind of number and converts from degrees to radians.
@@ -58,5 +56,5 @@ inline T degrees(T rad) {
 */
 template<typename T>
 inline T clamp_T(T x, T lo, T hi) {
-  return std::min(std::max(x, lo), hi);
+  return fmin(fmax(x, lo), hi);
 }

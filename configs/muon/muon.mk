@@ -1,9 +1,11 @@
-LLVM ?= /home/shashank/radiance/radiance-llvm/build
+LLVM ?= $(MUON)
 
-CFLAGS += -march=rv32im_zfinx -mabi=ilp32
+CFLAGS += -march=rv32im_zfinx -mabi=ilp32 
+CFLAGS += --target=riscv32-unknown-elf --sysroot=$(MUON)/riscv32-unknown-elf -I$(MUON)/include 
 
 include configs/riscv.mk
 
+CFLAGS += -L$(MUON)/lib/riscv32-unknown-elf -lm
 CFLAGS += -nostartfiles -nostdlib
 CFLAGS += -DMUON
 

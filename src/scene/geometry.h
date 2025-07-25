@@ -1,8 +1,9 @@
 #ifndef CGL_STATICSCENE_PRIMITIVE_H
 #define CGL_STATICSCENE_PRIMITIVE_H
 
-#include <cstdint>
 #include "util/vector.h"
+
+#include <stdint.h>
 typedef struct {
   uint32_t i0, i1, i2;
   int bsdf_idx;

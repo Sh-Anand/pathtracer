@@ -9,8 +9,6 @@
 #include <vx_utils.h>
 #endif
 
-using namespace std;
-
 // Helper math functions. Assume all vectors are in unit hemisphere //
 
 inline float clampf(float x, float lo, float hi) {
@@ -34,7 +32,7 @@ inline float sin_theta2(const Vector3D w) {
 }
 
 inline float sin_theta(const Vector3D w) {
-  return sqrt(sin_theta2(w));
+  return sqrtf(sin_theta2(w));
 }
 
 inline float cos_phi(const Vector3D w) {
@@ -76,11 +74,11 @@ DEVICE static inline Vector4D sample_texture(const CudaTexture tex, const Vector
     int v = int(v_f * (tex.height - 1) + 0.5f);
 
     // clamp to valid
-    u = max(0, min(u, tex.width  - 1));
-    v = max(0, min(v, tex.height - 1));
+    u = fmaxf(0, fminf(u, tex.width  - 1));
+    v = fmaxf(0, fminf(v, tex.height - 1));
 
     // compute byte index
-    size_t idx = (size_t(v) * tex.width + size_t(u)) * tex.channels;
+    uint32_t idx = (uint32_t(v) * tex.width + uint32_t(u)) * tex.channels;
     const uint8_t *base = tex.data;
 
     uint8_t c[4];
@@ -113,8 +111,8 @@ DEVICE inline float G_compute(
   // 2) denominator terms per glTF spec:
   //    G₁(X) = (2·X) / (X + sqrt(α² + (1−α²)·X²))
   float a2       = a * a;
-  float denomV  = NoV + sqrt(a2 + (1.0 - a2) * NoV * NoV);
-  float denomL  = NoL + sqrt(a2 + (1.0 - a2) * NoL * NoL);
+  float denomV  = NoV + sqrtf(a2 + (1.0 - a2) * NoV * NoV);
+  float denomL  = NoL + sqrtf(a2 + (1.0 - a2) * NoL * NoL);
   float GV      = (2.0 * NoV) / denomV;
   float GL      = (2.0 * NoL) / denomL;
   return GV * GL;
@@ -317,14 +315,14 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
 
     /* --- 5. Evaluate *both* lobes at (wo, wi) --- */
     Vector3D H  = vector3d_unit(vector3d_add(wo, sample_wi));
-    float    VoH = max(vector3d_dot(wo, H), 0.0f);
+    float    VoH = fmaxf(vector3d_dot(wo, H), 0.0f);
 
     /*   5a. Diffuse BRDF */
     Vector3D c_diff = vector3d_scale(base, onem);
     Vector3D f_diff = vector3d_scale(vector3d_mul(one_mF, c_diff), PI_R);
 
     /*   5b. Specular BRDF (uses GGX D and G helpers) */
-    float NoV   = max(vector3d_dot(N, wo), 0.0f);
+    float NoV   = fmaxf(vector3d_dot(N, wo), 0.0f);
     float NoL   = fmaxf(vector3d_dot(N, sample_wi), 0.0f);;
 
     if (NoV < EPS_F || NoL < EPS_F) {
@@ -333,7 +331,7 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
       return res;  // return zero vector
     }
 
-    float NoH   = max(vector3d_dot(N, H), 0.0f);
+    float NoH   = fmaxf(vector3d_dot(N, H), 0.0f);
     float D     = D_compute(alpha, NoH);
     float G     = G_compute(alpha, NoV, NoL) / (4.0f * NoV * NoL + EPS_F);
     Vector3D F  = vector3d_add(F0,
@@ -349,7 +347,7 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
     // 4.4) Specular sample
     /* --- 1. GGX half-vector sample (isotropic) -------------------- */
     float cosH   = sqrtf((1.0f - u2) / (1.0f + (alpha - 1.0f) * u2));
-    float sinH   = sqrtf(max(0.0f, 1.0f - cosH * cosH));
+    float sinH   = sqrtf(fmaxf(0.0f, 1.0f - cosH * cosH));
 
     /* local H = (sinθ cosφ, sinθ sinφ, cosθ) */
     Vector3D H_local = Vector3D{sinH * cosf(phi), sinH * sinf(phi), cosH};
@@ -362,10 +360,10 @@ DEVICE static inline Vector3D sample_f(const CudaBSDF* bsdfs,
 
     /* --- 3. Reflect wo about H to get wi -------------------------- */
     sample_wi = vector3d_reflect(vector3d_neg(wo), H);
-    float NoL = max(vector3d_dot(N, sample_wi), 0.0f);
-    float NoV = max(vector3d_dot(N,   wo      ), 0.0f);
-    float NoH = max(vector3d_dot(N,   H       ), 0.0f);
-    float VoH = max(vector3d_dot(wo,  H       ), 0.0f);
+    float NoL = fmaxf(vector3d_dot(N, sample_wi), 0.0f);
+    float NoV = fmaxf(vector3d_dot(N,   wo      ), 0.0f);
+    float NoH = fmaxf(vector3d_dot(N,   H       ), 0.0f);
+    float VoH = fmaxf(vector3d_dot(wo,  H       ), 0.0f);
 
     if (NoL < EPS_F || NoV < EPS_F || VoH < EPS_F) {
         *pdf = 0.0f;

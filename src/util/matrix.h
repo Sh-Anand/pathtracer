@@ -3,7 +3,6 @@
 #define MATRIX_H
 
 #include "vector.h"
-#include <cmath>
 
 // 3×3 and 4×4 matrix types
 typedef struct { Vector3D c[3]; } Matrix3x3;

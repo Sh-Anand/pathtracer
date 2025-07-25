@@ -4,7 +4,7 @@
 #include "util/cuda_defs.h"
 #include "vector.h"
 #include "gpu_rand.h"
-#include <cmath>
+#include <math.h>
 
 #ifdef __CUDACC__
   #define FORCE_INLINE __host__ __device__ __forceinline__
@@ -44,12 +44,12 @@ FORCE_INLINE bool are_geometrically_similar(const Sample *s1, const Sample *s2) 
 
     // 2) Depth test: normalized depth difference ≤ 0.05
     //    (Assuming s1.z_v and s2.z_v are camera‑space depths)
-    float depthRatio = s1->z_v / max(s2->z_v, 0.001f); // avoid division by zero
+    float depthRatio = s1->z_v / fmaxf(s2->z_v, 0.001f); // avoid division by zero
     if (depthRatio < 1.0f - DEPTH_THRESH || depthRatio > 1.0f + DEPTH_THRESH)
         return false;
 
     // 3) Illum delta test: ≤ 2x illumination difference
-    float ratio = illum(s1->L) / max(illum(s2->L), 0.001f); // avoid division by zero
+    float ratio = illum(s1->L) / fmaxf(illum(s2->L), 0.001f); // avoid division by zero
     if (ratio > ILLUM_DELTA_THRESH || ratio < ILLUM_DELTA_THRESH_INV)
         return false;
 

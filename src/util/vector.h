@@ -3,7 +3,6 @@
 #define VECTOR_H
 
 #include "cuda_defs.h"
-#include <cmath>
 
 #ifdef __CUDACC__
   #define FORCE_INLINE __host__ __device__ __forceinline__

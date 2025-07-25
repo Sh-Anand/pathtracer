@@ -31,10 +31,10 @@ class Camera {
 
   // Computes pos, screenXDir, screenYDir from target, r, phi, theta.
   void compute_position() {
-    float sinPhi = sin(phi);
+    float sinPhi = sinf(phi);
     if (sinPhi == 0) {
       phi += EPS_F;
-      sinPhi = sin(phi);
+      sinPhi = sinf(phi);
     }
     const Vector3D dirToCamera{-r * sinPhi * sinf(theta),
                               r * cosf(phi),

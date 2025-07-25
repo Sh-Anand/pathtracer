@@ -76,7 +76,7 @@ class TextSerializer : public Serializer {
                 v.x, v.y);
         }
         safe_fprintf(f, "};\n");
-        safe_fprintf(f, "const size_t num_%s = %zu;\n", name.c_str(), vectors.size());
+        safe_fprintf(f, "const uint32_t num_%s = %zu;\n", name.c_str(), vectors.size());
     }
 
     void serialize(FILE* f, const std::vector<Vector3D>& vectors, std::string name) override {
@@ -87,7 +87,7 @@ class TextSerializer : public Serializer {
                 v.x, v.y, v.z);
         }
         safe_fprintf(f, "};\n");
-        safe_fprintf(f, "const size_t num_%s = %zu;\n", name.c_str(), vectors.size());
+        safe_fprintf(f, "const uint32_t num_%s = %zu;\n", name.c_str(), vectors.size());
     }
 
     void serialize(FILE* f, const std::vector<Vector4D>& vectors, std::string name) override {
@@ -98,7 +98,7 @@ class TextSerializer : public Serializer {
                 v.x, v.y, v.z, v.w);
         }
         safe_fprintf(f, "};\n");
-        safe_fprintf(f, "const size_t num_%s = %zu;\n", name.c_str(), vectors.size());
+        safe_fprintf(f, "const uint32_t num_%s = %zu;\n", name.c_str(), vectors.size());
     }
 
     void serialize(FILE *f, const Camera &camera) override {
@@ -201,7 +201,7 @@ class TextSerializer : public Serializer {
         for (const auto& B : bsdfs) serialize(f, B);
 
         safe_fprintf(f, "};\n");
-        safe_fprintf(f, "const size_t num_bsdfs = %zu;\n\n", bsdfs.size());
+        safe_fprintf(f, "const uint32_t num_bsdfs = %zu;\n\n", bsdfs.size());
     }
 
     void serialize_texture_data(FILE* f, const CudaTexture& T, int idx)
@@ -230,7 +230,7 @@ class TextSerializer : public Serializer {
             serialize(f, textures[i], static_cast<int>(i));
 
         safe_fprintf(f, "};\n");
-        safe_fprintf(f, "const size_t num_textures = %zu;\n\n", textures.size());
+        safe_fprintf(f, "const uint32_t num_textures = %zu;\n\n", textures.size());
     }
 
     void serialize_primitives(FILE* f, const std::vector<CudaPrimitive>& primitives) override
@@ -241,7 +241,7 @@ class TextSerializer : public Serializer {
             serialize(f, P);
         }
         std::fputs("};\n", f);
-        safe_fprintf(f, "const size_t num_primitives = %zu;\n", primitives.size());
+        safe_fprintf(f, "const uint32_t num_primitives = %zu;\n", primitives.size());
     }
 
     void serialize_bvh_nodes(FILE* f, const std::vector<BVHNode>& nodes) override
@@ -251,7 +251,7 @@ class TextSerializer : public Serializer {
         for (const auto& node : nodes) serialize(f, node);
 
         safe_fprintf(f, "};\n");
-        safe_fprintf(f, "const size_t num_bvh_nodes = %zu;\n\n", nodes.size());
+        safe_fprintf(f, "const uint32_t num_bvh_nodes = %zu;\n\n", nodes.size());
     }
 
     void serialize_const(FILE* f, const char* name, int value) override
@@ -280,7 +280,7 @@ protected:
     // close array and the size symbol
     safe_fprintf(f,
       "};\n"
-      "const size_t num_%s = %zu;\n",
+      "const uint32_t num_%s = %zu;\n",
       var_name, count);
   }
 
