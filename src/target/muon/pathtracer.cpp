@@ -236,11 +236,107 @@ static inline void raytrace_pixel_temporal_sample(uint16_t x, uint16_t y) {
   }
 }
 
-static void rt_entry_point(int taskid, void *args) {
+// Computes jacobian from s1->s2 as defined in Equation 11 of the ReSTIR-GI paper
+DEVICE inline float jacobian(
+    const Vector3D xq1, const Vector3D xq2,
+    const Vector3D xr1, const Vector3D nq2)
+{
+    Vector3D q1q2 = vector3d_sub(xq1, xq2);
+    Vector3D r1q2 = vector3d_sub(xr1, xq2);
+
+    float dist_q  = vector3d_norm2(q1q2);
+    float dist_r  = vector3d_norm2(r1q2);
+    if (dist_r < EPS_F) return 0.f;
+
+    float abs_cos_q = fabsf(vector3d_dot(nq2, vector3d_scale(q1q2, 1.f/dist_q)));
+    float abs_cos_r = fabsf(vector3d_dot(nq2, vector3d_scale(r1q2, 1.f/dist_r)));
+    if (abs_cos_q < EPS_F) return 0.f;
+
+    return (abs_cos_r / abs_cos_q) * (dist_q / dist_r);
+}
+
+DEVICE static inline void spatial_resampling(uint16_t x, uint16_t y) {
+  const uint16_t neighbouring_pixel_radius = floor(0.05 * fmin(w, h));
+
+  uint32_t idx = x + y * w;
+  Reservoir Rs = temporalReservoirBufferGI[idx];
+  Vector3D q_x_v = initialSampleBuffer[idx].x_v;
+  Vector3D q_n_v = initialSampleBuffer[idx].n_v;
+  SampleMetadata qm = initialSampleMetadataBuffer[idx];
+  RNGState *rand_state = &rand_states[idx];
+  const uint8_t max_neighbouring_samples = 9; // ReSTIR GI paper value without temporal sampling
+
+  uint8_t s = 0, retries = 0;
+  while (s < max_neighbouring_samples && retries < 20) {
+    retries++;
+    // Randomly choose a neighbor pixel qn
+    int window = 2 * neighbouring_pixel_radius + 1;
+    uint16_t sample_x = x + static_cast<int>(next_float(rand_state) * window) - neighbouring_pixel_radius;
+    uint16_t sample_y = y + static_cast<int>(next_float(rand_state) * window) - neighbouring_pixel_radius;
+
+    // Ensure the sample is within the frame buffer bounds
+    if (sample_x >= w || sample_y >= h || (sample_x == x && sample_y == y)) continue;
+
+    // Retrieve the reservoir from the neighboring pixel
+    int idxn = sample_x + sample_y * w;
+    Reservoir Rn = temporalReservoirBufferGI[idxn];
+    Sample qn = initialSampleBuffer[Rn.z];
+    // Discard sample if it failed to intersect second bounce
+    if (qn.L.x == 0 && qn.L.y == 0 && qn.L.z == 0) continue;
+
+    // We count this as a sample
+    retries = 0;
+    s++;
+
+    Sample qs = initialSampleBuffer[Rs.z];
+    // Calculate geometric similarity between Rs.z (not q because of resampling) and qn
+    if (!are_geometrically_similar(&qs, &qn)) continue;
+
+    // Calculate |Jqn→q| (Jacobian determinant)
+    float Jqn_to_q = fabsf(jacobian(qn.x_v, qn.x_s, q_x_v, qn.n_s));
+    if (Jqn_to_q < EPS_F) continue;
+
+    // Calculate ˆp′q
+    float p_prime_q = illum(qn.L) / Jqn_to_q;
+
+    // visibility test
+    // if neighbour's path's point is invisible from the current path's point, p_prime_q = 0
+    Ray shadow_ray;
+    Vector3D xsmxv = vector3d_sub(qn.x_s, q_x_v);
+    shadow_ray.o = q_x_v; shadow_ray.d = vector3d_unit(xsmxv); shadow_ray.inv_d = vector3d_rcp(shadow_ray.d);
+    shadow_ray.min_t = EPS_F;
+    shadow_ray.max_t = vector3d_norm(xsmxv) - EPS_F;
+    if (!has_intersect(primitives, vertices, nodes, &shadow_ray)) p_prime_q = 0;
+
+    // Merge Rn into the current reservoir
+    merge(&Rs, Rn, p_prime_q, rand_state);
+  }
+
+  Sample S = initialSampleBuffer[Rs.z];
+  float phat = illum(S.L);
+  Rs.W = Rs.M * phat > 0 ? Rs.w / (Rs.M * phat) : 0;
+
+  float costheta = fmaxf(vector3d_dot(q_n_v, vector3d_unit(vector3d_sub(S.x_s, q_x_v))), 0.0f);
+  Vector3D L = vector3d_add(qm.emittance, vector3d_mul(vector3d_scale(qm.bsdf_f, costheta), vector3d_scale(S.L, Rs.W)));
+  pixel[idx] = {
+    .data = L,
+    .normal = S.n_v,
+    .depth = S.z_v
+  };
+}
+
+static void path_trace_kernel(int taskid, void *args) {
   if (taskid >= w * h) return;
   uint32_t x = taskid % w;
   uint32_t y = taskid / w;
   raytrace_pixel_temporal_sample(x, y);
+}
+
+static void spatial_resampling_kernel(int taskid, void *args) {
+  if (taskid >= w * h) return;
+  uint32_t x = taskid % w;
+  uint32_t y = taskid / w;
+  spatial_resampling(x, y);
 }
 
 int main() {
@@ -261,7 +357,11 @@ int main() {
   uint32_t grid_dim[2] = {(w + block_dim[0] - 1) / block_dim[0],
                           (h + block_dim[1] - 1) / block_dim[1]};
 
-  vx_spawn_tasks(w*h, (vx_spawn_tasks_cb)rt_entry_point, NULL);
+  vx_spawn_tasks(w*h, (vx_spawn_tasks_cb)path_trace_kernel, NULL);
+
+  if (restir) {
+    vx_spawn_tasks(w*h, (vx_spawn_tasks_cb)spatial_resampling_kernel, NULL);
+  }
 
 
   core_id = vx_core_id();
