@@ -1,10 +1,13 @@
 [muon]
 num_lanes = 32
 num_warps = 8
-num_cores = 8
+num_cores = 2
 
 [sim]
 elf = "build/bunny_32_32_0_muon/pathtracer.elf"
-log_level = "info"
-timeout = 100000
+timeout = 10000000
 benchmark = 10
+
+[mem]
+io_cout_addr = 0xFF080000
+io_cout_size = 64

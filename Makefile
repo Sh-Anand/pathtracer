@@ -84,9 +84,7 @@ run: $(GPU_SIM_BIN)
 	$(RUN_CMD)
 
 run-ssh: $(GPU_SIM_BIN)
-	@GPU_SIM_BIN_REMOTE=$(GPU_SIM_DIR)/$(PROJECT_NAME).bin; \
-	scp $(PT).bin $(SSH_USER)@$(SSH_HOST):$$GPU_SIM_BIN_REMOTE; \
-	$(subst --ssh $(SSH),--ssh 1,$(subst --bin $(GPU_SIM_BIN),--bin $$GPU_SIM_BIN_REMOTE,$(RUN_CMD)))
+	$(subst --ssh $(SSH),--ssh 1,$(RUN_CMD))
 
 # Utility targets
 relink: clean-link

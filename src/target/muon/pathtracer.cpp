@@ -6,6 +6,7 @@
 #include "util/cuda_defs.h"
 #include "util/reservoir.h"
 
+#include "vx_intrinsics.h"
 #include "vx_print.h"
 #include "vx_spawn.h"
 
@@ -243,22 +244,28 @@ static void rt_entry_point(int taskid, void *args) {
 }
 
 int main() {
-  vx_printf("Pathtracer starting...\n");
+  int core_id = vx_core_id();
 
-  vx_printf("RAYTRACING_START\n");
+  if (core_id == 0) {
+    vx_printf("Pathtracer starting...\n");
 
-  vx_printf("Width: %d, Height: %d\n", w, h);
-  vx_printf("Max Ray Depth: %d, NS Area Light: %d, Accumulate: %s, ReSTIR: %s\n",
-            max_ray_depth, ns_area_light, accumulate ? "true" : "false", restir ? "true" : "false");
+    vx_printf("RAYTRACING_START\n");
+
+    vx_printf("Width: %d, Height: %d\n", w, h);
+    vx_printf("Max Ray Depth: %d, NS Area Light: %d, Accumulate: %s, ReSTIR: %s\n",
+              max_ray_depth, ns_area_light, accumulate ? "true" : "false", restir ? "true" : "false");
+  }
 
   uint32_t dimension = 2;
-  uint32_t block_dim[2] = {4, 4};
+  uint32_t block_dim[2] = {8, 8};
   uint32_t grid_dim[2] = {(w + block_dim[0] - 1) / block_dim[0],
                           (h + block_dim[1] - 1) / block_dim[1]};
 
   vx_spawn_tasks(w*h, (vx_spawn_tasks_cb)rt_entry_point, NULL);
 
-  if (!restir) {
+
+  core_id = vx_core_id();
+  if (core_id == 0)  {
     vx_printf("PIXEL_BUFFER_START\n");
     vx_printf("%d, %d\n", w, h);
     for (uint32_t i = 0; i < w; i++) {
@@ -269,8 +276,9 @@ int main() {
       vx_printf("\n");
     }
     vx_printf("PIXEL_BUFFER_END\n");
-  }
 
-  vx_printf("RAYTRACING_COMPLETE\n");
+    vx_printf("RAYTRACING_COMPLETE\n");
+  }
+  
   return 0;
 }

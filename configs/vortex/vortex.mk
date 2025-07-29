@@ -1,4 +1,4 @@
-LLVM ?= /home/shashank/radiance/vortex-llvm/build
+LLVM ?= $(VORTEX_32)
 
 CFLAGS += -march=rv32imf -mabi=ilp32f
 CFLAGS += --target=riscv32-unknown-elf --sysroot=$(RISCV_32)/riscv32-unknown-elf --gcc-toolchain=$(RISCV_32)
