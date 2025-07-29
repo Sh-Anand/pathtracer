@@ -5,10 +5,6 @@
 #include "util/matrix.h"
 #include "util/vector.h"
 
-#ifdef MUON
-#include <vx_utils.h>
-#endif
-
 // Helper math functions. Assume all vectors are in unit hemisphere //
 
 inline float clampf(float x, float lo, float hi) {
