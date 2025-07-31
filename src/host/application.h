@@ -21,7 +21,7 @@ struct AppConfig {
   }
 
   int pathtracer_max_ray_depth;
-  bool pathtracer_accumulate_bounces; // whether we accumulate light bounce or only sample from the last bounce
+  int pathtracer_accumulate_bounces; // whether we accumulate light bounce or only sample from the last bounce
   int pathtracer_ns_area_light;
   int total_image_generated;
   bool debug;

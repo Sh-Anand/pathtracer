@@ -199,7 +199,7 @@ int main(int argc, char **argv) {
       config.pathtracer_max_ray_depth = atoi(optarg);
       break;
     case 'o':
-      config.pathtracer_accumulate_bounces = atoi(optarg) > 0;
+      config.pathtracer_accumulate_bounces = atoi(optarg);
       break;
     case 'd':
       config.debug = atoi(optarg) > 0;
