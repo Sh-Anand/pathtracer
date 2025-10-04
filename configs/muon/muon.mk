@@ -1,3 +1,6 @@
+RT_LIB_DIR ?= $(LIB_DIR)/$(target)/baremetal
+RT_LIB := $(RT_LIB_DIR)/lib$(target).a
+
 LLVM ?= $(MUON_32)
 
 CFLAGS += -march=rv32im_zfinx -mabi=ilp32 

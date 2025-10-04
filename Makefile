@@ -21,7 +21,6 @@ baked = $(CURDIR)/bakes/$(scene_name)_$(w)_$(h)_$(R)
 PT_SRC_DIR ?= src
 LIB_DIR ?= lib
 PT_TARGET := $(PT_SRC_DIR)/target/$(target)/$(PROJECT_NAME)
-RT_LIB_DIR ?= $(LIB_DIR)/$(target)
 
 # Build directories
 BUILD_DIR ?= build
@@ -36,9 +35,6 @@ SSH_USER ?= shashank.anand
 
 # Run sim parameters
 SSH ?= 0
-
-# Runtime library
-RT_LIB := $(RT_LIB_DIR)/lib$(target).a
 
 .PHONY: all relink runtime clean clean-link clean-lib run-sim run-sim-ssh
 

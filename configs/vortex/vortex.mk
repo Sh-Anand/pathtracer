@@ -1,3 +1,6 @@
+RT_LIB_DIR ?= $(LIB_DIR)/$(target)
+RT_LIB := $(RT_LIB_DIR)/lib$(target).a
+
 LLVM ?= $(VORTEX_32)
 
 CFLAGS += -march=rv32imf -mabi=ilp32f
