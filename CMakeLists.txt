@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.8)
+
+if(NOT DEFINED CMAKE_CUDA_HOST_COMPILER)
+  set(CMAKE_CUDA_HOST_COMPILER "/usr/bin/g++-14" CACHE FILEPATH "Host compiler for NVCC" FORCE)
+endif()
+
 project(pathtracer LANGUAGES CXX CUDA) 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -36,3 +41,10 @@ target_link_libraries(pathtracer
     OpenEXR::OpenEXR)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+
+add_custom_command(TARGET pathtracer POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E env PATH=$ENV{PATH}
+    cuobjdump --dump-ptx $<TARGET_FILE:pathtracer> > $<TARGET_FILE_DIR:pathtracer>/pathtracer.ptx
+  COMMAND ${CMAKE_COMMAND} -E env PATH=$ENV{PATH}
+    cuobjdump --dump-sass $<TARGET_FILE:pathtracer> > $<TARGET_FILE_DIR:pathtracer>/pathtracer.sass
+  COMMENT "Generating PTX and SASS dumps for pathtracer")
