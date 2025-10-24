@@ -44,10 +44,15 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
 add_custom_command(TARGET pathtracer POST_BUILD
   BYPRODUCTS
+    ${CMAKE_CURRENT_BINARY_DIR}/pathtracer.cubin
     ${CMAKE_CURRENT_BINARY_DIR}/pathtracer.ptx
     ${CMAKE_CURRENT_BINARY_DIR}/pathtracer.sass
   COMMAND ${CMAKE_COMMAND} -E env PATH=$ENV{PATH}
+    cuobjdump --extract-elf all $<TARGET_FILE:pathtracer>
+  COMMAND ${CMAKE_COMMAND} -E rename pathtracer.2.sm_52.cubin $<TARGET_FILE_DIR:pathtracer>/pathtracer.cubin
+  COMMAND ${CMAKE_COMMAND} -E remove -f pathtracer.1.sm_52.cubin
+  COMMAND ${CMAKE_COMMAND} -E env PATH=$ENV{PATH}
     cuobjdump --dump-ptx $<TARGET_FILE:pathtracer> > $<TARGET_FILE_DIR:pathtracer>/pathtracer.ptx
   COMMAND ${CMAKE_COMMAND} -E env PATH=$ENV{PATH}
-    cuobjdump --dump-sass $<TARGET_FILE:pathtracer> > $<TARGET_FILE_DIR:pathtracer>/pathtracer.sass
-  COMMENT "Generating PTX and SASS dumps for pathtracer")
+    nvdisasm --print-line-info -hex $<TARGET_FILE_DIR:pathtracer>/pathtracer.cubin > $<TARGET_FILE_DIR:pathtracer>/pathtracer.sass
+  COMMENT "Generating cubin, PTX and SASS dumps for pathtracer")
