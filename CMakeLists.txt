@@ -43,6 +43,9 @@ target_link_libraries(pathtracer
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
 add_custom_command(TARGET pathtracer POST_BUILD
+  BYPRODUCTS
+    ${CMAKE_CURRENT_BINARY_DIR}/pathtracer.ptx
+    ${CMAKE_CURRENT_BINARY_DIR}/pathtracer.sass
   COMMAND ${CMAKE_COMMAND} -E env PATH=$ENV{PATH}
     cuobjdump --dump-ptx $<TARGET_FILE:pathtracer> > $<TARGET_FILE_DIR:pathtracer>/pathtracer.ptx
   COMMAND ${CMAKE_COMMAND} -E env PATH=$ENV{PATH}
