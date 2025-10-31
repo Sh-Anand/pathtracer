@@ -7,6 +7,8 @@ endif()
 project(pathtracer LANGUAGES CXX CUDA) 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+set(CMAKE_CUDA_ARCHITECTURES 89)
+
 option(BUILD_DEBUG     "Build with debug settings"    OFF)
 set(BUILD_DEBUG ${BUILD_DEBUG} CACHE BOOL "Build debug" FORCE)
 
@@ -49,8 +51,8 @@ add_custom_command(TARGET pathtracer POST_BUILD
     ${CMAKE_CURRENT_BINARY_DIR}/pathtracer.sass
   COMMAND ${CMAKE_COMMAND} -E env PATH=$ENV{PATH}
     cuobjdump --extract-elf all $<TARGET_FILE:pathtracer>
-  COMMAND ${CMAKE_COMMAND} -E rename pathtracer.2.sm_52.cubin $<TARGET_FILE_DIR:pathtracer>/pathtracer.cubin
-  COMMAND ${CMAKE_COMMAND} -E remove -f pathtracer.1.sm_52.cubin
+  COMMAND ${CMAKE_COMMAND} -E rename pathtracer.2.sm_89.cubin $<TARGET_FILE_DIR:pathtracer>/pathtracer.cubin
+  COMMAND ${CMAKE_COMMAND} -E remove -f pathtracer.1.sm_89.cubin
   COMMAND ${CMAKE_COMMAND} -E env PATH=$ENV{PATH}
     cuobjdump --dump-ptx $<TARGET_FILE:pathtracer> > $<TARGET_FILE_DIR:pathtracer>/pathtracer.ptx
   COMMAND ${CMAKE_COMMAND} -E env PATH=$ENV{PATH}
