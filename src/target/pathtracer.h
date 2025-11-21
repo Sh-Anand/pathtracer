@@ -14,8 +14,8 @@
 #pragma once
 typedef struct {
   Vector3D data;
+  Vector3D albedo;
   Vector3D normal;
-  float depth;
 } PixelData;
 typedef struct {
   size_t w;

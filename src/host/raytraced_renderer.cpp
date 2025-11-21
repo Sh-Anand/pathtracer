@@ -94,10 +94,12 @@ void RaytracedRenderer::save_image(const std::string filename) {
     ch.insert("R",  Imf::Channel(Imf::FLOAT));
     ch.insert("G",  Imf::Channel(Imf::FLOAT));
     ch.insert("B",  Imf::Channel(Imf::FLOAT));
+    ch.insert("ALBEDO_R", Imf::Channel(Imf::FLOAT));
+    ch.insert("ALBEDO_G", Imf::Channel(Imf::FLOAT));
+    ch.insert("ALBEDO_B", Imf::Channel(Imf::FLOAT));
     ch.insert("NX", Imf::Channel(Imf::FLOAT));
     ch.insert("NY", Imf::Channel(Imf::FLOAT));
     ch.insert("NZ", Imf::Channel(Imf::FLOAT));
-    ch.insert("Z",  Imf::Channel(Imf::FLOAT));
 
     // 2) Create the file
     Imf::OutputFile file(filename.c_str(), header);
@@ -127,16 +129,17 @@ void RaytracedRenderer::save_image(const std::string filename) {
     insertSliceFlipped("R", offsetof(PixelData, data)   + sizeof(float)*0);
     insertSliceFlipped("G", offsetof(PixelData, data)   + sizeof(float)*1);
     insertSliceFlipped("B", offsetof(PixelData, data)   + sizeof(float)*2);
+    // albedo.x/y/z → ALBEDO_R/G/B
+    insertSliceFlipped("ALBEDO_R", offsetof(PixelData, albedo) + sizeof(float)*0);
+    insertSliceFlipped("ALBEDO_G", offsetof(PixelData, albedo) + sizeof(float)*1);
+    insertSliceFlipped("ALBEDO_B", offsetof(PixelData, albedo) + sizeof(float)*2);
     // normal.x/y/z → NX/NY/NZ
     insertSliceFlipped("NX", offsetof(PixelData, normal) + sizeof(float)*0);
     insertSliceFlipped("NY", offsetof(PixelData, normal) + sizeof(float)*1);
     insertSliceFlipped("NZ", offsetof(PixelData, normal) + sizeof(float)*2);
-    // depth → Z
-    insertSliceFlipped("Z", offsetof(PixelData, depth));
 
     // 4) Write out all scanlines
     file.setFrameBuffer(frameBufferExr);
     file.writePixels(H);
 }
-
 

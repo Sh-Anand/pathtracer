@@ -15,6 +15,18 @@ DEVICE static inline Vector3D get_emission(const CudaBSDF *bsdfs,
   return emission;
 }
 
+DEVICE static inline Vector3D get_base_color(const CudaBSDF *bsdfs,
+                                             const CudaTexture *textures,
+                                             const CudaIntersection isect) {
+  const CudaBSDF &bsdf = bsdfs[isect.bsdf_idx];
+  Vector3D base{bsdf.baseColor.x, bsdf.baseColor.y, bsdf.baseColor.z};
+  if (bsdf.tex_idx >= 0) {
+    Vector4D t = sample_texture(textures[bsdf.tex_idx], isect.uv);
+    base = Vector3D{base.x * t.x, base.y * t.y, base.z * t.z};
+  }
+  return base;
+}
+
 DEVICE static inline Vector3D estimate_direct_lighting_importance(PathTracer* pt, Ray r, const CudaIntersection isect, uint32_t idx) {
   // w_out points towards the source of the ray (e.g.,
   // toward the camera if this is a primary ray)
@@ -101,6 +113,7 @@ DEVICE static inline float at_least_one_bounce_radiance(PathTracer *pt, Ray r, c
         s->x_v   = hit_p;
         s->n_v   = isect_init.n;
         s->z_v   = vector3d_norm2(vector3d_sub(hit_p, r.o));
+        s->albedo = get_base_color(pt->bsdfs, pt->textures, isect_init);
         pdf_ret   = pdf;
         sm->bsdf_f  = bsdf_f;
         throughput = vector3d_scale(throughput, 1 / p_survive);
@@ -193,8 +206,8 @@ DEVICE static inline void raytrace_pixel_temporal_sample(PathTracer *pt, uint16_
     Vector3D L = vector3d_add(pt->initialSampleMetadataBuffer[idx].emittance, vector3d_mul(vector3d_scale(pt->initialSampleMetadataBuffer[idx].bsdf_f, cospdf), pt->initialSampleBuffer[idx].L));
     pt->sampleBuffer.pixel[idx] = {
       .data = L,
+      .albedo = pt->initialSampleBuffer[idx].albedo,
       .normal = pt->initialSampleBuffer[idx].n_v,
-      .depth = pt->initialSampleBuffer[idx].z_v
     };
   }
 }
@@ -283,7 +296,7 @@ DEVICE static inline void spatial_resampling(PathTracer *pt, uint16_t x, uint16_
   Vector3D L = vector3d_add(qm.emittance, vector3d_mul(vector3d_scale(qm.bsdf_f, costheta), vector3d_scale(S.L, Rs.W)));
   pt->sampleBuffer.pixel[idx] = {
     .data = L,
+    .albedo = S.albedo,
     .normal = S.n_v,
-    .depth = S.z_v
   };
 }

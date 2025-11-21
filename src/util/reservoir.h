@@ -21,6 +21,7 @@ struct Sample {
     float z_v;               // depth
     Vector3D x_s, n_s;       // sample point & normal (normalized)
     Vector3D L;              // outgoing radiance at x_s
+    Vector3D albedo;         // first-hit albedo (base color * texture)
 };
 
 struct Reservoir {
