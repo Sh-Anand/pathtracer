@@ -10,6 +10,7 @@
 #include <sstream>
 #include <fstream>
 #include <cmath>
+#include <utility>
 
 #include <OpenEXR/ImfOutputFile.h>
 #include <OpenEXR/ImfHeader.h>
@@ -88,58 +89,60 @@ void RaytracedRenderer::save_image(const std::string filename) {
     const auto &buf = frameBuffer;
     int W = int(buf.w), H = int(buf.h);
 
-    // 1) Build the EXR header
-    Imf::Header header(W, H);
-    auto &ch = header.channels();
-    ch.insert("R",  Imf::Channel(Imf::FLOAT));
-    ch.insert("G",  Imf::Channel(Imf::FLOAT));
-    ch.insert("B",  Imf::Channel(Imf::FLOAT));
-    ch.insert("ALBEDO_R", Imf::Channel(Imf::FLOAT));
-    ch.insert("ALBEDO_G", Imf::Channel(Imf::FLOAT));
-    ch.insert("ALBEDO_B", Imf::Channel(Imf::FLOAT));
-    ch.insert("NX", Imf::Channel(Imf::FLOAT));
-    ch.insert("NY", Imf::Channel(Imf::FLOAT));
-    ch.insert("NZ", Imf::Channel(Imf::FLOAT));
+    // split filename so we can emit rgb/albedo/normal separately
+    auto split_ext = [](const std::string &path) -> std::pair<std::string, std::string> {
+        auto pos = path.find_last_of('.');
+        if (pos == std::string::npos) return {path, ".exr"};
+        return {path.substr(0, pos), path.substr(pos)};
+    };
+    auto [base, ext] = split_ext(filename);
 
-    // 2) Create the file
-    Imf::OutputFile file(filename.c_str(), header);
-
-    // 3) Prepare the frame buffer with flipped Y
-    Imf::FrameBuffer frameBufferExr;
+    // Prepare buffer pointers for flipped write
     const size_t pixelSize = sizeof(PixelData);
     const size_t lineSize  = pixelSize * W;
+    char *basePtr = reinterpret_cast<char*>(buf.pixel);
 
-    // We want buf.pixel[y=0] (first row in memory) → EXR scanline H-1,
-    // and buf.pixel[y=H-1] → scanline 0.  So:
-    char *base = reinterpret_cast<char*>(buf.pixel);
+    auto write_three_channel = [&](const std::string &out_name,
+                                   size_t c0, size_t c1, size_t c2) {
+        Imf::Header header(W, H);
+        auto &ch = header.channels();
+        ch.insert("R",  Imf::Channel(Imf::FLOAT));
+        ch.insert("G",  Imf::Channel(Imf::FLOAT));
+        ch.insert("B",  Imf::Channel(Imf::FLOAT));
 
-    auto insertSliceFlipped = [&](const char *name, size_t offset){
-      // start pointer = beginning of *last* row + offset
-      char *start = base + (H - 1) * lineSize + offset;
-      // xStride = +pixelSize (move right in memory), yStride = -lineSize (move up)
-      frameBufferExr.insert(name, Imf::Slice(
-        Imf::FLOAT,
-        start,
-        pixelSize,
-        -lineSize
-      ));
+        Imf::OutputFile file(out_name.c_str(), header);
+
+        Imf::FrameBuffer fb;
+        auto insertSliceFlipped = [&](const char *name, size_t offset){
+          char *start = basePtr + (H - 1) * lineSize + offset;
+          fb.insert(name, Imf::Slice(
+            Imf::FLOAT,
+            start,
+            pixelSize,
+            -lineSize
+          ));
+        };
+
+        insertSliceFlipped("R", c0);
+        insertSliceFlipped("G", c1);
+        insertSliceFlipped("B", c2);
+
+        file.setFrameBuffer(fb);
+        file.writePixels(H);
     };
 
-    // data.x/y/z → R/G/B
-    insertSliceFlipped("R", offsetof(PixelData, data)   + sizeof(float)*0);
-    insertSliceFlipped("G", offsetof(PixelData, data)   + sizeof(float)*1);
-    insertSliceFlipped("B", offsetof(PixelData, data)   + sizeof(float)*2);
-    // albedo.x/y/z → ALBEDO_R/G/B
-    insertSliceFlipped("ALBEDO_R", offsetof(PixelData, albedo) + sizeof(float)*0);
-    insertSliceFlipped("ALBEDO_G", offsetof(PixelData, albedo) + sizeof(float)*1);
-    insertSliceFlipped("ALBEDO_B", offsetof(PixelData, albedo) + sizeof(float)*2);
-    // normal.x/y/z → NX/NY/NZ
-    insertSliceFlipped("NX", offsetof(PixelData, normal) + sizeof(float)*0);
-    insertSliceFlipped("NY", offsetof(PixelData, normal) + sizeof(float)*1);
-    insertSliceFlipped("NZ", offsetof(PixelData, normal) + sizeof(float)*2);
+    write_three_channel(base + "_rgb" + ext,
+                        offsetof(PixelData, data)   + sizeof(float)*0,
+                        offsetof(PixelData, data)   + sizeof(float)*1,
+                        offsetof(PixelData, data)   + sizeof(float)*2);
 
-    // 4) Write out all scanlines
-    file.setFrameBuffer(frameBufferExr);
-    file.writePixels(H);
+    write_three_channel(base + "_alb" + ext,
+                        offsetof(PixelData, albedo) + sizeof(float)*0,
+                        offsetof(PixelData, albedo) + sizeof(float)*1,
+                        offsetof(PixelData, albedo) + sizeof(float)*2);
+
+    write_three_channel(base + "_nrm" + ext,
+                        offsetof(PixelData, normal) + sizeof(float)*0,
+                        offsetof(PixelData, normal) + sizeof(float)*1,
+                        offsetof(PixelData, normal) + sizeof(float)*2);
 }
-
