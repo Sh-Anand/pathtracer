@@ -7,32 +7,43 @@
 #include "util/cuda_defs.h"
 #include "util/reservoir.h"
 
-extern DEVICE const int max_ray_depth;
-extern DEVICE const int ns_area_light;
-extern DEVICE const int accumulate;
-extern DEVICE const CudaCamera camera;       ///< current camera
-extern DEVICE const CudaLight lights[];
-extern DEVICE const int num_lights;
-extern DEVICE const CudaBSDF bsdfs[];
-extern DEVICE const CudaTexture textures[];
-extern DEVICE const CudaPrimitive primitives[];
-extern DEVICE const Vector3D vertices[];
-extern DEVICE const Vector3D normals[];
-extern DEVICE const Vector2D texcoords[];
-extern DEVICE const Vector4D tangents[];
-extern DEVICE const BVHNode nodes[];
-extern DEVICE const int w;
-extern DEVICE const int h;
-extern DEVICE const int restir;
+// Baked targets define the scene as arrays and constants. gluon passes it at
+// launch instead, so there the arrays are pointers and the constants plain
+// globals, both bound by the kernel entry (src/target/gluon/kernel.cpp).
+#ifdef GLUON
+#define SCENE_CONST(T, name) extern DEVICE T name
+#define SCENE_ARRAY(T, name) extern DEVICE T *name
+#else
+#define SCENE_CONST(T, name) extern DEVICE const T name
+#define SCENE_ARRAY(T, name) extern DEVICE T name[]
+#endif
+
+SCENE_CONST(int, max_ray_depth);
+SCENE_CONST(int, ns_area_light);
+SCENE_CONST(int, accumulate);
+SCENE_CONST(CudaCamera, camera);       ///< current camera
+SCENE_ARRAY(const CudaLight, lights);
+SCENE_CONST(int, num_lights);
+SCENE_ARRAY(const CudaBSDF, bsdfs);
+SCENE_ARRAY(const CudaTexture, textures);
+SCENE_ARRAY(const CudaPrimitive, primitives);
+SCENE_ARRAY(const Vector3D, vertices);
+SCENE_ARRAY(const Vector3D, normals);
+SCENE_ARRAY(const Vector2D, texcoords);
+SCENE_ARRAY(const Vector4D, tangents);
+SCENE_ARRAY(const BVHNode, nodes);
+SCENE_CONST(int, w);
+SCENE_CONST(int, h);
+SCENE_CONST(int, restir);
 // read only end
 
 // read/write start
-extern DEVICE RNGState rand_states[];
-extern DEVICE Sample initialSampleBuffer[];
-extern DEVICE SampleMetadata initialSampleMetadataBuffer[];
-extern DEVICE Reservoir temporalReservoirBufferGI[];
-extern DEVICE PixelData pixel[];
-extern DEVICE uint8_t rays_traced[];
+SCENE_ARRAY(RNGState, rand_states);
+SCENE_ARRAY(Sample, initialSampleBuffer);
+SCENE_ARRAY(SampleMetadata, initialSampleMetadataBuffer);
+SCENE_ARRAY(Reservoir, temporalReservoirBufferGI);
+SCENE_ARRAY(PixelData, pixel);
+SCENE_ARRAY(uint8_t, rays_traced);
 // read/write end
 
 DEVICE static inline Vector3D get_emission(const CudaBSDF *bsdfs,

@@ -43,3 +43,12 @@ endif()
 add_executable(baker ${APPLICATION_SOURCE})
 target_include_directories(baker PUBLIC src)
 target_link_libraries(baker PRIVATE assimp::assimp)
+
+# host for the gluon target: drives the kernel through gluon's driver
+if (GLUON_ROOT)
+  add_executable(pathtracer_gluon src/target/gluon/host.cpp ${GLUON_ROOT}/sw/driver/src/rad.cpp)
+  target_include_directories(pathtracer_gluon PUBLIC src
+      ${GLUON_ROOT}/sw/driver/include ${GLUON_ROOT}/sw/driver/utils ${GLUON_ROOT}/sw/libmuon/gluon/include)
+  target_compile_features(pathtracer_gluon PRIVATE cxx_std_17)
+  target_link_libraries(pathtracer_gluon PRIVATE assimp::assimp)
+endif()
