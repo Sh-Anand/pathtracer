@@ -16,8 +16,11 @@ KERNEL_CFLAGS += -O3 -std=c++17 -fno-rtti -fno-exceptions -fno-builtin-memset -f
 KERNEL_CFLAGS += -ffunction-sections -fdata-sections -fPIC -fno-unwind-tables -fno-asynchronous-unwind-tables
 KERNEL_CFLAGS += -Xclang -target-feature -Xclang +vortex -mllvm -inline-threshold=262144
 KERNEL_CFLAGS += -DGLUON -I$(PT_SRC_DIR) -I$(LIBMUON)/include -isystem $(LLVM)/include/$(TRIPLE)
-KERNEL_LDFLAGS := -fuse-ld=lld -nostdlib -Wl,-melf32lriscv -Wl,-pie -L$(LLVM)/lib/$(TRIPLE)
-KERNEL_LIBS := $(LIBMUON)/libmuon.a -lm -lc $(LLVM)/lib/clang/18/lib/$(TRIPLE)/libclang_rt.builtins.a
+# lane-interleaved stack; must match STACK_WORD_STRIDE in rad_defs.h, and the runtimes linked in
+KERNEL_CFLAGS += -mllvm -riscv-stack-word-stride=32
+STRIDE_LIBS := $(LLVM)/lib/$(TRIPLE)/stride32
+KERNEL_LDFLAGS := -fuse-ld=lld -nostdlib -Wl,-melf32lriscv -Wl,-pie -L$(STRIDE_LIBS)
+KERNEL_LIBS := $(LIBMUON)/libmuon.a -lm -lc $(STRIDE_LIBS)/libclang_rt.builtins.a
 
 all: $(KERNEL_ELF) $(HOST_EXE)
 
