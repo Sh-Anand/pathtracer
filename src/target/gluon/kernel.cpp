@@ -66,14 +66,14 @@ static bool pixel_xy(uint32_t *x, uint32_t *y) {
   return *x < (uint32_t)w && *y < (uint32_t)h;
 }
 
-extern "C" void pathtrace_kernel(const GluonScene *s) {
+extern "C" __kernel__ void pathtrace_kernel(const GluonScene *s) {
   bind(s);
   uint32_t x, y;
   if (pixel_xy(&x, &y))
     raytrace_pixel_temporal_sample(x, y);
 }
 
-extern "C" void spatial_resampling_kernel(const GluonScene *s) {
+extern "C" __kernel__ void spatial_resampling_kernel(const GluonScene *s) {
   bind(s);
   uint32_t x, y;
   if (pixel_xy(&x, &y))
